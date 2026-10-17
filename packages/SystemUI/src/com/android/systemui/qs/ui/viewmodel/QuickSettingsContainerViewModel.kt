@@ -16,7 +16,13 @@
 
 package com.android.systemui.qs.ui.viewmodel
 
+import android.content.res.Resources
+import android.media.AudioManager
 import android.view.Display
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.android.settingslib.volume.shared.model.AudioStream
 import com.android.systemui.brightness.ui.viewmodel.BrightnessSliderViewModel
 import com.android.systemui.display.data.repository.DisplayTypeRepository
 import com.android.systemui.lifecycle.HydratedActivatable
@@ -29,11 +35,14 @@ import com.android.systemui.qs.panels.ui.viewmodel.DetailsViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.EditModeViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.MediaInRowInLandscapeViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.TileGridViewModel
+import com.android.systemui.res.R
 import com.android.systemui.shade.ShadeDisplayAware
 import com.android.systemui.shade.ui.viewmodel.ShadeHeaderViewModel
+import com.android.systemui.volume.panel.component.volume.slider.ui.viewmodel.AudioStreamSliderViewModel
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -51,6 +60,8 @@ constructor(
     val mediaViewModelFactory: MediaViewModel.Factory,
     mediaInRowInLandscapeViewModelFactory: MediaInRowInLandscapeViewModel.Factory,
     @ShadeDisplayAware shadeDisplayTypeRepository: DisplayTypeRepository,
+    @ShadeDisplayAware resources: Resources,
+    private val audioStreamSliderViewModelFactory: AudioStreamSliderViewModel.Factory,
 ) : HydratedActivatable() {
 
     val isBrightnessSliderVisible by
@@ -66,6 +77,13 @@ constructor(
 
     val brightnessSliderViewModel =
         brightnessSliderViewModelFactory.create(supportsBrightnessMirroring)
+
+    /** Shown with the brightness slider, for devices without volume keys. */
+    private val showMediaVolumeSlider = resources.getBoolean(R.bool.config_qsMediaVolumeSlider)
+
+    /** The media volume slider, while active and enabled by config_qsMediaVolumeSlider. */
+    var mediaVolumeSliderViewModel: AudioStreamSliderViewModel? by mutableStateOf(null)
+        private set
 
     val shadeHeaderViewModel = shadeHeaderViewModelFactory.create()
 
@@ -87,6 +105,22 @@ constructor(
             launch { shadeHeaderViewModel.activate() }
             launch { tileGridViewModel.activate() }
             launch { qsMediaInRowViewModel.activate() }
+            if (showMediaVolumeSlider) {
+                launch {
+                    try {
+                        mediaVolumeSliderViewModel =
+                            audioStreamSliderViewModelFactory.create(
+                                AudioStreamSliderViewModel.FactoryAudioStreamWrapper(
+                                    AudioStream(AudioManager.STREAM_MUSIC)
+                                ),
+                                this,
+                            )
+                        awaitCancellation()
+                    } finally {
+                        mediaVolumeSliderViewModel = null
+                    }
+                }
+            }
         }
     }
 
