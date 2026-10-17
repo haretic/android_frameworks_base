@@ -16,6 +16,7 @@
 
 package com.android.systemui.qs.ui.viewmodel
 
+import android.content.res.mainResources
 import com.android.systemui.brightness.ui.viewmodel.brightnessSliderViewModelFactory
 import com.android.systemui.display.domain.interactor.shadeDisplayTypeRepository
 import com.android.systemui.kosmos.Kosmos
@@ -26,6 +27,7 @@ import com.android.systemui.qs.panels.ui.viewmodel.editModeViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.mediaInRowInLandscapeViewModelFactory
 import com.android.systemui.qs.panels.ui.viewmodel.tileGridViewModelFactory
 import com.android.systemui.shade.ui.viewmodel.shadeHeaderViewModelFactory
+import com.android.systemui.volume.panel.component.volume.slider.ui.viewmodel.audioStreamSliderViewModelFactory
 
 val Kosmos.quickSettingsContainerViewModelFactory by
     Kosmos.Fixture {
@@ -44,6 +46,8 @@ val Kosmos.quickSettingsContainerViewModelFactory by
                     mediaViewModelFactory = mediaViewModelFactory,
                     mediaInRowInLandscapeViewModelFactory = mediaInRowInLandscapeViewModelFactory,
                     shadeDisplayTypeRepository = shadeDisplayTypeRepository,
+                    resources = mainResources,
+                    audioStreamSliderViewModelFactory = audioStreamSliderViewModelFactory,
                 )
             }
         }
