@@ -1255,4 +1255,8 @@
     Indicates whether to use the Alerts channel for storage notifications.
     -->
     <bool name="config_storageNotificationsUseAlertsChannel">false</bool>
+
+    <!-- Whether quick settings shows a media volume slider with the brightness slider, for
+         devices without volume keys. -->
+    <bool name="config_qsMediaVolumeSlider">false</bool>
 </resources>

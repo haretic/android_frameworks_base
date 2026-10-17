@@ -96,6 +96,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.android.app.tracing.coroutines.launchTraced
+import com.android.compose.PlatformSliderDefaults
 import com.android.compose.animation.scene.ContentKey
 import com.android.compose.animation.scene.ContentScope
 import com.android.compose.animation.scene.ElementKey
@@ -162,6 +163,8 @@ import com.android.systemui.util.asIndenting
 import com.android.systemui.util.kotlin.pairwise
 import com.android.systemui.util.printSection
 import com.android.systemui.util.println
+import com.android.systemui.volume.panel.component.volume.slider.ui.viewmodel.AudioStreamSliderViewModel
+import com.android.systemui.volume.panel.component.volume.ui.composable.VolumeSlider
 import java.io.PrintWriter
 import java.util.function.Consumer
 import javax.inject.Inject
@@ -950,18 +953,42 @@ constructor(
             )
         ) {
             AlwaysDarkMode {
-                BrightnessSliderContainer(
-                    viewModel =
-                        viewModel.containerViewModel.brightnessSliderViewModel,
-                    containerColors =
-                        ContainerColors(
-                            Color.Transparent,
-                            ContainerColors.defaultContainerColor,
-                        ),
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                Column(
+                    verticalArrangement =
+                        spacedBy(dimensionResource(R.dimen.qs_tile_margin_vertical))
+                ) {
+                    BrightnessSliderContainer(
+                        viewModel =
+                            viewModel.containerViewModel.brightnessSliderViewModel,
+                        containerColors =
+                            ContainerColors(
+                                Color.Transparent,
+                                ContainerColors.defaultContainerColor,
+                            ),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    viewModel.containerViewModel.mediaVolumeSliderViewModel?.let {
+                        MediaVolumeSlider(it)
+                    }
+                }
             }
         }
+    }
+
+    /** Media volume, with the brightness slider, for devices without volume keys. */
+    @Composable
+    private fun MediaVolumeSlider(viewModel: AudioStreamSliderViewModel) {
+        val state by viewModel.slider.collectAsStateWithLifecycle()
+        VolumeSlider(
+            state = state,
+            onValueChange = { newValue -> viewModel.onValueChanged(state, newValue) },
+            onValueChangeFinished = { viewModel.onValueChangeFinished() },
+            onIconTapped = { viewModel.toggleMuted(state) },
+            sliderColors = PlatformSliderDefaults.defaultPlatformSliderColors(),
+            hapticsViewModelFactory = viewModel.getSliderHapticsViewModelFactory(),
+            showLabel = false,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 
     @Composable
