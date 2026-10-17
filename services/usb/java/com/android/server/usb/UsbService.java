@@ -238,7 +238,10 @@ public class UsbService extends IUsbManager.Stub {
             mAuthManager = new UsbAuthManager(context, mUserManager, mHostManager);
             mHostManager.setAuthManager(mAuthManager);
         }
-        if (new File("/sys/class/android_usb").exists()) {
+        // Mainline kernels have no android_usb class; devices that track gadget state
+        // through the UDC sysfs node still need the device manager.
+        if (new File("/sys/class/android_usb").exists() || context.getResources().getBoolean(
+                com.android.internal.R.bool.config_enableUdcSysfsUsbStateUpdate)) {
             mDeviceManager = new UsbDeviceManager(context, mAlsaManager, mSettingsManager,
                     mPermissionManager);
         }
