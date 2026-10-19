@@ -109,6 +109,7 @@ import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
 
 import androidx.annotation.NonNull;
+import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.LifecycleOwner;
 import androidx.lifecycle.LifecycleRegistry;
@@ -2345,6 +2346,8 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
             mIconView.setImageDrawable(getIcon(context));
             mIconView.setScaleType(ScaleType.CENTER_CROP);
             if (isTv()) {
+                // The icon takes the focus itself here, so it shows its own focused state
+                mIconView.setDuplicateParentStateEnabled(false);
                 mIconView.setFocusable(true);
                 mIconView.setClickable(true);
                 mIconView.setBackground(mContext.getDrawable(
@@ -2919,6 +2922,10 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
         private final GestureDetector mGestureDetector;
         @NonNull
         private final DeviceEntryInteractor mDeviceEntryInteractor;
+        @NonNull
+        private final ActivityStarter mActivityStarter;
+        @NonNull
+        private final UserTracker mUserTracker;
 
         @VisibleForTesting
         @Nullable
@@ -3010,7 +3017,9 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
                 @NonNull AccessibilityManager accessibilityManager,
                 @NonNull DialogTransitionAnimator dialogTransitionAnimator,
                 @NonNull SystemUIDialog.Factory systemUIDialogFactory,
-                @NonNull DeviceEntryInteractor deviceEntryInteractor) {
+                @NonNull DeviceEntryInteractor deviceEntryInteractor,
+                @NonNull ActivityStarter activityStarter,
+                @NonNull UserTracker userTracker) {
             mContext = context;
             mAdapter = adapter;
             mOverflowAdapter = overflowAdapter;
@@ -3035,6 +3044,8 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
             mSystemUIDialogFactory = systemUIDialogFactory;
             mGestureDetector = new GestureDetector(context, mGestureListener);
             mDeviceEntryInteractor = deviceEntryInteractor;
+            mActivityStarter = activityStarter;
+            mUserTracker = userTracker;
             mOnBackInvokedCallback = () -> {
                 logOnBackInvocation();
                 if (mAdapter.isShowingRestartOptions()) {
@@ -3063,6 +3074,7 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
             window.setTitle(dialog.getContext().getString(
                     com.android.systemui.res.R.string.accessibility_quick_settings_power_menu));
             initializeLayout(dialog);
+            PowerMenuWheelNavigation.attach(dialog);
             mInitialWindowDimAmount = window.getAttributes().dimAmount;
         }
 
@@ -3156,6 +3168,14 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
             mGlobalActionsLayout.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             mGlobalActionsLayout.setRotationListener(this::onRotate);
             mGlobalActionsLayout.setAdapter(mAdapter);
+            final PowerMenuPinnedApps pinnedApps = PowerMenuPinnedApps.create(
+                    dialog.getContext(), dialog.findViewById(android.R.id.list),
+                    mUserTracker.getUserHandle(), mActivityStarter, this::dismiss);
+            if (pinnedApps != null) {
+                // Not with the restart options, they replace the actions for a moment
+                mGlobalActionsLayout.setFooter(pinnedApps,
+                        () -> !mAdapter.isShowingRestartOptions());
+            }
             final WindowRootViewBlurInteractor blurInteractor = dialog.getBlurInteractor();
             collectFlow(mGlobalActionsLayout, blurInteractor.isBlurCurrentlySupported(),
                     mGlobalActionsLayout::setIsBlurSupported);
@@ -3163,6 +3183,7 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
                     blurInteractor.isBlurCurrentlySupported().getValue());
             ViewGroup container =
                     dialog.findViewById(com.android.systemui.res.R.id.global_actions_container);
+            PowerMenuStatsPanel.addTo((ConstraintLayout) container, mGlobalActionsLayout);
             container.setOnTouchListener((v, event) -> {
                 mGestureDetector.onTouchEvent(event);
                 return v.onTouchEvent(event);
