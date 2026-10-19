@@ -4727,6 +4727,18 @@ public interface WindowManager extends ViewManager {
         public static final int INPUT_FEATURE_CAPTURE_KEYBOARD = 1 << 5;
 
         /**
+         * Input feature flag for a system menu on a device whose power key is also its select
+         * key (e.g. a device with a scroll wheel and one side button): while the window has
+         * input focus, a short press of the power key is passed to it as a key event instead
+         * of turning the screen off. Only honored for windows of an app holding
+         * {@link android.Manifest.permission#INTERNAL_SYSTEM_WINDOW}, and read when the window
+         * takes focus.
+         *
+         * @hide
+         */
+        public static final int INPUT_FEATURE_POWER_KEY_SELECTS = 1 << 6;
+
+        /**
          * An internal annotation for flags that can be specified to {@link #inputFeatures}.
          *
          * NOTE: These are not the same as {@link android.os.InputConfig} flags.
@@ -4740,7 +4752,8 @@ public interface WindowManager extends ViewManager {
                 INPUT_FEATURE_SPY,
                 INPUT_FEATURE_SENSITIVE_FOR_PRIVACY,
                 INPUT_FEATURE_DISPLAY_TOPOLOGY_AWARE,
-                INPUT_FEATURE_CAPTURE_KEYBOARD
+                INPUT_FEATURE_CAPTURE_KEYBOARD,
+                INPUT_FEATURE_POWER_KEY_SELECTS
         })
         public @interface InputFeatureFlags {
         }
@@ -6466,6 +6479,10 @@ public interface WindowManager extends ViewManager {
             if ((inputFeatures & INPUT_FEATURE_CAPTURE_KEYBOARD) != 0) {
                 inputFeatures &= ~INPUT_FEATURE_CAPTURE_KEYBOARD;
                 features.add("INPUT_FEATURE_CAPTURE_KEYBOARD");
+            }
+            if ((inputFeatures & INPUT_FEATURE_POWER_KEY_SELECTS) != 0) {
+                inputFeatures &= ~INPUT_FEATURE_POWER_KEY_SELECTS;
+                features.add("INPUT_FEATURE_POWER_KEY_SELECTS");
             }
             if (inputFeatures != 0) {
                 features.add(Integer.toHexString(inputFeatures));
