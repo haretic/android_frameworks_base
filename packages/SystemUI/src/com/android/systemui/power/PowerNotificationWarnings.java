@@ -317,9 +317,12 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
 
         final String percentage = NumberFormat.getPercentInstance()
                 .format((double) mCurrentBatterySnapshot.getBatteryLevel() / 100.0);
-        final String title = mContext.getString(R.string.battery_low_title);
-        final String contentText = mContext.getString(
-                R.string.battery_low_description, percentage);
+        final boolean last = mBucket == PowerUI.BUCKET_LAST_WARNING;
+        final String title = mContext.getString(
+                last ? R.string.battery_last_warning_title : R.string.battery_low_title);
+        final String contentText = mContext.getString(last
+                ? R.string.battery_last_warning_description : R.string.battery_low_description,
+                percentage);
 
         final Notification.Builder nb =
                 new Notification.Builder(mContext, NotificationChannels.BATTERY)
