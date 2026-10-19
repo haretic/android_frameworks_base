@@ -97,13 +97,19 @@ public class PowerUI implements
     private boolean mEnableSkinTemperatureWarning;
     private boolean mEnableUsbTemperatureAlarm;
 
+    /** The battery level bucket of the last warning, see findBatteryLevelBucket. */
+    static final int BUCKET_LAST_WARNING = -3;
+
     private int mLowBatteryAlertCloseLevel;
     private final int[] mLowBatteryReminderLevels = new int[2];
+    // config_lastBatteryWarningLevel, below the critical level, or -1 without a last warning
+    private int mLastBatteryWarningLevel = -1;
 
     private long mScreenOffTime = -1;
 
     @VisibleForTesting boolean mLowWarningShownThisChargeCycle;
     @VisibleForTesting boolean mSevereWarningShownThisChargeCycle;
+    @VisibleForTesting boolean mLastWarningShownThisChargeCycle;
     @VisibleForTesting BatteryStateSnapshot mCurrentBatteryStateSnapshot;
     @VisibleForTesting BatteryStateSnapshot mLastBatteryStateSnapshot;
     @VisibleForTesting IThermalService mThermalService;
@@ -252,6 +258,9 @@ public class PowerUI implements
 
         mLowBatteryReminderLevels[0] = warnLevel;
         mLowBatteryReminderLevels[1] = critLevel;
+        final int lastLevel = mContext.getResources().getInteger(
+                com.android.systemui.res.R.integer.config_lastBatteryWarningLevel);
+        mLastBatteryWarningLevel = lastLevel > 0 && lastLevel < critLevel ? lastLevel : -1;
         mLowBatteryAlertCloseLevel = mLowBatteryReminderLevels[0]
                 + mContext.getResources().getInteger(
                         com.android.internal.R.integer.config_lowBatteryCloseWarningBump);
@@ -266,7 +275,8 @@ public class PowerUI implements
      * 1 means that the battery is "ok"
      * 0 means that the battery is between "ok" and what we should warn about.
      * less than 0 means that the battery is low, -1 means the battery is reaching warning level,
-     * -2 means the battery is reaching severe level.
+     * -2 means the battery is reaching severe level, -3 that it reached the last warning level
+     * (config_lastBatteryWarningLevel), shortly before the device turns itself off.
      */
     private int findBatteryLevelBucket(int level) {
         if (level >= mLowBatteryAlertCloseLevel) {
@@ -274,6 +284,9 @@ public class PowerUI implements
         }
         if (level > mLowBatteryReminderLevels[0]) {
             return 0;
+        }
+        if (level <= mLastBatteryWarningLevel) {
+            return BUCKET_LAST_WARNING;
         }
         final int N = mLowBatteryReminderLevels.length;
         for (int i=N-1; i>=0; i--) {
@@ -439,6 +452,7 @@ public class PowerUI implements
         if (currentSnapshot.getBatteryLevel() >= CHARGE_CYCLE_PERCENT_RESET) {
             mLowWarningShownThisChargeCycle = false;
             mSevereWarningShownThisChargeCycle = false;
+            mLastWarningShownThisChargeCycle = false;
             if (DEBUG) {
                 Slog.d(TAG, "Charge cycle reset! Can show warnings again");
             }
@@ -451,6 +465,9 @@ public class PowerUI implements
             mWarnings.showLowBatteryWarning(playSound);
             // mark if we've already shown a warning this cycle. This will prevent the notification
             // trigger from spamming users by only showing low/critical warnings once per cycle
+            if (currentSnapshot.getBatteryLevel() <= mLastBatteryWarningLevel) {
+                mLastWarningShownThisChargeCycle = true;
+            }
             if (currentSnapshot.getBatteryLevel() <= currentSnapshot.getSevereLevelThreshold()) {
                 mSevereWarningShownThisChargeCycle = true;
                 mLowWarningShownThisChargeCycle = true;
@@ -492,7 +509,11 @@ public class PowerUI implements
         final boolean canShowSevereWarning = !mSevereWarningShownThisChargeCycle
                 && snapshot.getBatteryLevel() <= snapshot.getSevereLevelThreshold();
 
-        final boolean canShow = canShowWarning || canShowSevereWarning;
+        // And the last warning once, shortly before the device turns itself off
+        final boolean canShowLastWarning = !mLastWarningShownThisChargeCycle
+                && snapshot.getBatteryLevel() <= mLastBatteryWarningLevel;
+
+        final boolean canShow = canShowWarning || canShowSevereWarning || canShowLastWarning;
 
         if (DEBUG) {
             Slog.d(TAG, "Enhanced trigger is: " + canShow + "\nwith battery snapshot:"
