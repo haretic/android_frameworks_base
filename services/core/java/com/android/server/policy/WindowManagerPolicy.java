@@ -217,6 +217,11 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
             return false;
         }
 
+        /** The window's {@link WindowManager.LayoutParams#inputFeatures}. */
+        default int getInputFeatures() {
+            return 0;
+        }
+
         /** @return true if the window can show over keyguard. */
         boolean canShowWhenLocked();
     }

@@ -31,7 +31,9 @@
             android:padding="@dimen/global_actions_button_padding"
             android:scaleType="centerInside"
             android:tint="@color/materialColorOnSurface"
-            android:background="@drawable/global_actions_lite_button"/>
+            android:background="@drawable/global_actions_lite_button"
+            android:foreground="@drawable/global_actions_lite_button_focus_ring"
+            android:duplicateParentState="true"/>
         <TextView
             android:id="@*android:id/message"
             android:layout_width="match_parent"

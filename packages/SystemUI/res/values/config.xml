@@ -1259,4 +1259,13 @@
     <!-- Whether quick settings shows a media volume slider with the brightness slider, for
          devices without volume keys. -->
     <bool name="config_qsMediaVolumeSlider">false</bool>
+
+    <!-- Whether the power menu shows CPU, temperature, battery and RAM with small graphs of
+         the last 10 minutes. persist.sys.power_menu_stats overrides it. -->
+    <bool name="config_powerMenuStats">false</bool>
+
+    <!-- Whether the power menu is worked with a scroll wheel sending DPAD up/down and a side
+         button that is the power key: the wheel walks the focus through every button, the
+         side button presses the focused one instead of turning the screen off. -->
+    <bool name="config_powerMenuWheelNavigation">false</bool>
 </resources>

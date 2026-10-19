@@ -38,6 +38,7 @@ import javax.inject.Provider;
 @SysUISingleton
 public class GlobalActionsComponent implements CoreStartable, Callbacks, GlobalActionsManager {
 
+    private final Context mContext;
     private final CommandQueue mCommandQueue;
     private final ExtensionController mExtensionController;
     private final Provider<GlobalActions> mGlobalActionsProvider;
@@ -47,10 +48,12 @@ public class GlobalActionsComponent implements CoreStartable, Callbacks, GlobalA
     private StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
 
     @Inject
-    public GlobalActionsComponent(CommandQueue commandQueue,
+    public GlobalActionsComponent(Context context,
+            CommandQueue commandQueue,
             ExtensionController extensionController,
             Provider<GlobalActions> globalActionsProvider,
             StatusBarKeyguardViewManager statusBarKeyguardViewManager) {
+        mContext = context;
         mCommandQueue = commandQueue;
         mExtensionController = extensionController;
         mGlobalActionsProvider = globalActionsProvider;
@@ -68,6 +71,8 @@ public class GlobalActionsComponent implements CoreStartable, Callbacks, GlobalA
                 .build();
         mPlugin = mExtension.get();
         mCommandQueue.addCallback(this);
+        // So the power menu's graphs already hold a few minutes when it opens
+        PowerMenuStatsPanel.startSampling(mContext);
     }
 
     private void onExtensionCallback(GlobalActions newPlugin) {
