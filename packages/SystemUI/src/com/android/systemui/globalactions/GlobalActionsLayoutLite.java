@@ -22,12 +22,14 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import androidx.constraintlayout.helper.widget.Flow;
+import androidx.constraintlayout.widget.ConstraintLayout;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.HardwareBgDrawable;
 
 import java.util.HashSet;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 import com.android.systemui.res.R;
 
 /**
@@ -36,6 +38,8 @@ import com.android.systemui.res.R;
 public class GlobalActionsLayoutLite extends GlobalActionsLayout {
     private View mLastView;
     private final Set<Integer> mCurrentIds = new HashSet<>();
+    private View mFooter;
+    private BooleanSupplier mShowFooter;
 
     public GlobalActionsLayoutLite(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -59,7 +63,8 @@ public class GlobalActionsLayoutLite extends GlobalActionsLayout {
         super.onUpdateList();
         int nElementsWrap = getResources().getInteger(
                 com.android.systemui.res.R.integer.power_menu_lite_max_columns);
-        int nChildren = getListView().getChildCount() - 1; // don't count flow element
+        // don't count the flow element or the footer
+        int nChildren = getListView().getChildCount() - (mFooter != null ? 2 : 1);
 
         // Avoid having just one action on the last row if there are more than 2 columns because
         // it looks unbalanced. Instead, bring the column size down to balance better.
@@ -67,7 +72,55 @@ public class GlobalActionsLayoutLite extends GlobalActionsLayout {
             nElementsWrap -= 1;
         }
         Flow flow = findViewById(R.id.list_flow);
+        if (mFooter != null) {
+            final boolean show = mShowFooter.getAsBoolean();
+            mFooter.setVisibility(show ? View.VISIBLE : View.GONE);
+            if (show && isFooterBeside()) {
+                // Two columns of actions leave room for the footer beside them
+                nElementsWrap = Math.min(nElementsWrap, 2);
+            }
+        }
         flow.setMaxElementsWrap(nElementsWrap);
+    }
+
+    /**
+     * Keeps {@code footer} in the card after the actions, e.g. the pinned apps: under them, or
+     * beside them where R.bool.global_actions_pinned_beside says so (landscape). It is shown
+     * while {@code showFooter} returns true, checked on every list update.
+     */
+    public void setFooter(View footer, BooleanSupplier showFooter) {
+        mFooter = footer;
+        mShowFooter = showFooter;
+        if (footer.getId() == View.NO_ID) {
+            footer.setId(View.generateViewId());
+        }
+        final View flow = findViewById(R.id.list_flow);
+        final ConstraintLayout.LayoutParams lp = new ConstraintLayout.LayoutParams(
+                ConstraintLayout.LayoutParams.WRAP_CONTENT,
+                ConstraintLayout.LayoutParams.WRAP_CONTENT);
+        if (isFooterBeside()) {
+            final ConstraintLayout.LayoutParams flowLp =
+                    (ConstraintLayout.LayoutParams) flow.getLayoutParams();
+            flowLp.width = ConstraintLayout.LayoutParams.WRAP_CONTENT;
+            flowLp.endToEnd = ConstraintLayout.LayoutParams.UNSET;
+            flowLp.endToStart = footer.getId();
+            flowLp.horizontalChainStyle = ConstraintLayout.LayoutParams.CHAIN_PACKED;
+            flow.setLayoutParams(flowLp);
+            lp.startToEnd = flow.getId();
+            lp.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID;
+            lp.topToTop = ConstraintLayout.LayoutParams.PARENT_ID;
+            lp.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID;
+        } else {
+            lp.topToBottom = flow.getId();
+            lp.startToStart = ConstraintLayout.LayoutParams.PARENT_ID;
+            lp.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID;
+        }
+        footer.setLayoutParams(lp);
+        getListView().addView(footer);
+    }
+
+    private boolean isFooterBeside() {
+        return getResources().getBoolean(R.bool.global_actions_pinned_beside);
     }
 
     @Override
@@ -95,6 +148,9 @@ public class GlobalActionsLayoutLite extends GlobalActionsLayout {
 
         // Add flow element back after clearing the list view
         super.addToListView(flow, false);
+        if (mFooter != null) {
+            getListView().addView(mFooter);
+        }
         mLastView = null;
         mCurrentIds.clear();
     }

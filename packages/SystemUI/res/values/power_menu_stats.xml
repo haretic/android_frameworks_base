@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Copyright (C) 2026 The andr36oid Project
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+-->
+<resources>
+    <!-- Power menu stats: a card above the power menu in portrait, a strip along the top of
+         the screen in landscape. config_powerMenuStats offers it. -->
+    <bool name="global_actions_stats_strip">false</bool>
+    <dimen name="global_actions_stats_menu_gap">12dp</dimen>
+    <dimen name="global_actions_stats_padding_horizontal">12dp</dimen>
+    <dimen name="global_actions_stats_padding_vertical">9dp</dimen>
+    <dimen name="global_actions_stats_cell_gap_half">5dp</dimen>
+    <dimen name="global_actions_stats_graph_height">18dp</dimen>
+    <dimen name="global_actions_stats_graph_width">0dp</dimen>
+    <dimen name="global_actions_stats_graph_gap">3dp</dimen>
+    <dimen name="global_actions_stats_label_size">10sp</dimen>
+    <dimen name="global_actions_stats_value_size">15sp</dimen>
+    <dimen name="global_actions_stats_extra_size">10sp</dimen>
+    <dimen name="global_actions_stats_strip_corner_radius">16dp</dimen>
+
+    <style name="GlobalActionsStats" />
+    <style name="GlobalActionsStats.Label">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:fontFamily">@*android:string/config_bodyFontFamilyMedium</item>
+        <item name="android:letterSpacing">0.08</item>
+        <item name="android:textSize">@dimen/global_actions_stats_label_size</item>
+        <item name="android:textColor">@color/materialColorOnSurfaceVariant</item>
+    </style>
+    <style name="GlobalActionsStats.Value">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:fontFamily">@*android:string/config_headlineFontFamilyMedium</item>
+        <item name="android:fontFeatureSettings">tnum</item>
+        <item name="android:textSize">@dimen/global_actions_stats_value_size</item>
+        <item name="android:textColor">@color/materialColorOnSurface</item>
+    </style>
+    <style name="GlobalActionsStats.Extra">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:fontFeatureSettings">tnum</item>
+        <item name="android:textSize">@dimen/global_actions_stats_extra_size</item>
+        <item name="android:textColor">@color/materialColorOnSurfaceVariant</item>
+    </style>
+
+    <!-- One color per metric; CPU follows the wallpaper like the menu -->
+    <color name="global_actions_stats_cpu">@color/materialColorPrimary</color>
+    <color name="global_actions_stats_temp">#FFB870</color>
+    <color name="global_actions_stats_bat">#9BE29B</color>
+    <color name="global_actions_stats_ram">#A8C8FF</color>
+    <!-- Levels: charging, warm or nearly full, hot or nearly empty -->
+    <color name="global_actions_stats_good">#69F0AE</color>
+    <color name="global_actions_stats_ok">#FFD740</color>
+    <color name="global_actions_stats_bad">@color/materialColorError</color>
+
+    <!-- Ring around the focused button or pinned app -->
+    <dimen name="global_actions_focus_ring_width">3dp</dimen>
+
+    <!-- Pinned apps, inside the menu's card: a row under the buttons, beside them in
+         landscape (values-land) -->
+    <bool name="global_actions_pinned_beside">false</bool>
+    <integer name="global_actions_pinned_columns">4</integer>
+    <dimen name="global_actions_pinned_divider_margin">12dp</dimen>
+    <dimen name="global_actions_pinned_label_margin">4dp</dimen>
+    <dimen name="global_actions_pinned_item_width">72dp</dimen>
+    <dimen name="global_actions_pinned_item_padding">4dp</dimen>
+    <dimen name="global_actions_pinned_item_corner_radius">12dp</dimen>
+    <dimen name="global_actions_pinned_icon_size">44dp</dimen>
+    <dimen name="global_actions_pinned_label_gap">4dp</dimen>
+    <dimen name="global_actions_pinned_label_size">12sp</dimen>
+
+    <!-- Power menu stats label for the processor load [CHAR LIMIT=5] -->
+    <string name="global_actions_stats_cpu">CPU</string>
+    <!-- Power menu stats label for the temperature of the chip [CHAR LIMIT=5] -->
+    <string name="global_actions_stats_temp">TEMP</string>
+    <!-- Power menu stats label for the battery [CHAR LIMIT=5] -->
+    <string name="global_actions_stats_bat">BAT</string>
+    <!-- Power menu stats label for the memory in use [CHAR LIMIT=5] -->
+    <string name="global_actions_stats_ram">RAM</string>
+    <!-- Spoken description of the power menu stats panel [CHAR LIMIT=NONE] -->
+    <string name="global_actions_stats_description">System stats of the last 10 minutes</string>
+    <!-- Title over the apps pinned to the power menu [CHAR LIMIT=20] -->
+    <string name="global_actions_pinned_title">PINNED</string>
+</resources>

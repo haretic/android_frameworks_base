@@ -540,6 +540,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     // handler thread.  We'll need to resolve this someday by teaching the input dispatcher
     // to hold wakelocks during dispatch and eliminating the critical path.
     volatile boolean mPowerKeyHandled;
+    // The focused window of the default display, for INPUT_FEATURE_POWER_KEY_SELECTS
+    private volatile WindowState mDefaultDisplayFocus;
+    // The power key press in progress goes to the focused window, input reader thread only
+    private boolean mPowerKeyToFocusedWindow;
     volatile boolean mBackKeyHandled;
     volatile boolean mEndCallKeyHandled;
     volatile boolean mPowerButtonLaunchGestureTriggered;
@@ -4562,6 +4566,30 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mDisplayFoldController.onDefaultDisplayFocusChanged(
                     newFocus != null ? newFocus.getOwningPackage() : null);
         }
+        mDefaultDisplayFocus = newFocus;
+    }
+
+    /**
+     * Whether a power key press goes to the focused window as a key event, see
+     * INPUT_FEATURE_POWER_KEY_SELECTS. Decided on the first down, so a press that began
+     * in a menu ends there even if the menu went away in between. Input reader thread.
+     */
+    private boolean powerKeyGoesToFocusedWindow(KeyEvent event, boolean interactive) {
+        if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            if (event.getRepeatCount() == 0) {
+                // Read without the WM lock: the window may set the feature after it got the
+                // focus (a dialog), and an int read can at worst miss a change made just now
+                final WindowState focus = mDefaultDisplayFocus;
+                mPowerKeyToFocusedWindow = interactive && !mPowerKeyHandled && focus != null
+                        && focus.canAddInternalSystemWindow()
+                        && (focus.getInputFeatures()
+                                & WindowManager.LayoutParams.INPUT_FEATURE_POWER_KEY_SELECTS) != 0;
+            }
+            return mPowerKeyToFocusedWindow;
+        }
+        final boolean toWindow = mPowerKeyToFocusedWindow;
+        mPowerKeyToFocusedWindow = false;
+        return toWindow;
     }
 
     @Override
@@ -5094,6 +5122,13 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             if (isWakeKey && down) {
                 mPendingWakeKey = keyCode;
             }
+        }
+
+        if (keyCode == KeyEvent.KEYCODE_POWER && !isKeyGestureTriggered
+                && powerKeyGoesToFocusedWindow(event, interactive)) {
+            // A system menu took it as its select key: no screen off, no power menu
+            mSingleKeyGestureDetector.reset();
+            return ACTION_PASS_TO_USER;
         }
 
         // If the key would be handled globally, just return the result, don't worry about special

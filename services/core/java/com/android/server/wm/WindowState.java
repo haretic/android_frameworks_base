@@ -1333,6 +1333,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         return mOwnerCanAddInternalSystemWindow;
     }
 
+    @Override
+    public int getInputFeatures() {
+        return mAttrs.inputFeatures;
+    }
+
     boolean skipLayout() {
         // Skip layout of the window when in transition to pip mode.
         return mActivityRecord != null && (mActivityRecord.mWaitForEnteringPinnedMode
