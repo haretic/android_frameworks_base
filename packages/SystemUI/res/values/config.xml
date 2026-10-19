@@ -1268,4 +1268,8 @@
          button that is the power key: the wheel walks the focus through every button, the
          side button presses the focused one instead of turning the screen off. -->
     <bool name="config_powerMenuWheelNavigation">false</bool>
+
+    <!-- Battery level of a last low battery warning, below the critical one, saying that the
+         device turns itself off soon. -1 for none. -->
+    <integer name="config_lastBatteryWarningLevel">-1</integer>
 </resources>
