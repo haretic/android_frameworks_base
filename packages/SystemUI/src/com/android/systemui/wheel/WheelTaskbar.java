@@ -146,6 +146,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private View mClosing;
     private LinearLayout mBar;
     private LinearLayout mAppsColumn;
+    private ScrollView mAppsScroll;
     private List<WheelTaskbarApps.Entry> mApps = new ArrayList<>();
     private LinearLayout mPanel;
     private TextView mPanelTitle;
@@ -581,6 +582,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private void buildBar() {
         mBar.removeAllViews();
         mAppsColumn = null;
+        mAppsScroll = null;
         mModeIcon = null;
         for (String button : mSettings.buttons) {
             switch (button) {
@@ -646,6 +648,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         lp.topMargin = dp(2);
         lp.bottomMargin = dp(6);
         mBar.addView(scroll, lp);
+        mAppsScroll = scroll;
         mApps = WheelTaskbarApps.load(userContext(), mUserTracker.getUserId(),
                 mSettings.running, mForegroundTask);
         for (WheelTaskbarApps.Entry app : mApps) {
@@ -777,8 +780,30 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                     .setInterpolator(new DecelerateInterpolator()).start();
             if (hasFocus) {
                 showLabel(v, label);
+                revealAppsEnd(v);
             }
         });
+    }
+
+    /**
+     * A button above or below the apps scrolls them to that end, so the wheel enters the list
+     * at its first or last app, none half under a button. A focused app scrolls itself in view.
+     */
+    private void revealAppsEnd(View button) {
+        if (mAppsScroll == null || mBar == null) {
+            return;
+        }
+        final int at = mBar.indexOfChild((View) button.getParent());
+        if (at < 0) {
+            return;
+        }
+        final int y = at < mBar.indexOfChild(mAppsScroll) ? 0
+                : Math.max(0, mAppsColumn.getHeight() - mAppsScroll.getHeight());
+        if (mSettings.animation > 0) {
+            mAppsScroll.smoothScrollTo(0, y);
+        } else {
+            mAppsScroll.scrollTo(0, y);
+        }
     }
 
     private TextView badge(FrameLayout cell) {
