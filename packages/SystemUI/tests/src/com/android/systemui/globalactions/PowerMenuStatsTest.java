@@ -151,7 +151,7 @@ public class PowerMenuStatsTest {
 
         final PowerMenuStatsReader reader = new PowerMenuStatsReader(mRoot.getPath());
         reader.sample();
-        reader.setBattery(87, false, 3800, -500000);
+        reader.setBattery(87, false, false, 3800, -500000);
         assertEquals(1296, reader.cpuMhz);
         assertEquals(52.3f, reader.tempC, 0.001f);
         assertEquals(87, reader.batteryPercent);
@@ -165,7 +165,7 @@ public class PowerMenuStatsTest {
 
         write("proc/stat", "cpu  3 0 1 10 0 0 0 0 0 0\n");
         reader.sample();
-        reader.setBattery(87, true, 3800, -500000);
+        reader.setBattery(87, true, true, 3800, -500000);
         assertEquals(50, reader.cpuPercent);
         assertTrue(reader.charging);
 
@@ -196,8 +196,12 @@ public class PowerMenuStatsTest {
         assertEquals("--", PowerMenuStatsFormat.tempValue(Float.NaN));
         assertEquals("max 61°C", PowerMenuStatsFormat.tempExtra(60.8f));
         assertEquals("", PowerMenuStatsFormat.tempExtra(Float.NaN));
-        assertEquals("-1.9 W", PowerMenuStatsFormat.batteryExtra(1.87f, false));
-        assertEquals("+5.0 W", PowerMenuStatsFormat.batteryExtra(5f, true));
+        assertEquals("-1.9 W", PowerMenuStatsFormat.batteryExtra(1.87f, false, false));
+        assertEquals("+5.0 W", PowerMenuStatsFormat.batteryExtra(5f, true, true));
+        // On USB with charging held off, the charger runs the r1
+        assertEquals("USB power", PowerMenuStatsFormat.batteryExtra(0.01f, false, true));
+        assertEquals("USB power", PowerMenuStatsFormat.batteryExtra(Float.NaN, false, true));
+        assertEquals("USB, -1.2 W", PowerMenuStatsFormat.batteryExtra(1.2f, false, true));
         assertEquals("1.9 G", PowerMenuStatsFormat.ramValue(1946));
         assertEquals("--", PowerMenuStatsFormat.ramValue(-1));
         assertEquals("of 3.5 G", PowerMenuStatsFormat.ramExtra(3584));

@@ -34,12 +34,23 @@ import java.nio.file.Paths;
  */
 final class PowerMenuStatsReader {
 
+    /** A cluster's clock while all its cores are offline (parked). */
+    static final int OFFLINE = 0;
+
     /** -1 or NaN where a value couldn't be read. */
     int cpuPercent = -1;
     int cpuMhz = -1;
+    /** The big and the little cluster's clock, or {@link #OFFLINE}; -1 without two clusters. */
+    int bigMhz = -1;
+    int littleMhz = -1;
     float tempC = Float.NaN;
     int batteryPercent = -1;
     boolean charging;
+    /**
+     * On a charger. Without charging (held at a limit, or full) the charger runs the r1 and
+     * the battery's power is what it adds, if anything.
+     */
+    boolean plugged;
     float batteryVolts = Float.NaN;
     /** Always positive, the direction is in {@link #charging}. */
     float batteryAmps = Float.NaN;
@@ -51,6 +62,9 @@ final class PowerMenuStatsReader {
 
     private final String mRoot;
     private final String[] mCpuFreqPaths;
+    /** cpufreq policy directories, null unless there are two clusters. */
+    private final String mBigPolicy;
+    private final String mLittlePolicy;
     private final String mTempPath;
 
     private long mLastCpuBusy = -1;
@@ -64,23 +78,30 @@ final class PowerMenuStatsReader {
     PowerMenuStatsReader(String root) {
         mRoot = root;
         mCpuFreqPaths = findCpuFreqs();
+        final String[] clusters = findClusters();
+        mBigPolicy = clusters[0];
+        mLittlePolicy = clusters[1];
         mTempPath = findTemperature();
     }
 
     /** A reader with nothing read yet, all values unknown. Looks up no files. */
     static PowerMenuStatsReader empty() {
-        return new PowerMenuStatsReader("", new String[0], null);
+        return new PowerMenuStatsReader("", new String[0], null, null, null);
     }
 
     /** A copy of the current values, safe to hand to another thread. */
     PowerMenuStatsReader snapshot() {
         final PowerMenuStatsReader copy =
-                new PowerMenuStatsReader(mRoot, mCpuFreqPaths, mTempPath);
+                new PowerMenuStatsReader(mRoot, mCpuFreqPaths, mBigPolicy, mLittlePolicy,
+                        mTempPath);
         copy.cpuPercent = cpuPercent;
         copy.cpuMhz = cpuMhz;
+        copy.bigMhz = bigMhz;
+        copy.littleMhz = littleMhz;
         copy.tempC = tempC;
         copy.batteryPercent = batteryPercent;
         copy.charging = charging;
+        copy.plugged = plugged;
         copy.batteryVolts = batteryVolts;
         copy.batteryAmps = batteryAmps;
         copy.batteryWatts = batteryWatts;
@@ -91,9 +112,12 @@ final class PowerMenuStatsReader {
     }
 
     // For empty() and snapshot(): takes the paths, looks nothing up
-    private PowerMenuStatsReader(String root, String[] cpuFreqPaths, String tempPath) {
+    private PowerMenuStatsReader(String root, String[] cpuFreqPaths, String bigPolicy,
+            String littlePolicy, String tempPath) {
         mRoot = root;
         mCpuFreqPaths = cpuFreqPaths;
+        mBigPolicy = bigPolicy;
+        mLittlePolicy = littlePolicy;
         mTempPath = tempPath;
     }
 
@@ -110,6 +134,8 @@ final class PowerMenuStatsReader {
             mhz = Math.max(mhz, readInt(path, 1000));
         }
         cpuMhz = positiveOrMinusOne(mhz);
+        bigMhz = clusterMhz(mBigPolicy);
+        littleMhz = clusterMhz(mLittlePolicy);
         final int milliC = mTempPath == null ? Integer.MIN_VALUE : readInt(mTempPath, 1);
         tempC = milliC == Integer.MIN_VALUE || milliC < 0 ? Float.NaN : milliC / 1000f;
         sampleRam(read(mRoot + "/proc/meminfo"));
@@ -148,12 +174,15 @@ final class PowerMenuStatsReader {
     }
 
     /**
-     * The battery as BatteryManager reports it: level in percent (-1 unknown), voltage in mV
-     * and current in uA (Integer.MIN_VALUE unknown, either sign).
+     * The battery as BatteryManager reports it: level in percent (-1 unknown), whether it
+     * charges and whether a charger is plugged in, voltage in mV and current in uA
+     * (Integer.MIN_VALUE unknown, either sign).
      */
-    void setBattery(int percent, boolean isCharging, int milliVolts, int microAmps) {
+    void setBattery(int percent, boolean isCharging, boolean isPlugged, int milliVolts,
+            int microAmps) {
         batteryPercent = percent < 0 ? -1 : percent;
         charging = isCharging;
+        plugged = isPlugged;
         batteryAmps = microAmps == Integer.MIN_VALUE ? Float.NaN : Math.abs(microAmps / 1e6f);
         batteryVolts = milliVolts == Integer.MIN_VALUE || milliVolts <= 0
                 ? Float.NaN : milliVolts / 1e3f;
@@ -204,6 +233,48 @@ final class PowerMenuStatsReader {
             paths[i] = policies[i].getPath() + "/scaling_cur_freq";
         }
         return paths;
+    }
+
+    /**
+     * The fastest and the slowest cpufreq policy by cpuinfo_max_freq, {null, null} unless
+     * there are two clusters with different top clocks.
+     */
+    private String[] findClusters() {
+        final File[] policies = new File(mRoot + "/sys/devices/system/cpu/cpufreq").listFiles(
+                (dir, name) -> name.startsWith("policy"));
+        String big = null;
+        String little = null;
+        int bigMax = Integer.MIN_VALUE;
+        int littleMax = Integer.MAX_VALUE;
+        if (policies != null) {
+            for (File policy : policies) {
+                final int max = readInt(policy.getPath() + "/cpuinfo_max_freq", 1);
+                if (max <= 0) {
+                    continue;
+                }
+                if (max > bigMax) {
+                    bigMax = max;
+                    big = policy.getPath();
+                }
+                if (max < littleMax) {
+                    littleMax = max;
+                    little = policy.getPath();
+                }
+            }
+        }
+        return bigMax > littleMax ? new String[] {big, little} : new String[] {null, null};
+    }
+
+    /** A cluster's clock in MHz; OFFLINE while it has no online core (affected_cpus empty). */
+    private int clusterMhz(String policy) {
+        if (policy == null) {
+            return -1;
+        }
+        final String affected = read(policy + "/affected_cpus");
+        if (affected != null && affected.trim().isEmpty()) {
+            return OFFLINE;
+        }
+        return positiveOrMinusOne(readInt(policy + "/scaling_cur_freq", 1000));
     }
 
     /** The SoC's thermal zone, or the first one there is. */
