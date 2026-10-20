@@ -49,6 +49,21 @@ final class PowerMenuStatsFormat {
         return mhz > 0 ? String.format(Locale.US, "%.1f GHz", mhz / 1000f) : "";
     }
 
+    /**
+     * "big 2.2 GHz" over "little off", one line per cluster; cpuExtra(mhz) without two
+     * clusters.
+     */
+    static String cpuClusters(int bigMhz, int littleMhz, int mhz) {
+        if (bigMhz < 0 || littleMhz < 0) {
+            return cpuExtra(mhz);
+        }
+        return "big " + clusterClock(bigMhz) + "\nlittle " + clusterClock(littleMhz);
+    }
+
+    private static String clusterClock(int mhz) {
+        return mhz == PowerMenuStatsReader.OFFLINE ? "off" : cpuExtra(mhz);
+    }
+
     /** "48°C" */
     static String tempValue(float celsius) {
         return Float.isNaN(celsius) ? UNKNOWN : Math.round(celsius) + "°C";
@@ -74,8 +89,16 @@ final class PowerMenuStatsFormat {
                 : charging ? LEVEL_GOOD : percent <= 15 ? LEVEL_BAD : LEVEL_NORMAL;
     }
 
-    /** "+4.6 W" while charging, "-1.9 W" on battery, empty if the power is unknown. */
-    static String batteryExtra(float watts, boolean charging) {
+    /**
+     * "+4.6 W" while charging, "-1.9 W" on battery, empty if the power is unknown. Plugged in
+     * but not charging, the charger runs the r1: "USB power", or "USB, -0.4 W" with what the
+     * battery adds.
+     */
+    static String batteryExtra(float watts, boolean charging, boolean plugged) {
+        if (plugged && !charging) {
+            return Float.isNaN(watts) || watts < 0.05f ? "USB power"
+                    : String.format(Locale.US, "USB, -%.1f W", watts);
+        }
         return Float.isNaN(watts) ? ""
                 : String.format(Locale.US, "%s%.1f W", charging ? "+" : "-", watts);
     }
