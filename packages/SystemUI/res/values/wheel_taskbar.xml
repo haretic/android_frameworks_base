@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     SPDX-FileCopyrightText: 2026 The LineageOS Project
+     SPDX-License-Identifier: Apache-2.0
+-->
+<resources>
+    <!-- Whether a turn of the scroll wheel opens the wheel taskbar (WheelTaskbar). The policy
+         sends those turns from the devices in config_scrollWheelInputDevices, or from the wheel
+         daemon's (config_wheelDaemonInputDevice). -->
+    <bool name="config_wheelTaskbar">false</bool>
+
+    <!-- The wheel taskbar's settings, its last button, as a component name; empty opens the
+         Settings app. -->
+    <string name="config_wheelTaskbarSettings" translatable="false"></string>
+
+    <!-- What the wheel does in apps the user hasn't picked a wheel mode for, package=mode with
+         the modes taskbar, app and volume (LineageSettings.Secure.WHEEL_APP_MODES); for apps
+         made for the wheel. Any other app has taskbar. -->
+    <string-array name="config_wheelAppModeDefaults" translatable="false" />
+
+    <dimen name="wheel_taskbar_top">24dp</dimen>
+    <dimen name="wheel_taskbar_gap">8dp</dimen>
+    <dimen name="wheel_taskbar_badge_size">16dp</dimen>
+    <dimen name="wheel_taskbar_menu_width">168dp</dimen>
+    <dimen name="wheel_taskbar_menu_top">24dp</dimen>
+    <dimen name="wheel_taskbar_item_height">44dp</dimen>
+    <dimen name="wheel_taskbar_item_icon">28dp</dimen>
+    <dimen name="wheel_taskbar_ring">2dp</dimen>
+
+    <color name="wheel_taskbar_background">@android:color/system_neutral1_900</color>
+    <color name="wheel_taskbar_button">@android:color/system_neutral2_800</color>
+    <color name="wheel_taskbar_ring">@android:color/system_accent1_100</color>
+    <color name="wheel_taskbar_text">@android:color/system_neutral1_50</color>
+    <color name="wheel_taskbar_text_secondary">@android:color/system_neutral2_200</color>
+    <color name="wheel_taskbar_badge">#ffe5534b</color>
+
+    <style name="TextAppearance.WheelTaskbar.Label" parent="">
+        <item name="android:fontFamily">@*android:string/config_bodyFontFamilyMedium</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">@color/wheel_taskbar_text</item>
+    </style>
+
+    <style name="TextAppearance.WheelTaskbar.Title" parent="">
+        <item name="android:fontFamily">@*android:string/config_bodyFontFamilyMedium</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:letterSpacing">0.08</item>
+        <item name="android:textColor">@color/wheel_taskbar_text_secondary</item>
+    </style>
+
+    <style name="TextAppearance.WheelTaskbar.Item" parent="">
+        <item name="android:fontFamily">@*android:string/config_bodyFontFamily</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textColor">@color/wheel_taskbar_text</item>
+    </style>
+
+    <style name="TextAppearance.WheelTaskbar.Summary" parent="">
+        <item name="android:fontFamily">@*android:string/config_bodyFontFamily</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">@color/wheel_taskbar_text_secondary</item>
+    </style>
+
+    <style name="TextAppearance.WheelTaskbar.Badge" parent="">
+        <item name="android:textSize">10sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@android:color/white</item>
+    </style>
+</resources>
