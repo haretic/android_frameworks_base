@@ -14,6 +14,7 @@ import android.view.Window;
 import android.view.WindowManager;
 
 import com.android.systemui.res.R;
+import com.android.systemui.wheel.WheelSystemWindows;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -34,19 +35,60 @@ final class PowerMenuWheelNavigation implements DialogInterface.OnKeyListener {
 
     private PowerMenuWheelNavigation(Window window) {
         mWindow = window;
+        // The first wheel step after a tap never reaches onKey: the view root spends it on
+        // leaving touch mode (checkForLeavingTouchModeAndConsume). Take that as the step, on
+        // the first button, as the view root does not say which way the wheel turned.
+        window.getDecorView().getViewTreeObserver().addOnTouchModeChangeListener(inTouchMode -> {
+            if (!inTouchMode && !mMoved) {
+                window.getDecorView().post(() -> {
+                    if (!mMoved && !window.getDecorView().isInTouchMode()) {
+                        move(1);
+                    }
+                });
+            }
+        });
     }
 
-    /** Call before the dialog shows, the policy reads the window's flags when it gets focus. */
-    static void attach(Dialog dialog) {
+    /**
+     * Call before the dialog shows, the policy reads the window's flags when it gets focus.
+     * Returns null when the device has no wheel navigation.
+     */
+    static PowerMenuWheelNavigation attach(Dialog dialog) {
         if (!dialog.getContext().getResources().getBoolean(
                 R.bool.config_powerMenuWheelNavigation)) {
-            return;
+            return null;
         }
         final Window window = dialog.getWindow();
         final WindowManager.LayoutParams lp = window.getAttributes();
         lp.inputFeatures |= WindowManager.LayoutParams.INPUT_FEATURE_POWER_KEY_SELECTS;
         window.setAttributes(lp);
-        dialog.setOnKeyListener(new PowerMenuWheelNavigation(window));
+        // Whatever the wheel does in the app under it, here it moves the focus
+        WheelSystemWindows.track(window);
+        final PowerMenuWheelNavigation navigation = new PowerMenuWheelNavigation(window);
+        dialog.setOnKeyListener(navigation);
+        return navigation;
+    }
+
+    /** Where the wheel focus is among the stops, -1 before the wheel moved it. */
+    int focusedStop() {
+        return mMoved ? targets().indexOf(mWindow.getDecorView().findFocus()) : -1;
+    }
+
+    /**
+     * Puts the wheel focus back on {@code stop} (from focusedStop()) once the dialog's new
+     * content is laid out, after a rotation rebuilt it.
+     */
+    void restoreFocus(int stop) {
+        if (stop < 0) {
+            return;
+        }
+        final View root = mWindow.getDecorView();
+        root.post(() -> {
+            final List<View> targets = targets();
+            if (!targets.isEmpty()) {
+                targets.get(Math.min(stop, targets.size() - 1)).requestFocusFromTouch();
+            }
+        });
     }
 
     @Override
