@@ -58,6 +58,7 @@ import com.android.systemui.stylus.StylusUsiPowerStartable
 import com.android.systemui.temporarydisplay.chipbar.ChipbarCoordinator
 import com.android.systemui.usb.StorageNotification
 import com.android.systemui.util.NotificationChannels
+import com.android.systemui.wheel.WheelTaskbar
 import com.android.systemui.wmshell.WMShell
 import dagger.Binds
 import dagger.Module
@@ -94,6 +95,12 @@ abstract class SystemUICoreStartableModule {
     @IntoMap
     @ClassKey(GlobalActionsComponent::class)
     abstract fun bindGlobalActionsComponent(sysui: GlobalActionsComponent): CoreStartable
+
+    /** Inject into WheelTaskbar. */
+    @Binds
+    @IntoMap
+    @ClassKey(WheelTaskbar::class)
+    abstract fun bindWheelTaskbar(sysui: WheelTaskbar): CoreStartable
 
     /** Inject into InstantAppNotifier. */
     @Binds
