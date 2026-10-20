@@ -8074,4 +8074,16 @@
 
     <!-- Whether to explicitly disable the Video capability over IWLAN when Wi-Fi Calling is turned off. -->
     <bool name="config_disable_video_capability_when_wfc_off">false</bool>
+
+    <!-- Input devices, by name, that are a scroll wheel sending DPAD up and down. A turn the
+         app in front leaves unhandled goes to SystemUI as a system key, for its wheel taskbar
+         (config_wheelTaskbar). -->
+    <string-array name="config_scrollWheelInputDevices" translatable="false" />
+
+    <!-- The input device of a daemon that owns the scroll wheel and sends its taskbar steps
+         as KEYCODE_NAVIGATE_PREVIOUS / NEXT: the policy gives them to SystemUI's wheel
+         taskbar while an app has the focus. Empty: no such daemon. -->
+    <string name="config_wheelDaemonInputDevice" translatable="false"></string>
+    <!-- Its init socket, where SystemUI sets the mode for the app in front. -->
+    <string name="config_wheelDaemonSocket" translatable="false"></string>
 </resources>
