@@ -1032,7 +1032,7 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
                 || newConfig.orientation != mOrientation)) {
             mSmallestScreenWidthDp = newConfig.smallestScreenWidthDp;
             mOrientation = newConfig.orientation;
-            mDelegate.refreshDialog();
+            mDelegate.relayoutDialog();
         }
     }
 
@@ -2932,6 +2932,9 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
         @VisibleForTesting
         @Nullable
         SystemUIDialog mCurrentDialog;
+        /** The wheel and side-button navigation, null without a wheel. */
+        @Nullable
+        private PowerMenuWheelNavigation mWheelNavigation;
         private GlobalActionsLayoutLite mGlobalActionsLayout;
         @Nullable
         private ScrimDrawable mBackgroundDrawable;
@@ -3075,8 +3078,8 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
             final Window window = dialog.getWindow();
             window.setTitle(dialog.getContext().getString(
                     com.android.systemui.res.R.string.accessibility_quick_settings_power_menu));
-            initializeLayout(dialog);
-            PowerMenuWheelNavigation.attach(dialog);
+            initializeLayout(dialog, true /* firstTime */);
+            mWheelNavigation = PowerMenuWheelNavigation.attach(dialog);
             mInitialWindowDimAmount = window.getAttributes().dimAmount;
         }
 
@@ -3152,7 +3155,7 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
             mOverflowPopup.show();
         }
 
-        private void initializeLayout(@NonNull SystemUIDialog dialog) {
+        private void initializeLayout(@NonNull SystemUIDialog dialog, boolean firstTime) {
             dialog.setContentView(com.android.systemui.res.R.layout.global_actions_grid_lite);
             fixNavBarClipping(dialog);
 
@@ -3216,7 +3219,7 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
             // If user entered from the lock screen and smart lock was enabled, disable it
             int user = mSelectedUserInteractor.getSelectedUserId();
             boolean userHasTrust = mKeyguardUpdateMonitor.getUserHasTrust(user);
-            if (mKeyguardShowing && userHasTrust) {
+            if (firstTime && mKeyguardShowing && userHasTrust) {
                 mLockPatternUtils.requireCredentialEntry(user);
                 showSmartLockDisabledMessage(dialog.getContext(), container);
             }
@@ -3534,6 +3537,32 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
 
             // Update the list as the max number of items per row has probably changed.
             mGlobalActionsLayout.updateList();
+        }
+
+        /**
+         * Lays the open dialog out again for a new size or orientation: the stats panel and the
+         * pinned apps pick their arrangement when they are inflated.
+         */
+        public void relayoutDialog() {
+            if (mCurrentDialog == null) {
+                refreshDialog();
+                return;
+            }
+            dismissOverflow();
+            dismissPowerOptions();
+            dismissRestartOptions();
+            dismissUsers();
+            final int stop = mWheelNavigation != null ? mWheelNavigation.focusedStop() : -1;
+            mOnRefreshCallback.run();
+            initializeLayout(mCurrentDialog, false /* firstTime */);
+            mGlobalActionsLayout.updateList();
+            updateColors(mCurrentDialog, mColorExtractor.getNeutralColors(), false /* animate */);
+            if (SceneContainerFlag.isEnabled()) {
+                dismissWhenUnlockStatusChanges(mDeviceEntryInteractor.isUnlocked().getValue());
+            }
+            if (mWheelNavigation != null) {
+                mWheelNavigation.restoreFocus(stop);
+            }
         }
 
         private void onRotate(int from, int to) {
