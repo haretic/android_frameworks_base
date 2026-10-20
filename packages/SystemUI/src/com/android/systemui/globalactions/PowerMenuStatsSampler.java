@@ -183,7 +183,7 @@ final class PowerMenuStatsSampler {
         final Intent battery = mContext.registerReceiver(null,
                 new IntentFilter(Intent.ACTION_BATTERY_CHANGED), Context.RECEIVER_NOT_EXPORTED);
         if (battery == null) {
-            r.setBattery(-1, false, Integer.MIN_VALUE, Integer.MIN_VALUE);
+            r.setBattery(-1, false, false, Integer.MIN_VALUE, Integer.MIN_VALUE);
             return;
         }
         final int level = battery.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
@@ -197,6 +197,7 @@ final class PowerMenuStatsSampler {
         r.setBattery(level < 0 || scale <= 0 ? -1 : 100 * level / scale,
                 status == BatteryManager.BATTERY_STATUS_CHARGING
                         || status == BatteryManager.BATTERY_STATUS_FULL,
+                battery.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0,
                 milliVolts, microAmps);
     }
 

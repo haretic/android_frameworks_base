@@ -106,6 +106,11 @@ public class PowerMenuStatsPanel extends LinearLayout implements PowerMenuStatsS
         super.onFinishInflate();
         mCpu = new Cell(findViewById(R.id.global_actions_stats_cpu),
                 R.string.global_actions_stats_cpu, R.color.global_actions_stats_cpu);
+        if (mCpu.extra != null) {
+            // One line per cluster
+            mCpu.extra.setSingleLine(false);
+            mCpu.extra.setMaxLines(2);
+        }
         mTemp = new Cell(findViewById(R.id.global_actions_stats_temp),
                 R.string.global_actions_stats_temp, R.color.global_actions_stats_temp);
         mBattery = new Cell(findViewById(R.id.global_actions_stats_bat),
@@ -183,15 +188,16 @@ public class PowerMenuStatsPanel extends LinearLayout implements PowerMenuStatsS
     }
 
     private void showNumbers(PowerMenuStatsReader s, float maxTemp) {
-        // 34%, 1.8 GHz
+        // 34%, big 2.2 GHz over little 1.6 GHz (only the portrait card has the extra line)
         mCpu.show(PowerMenuStatsFormat.cpuValue(s.cpuPercent),
-                PowerMenuStatsFormat.cpuExtra(s.cpuMhz), PowerMenuStatsFormat.LEVEL_NORMAL);
-        // 48°C, max 61°C (the highest point of the graph)
+                PowerMenuStatsFormat.cpuClusters(s.bigMhz, s.littleMhz, s.cpuMhz),
+                PowerMenuStatsFormat.LEVEL_NORMAL);
+        // 48°C, max 61°C: the hottest sample in the graph's window (about 10 minutes)
         mTemp.show(PowerMenuStatsFormat.tempValue(s.tempC),
                 PowerMenuStatsFormat.tempExtra(maxTemp), PowerMenuStatsFormat.tempLevel(s.tempC));
         // 97%, +4.6 W while charging
         mBattery.show(PowerMenuStatsFormat.batteryValue(s.batteryPercent),
-                PowerMenuStatsFormat.batteryExtra(s.batteryWatts, s.charging),
+                PowerMenuStatsFormat.batteryExtra(s.batteryWatts, s.charging, s.plugged),
                 PowerMenuStatsFormat.batteryLevel(s.batteryPercent, s.charging));
         // 1.9 G, of 3.5 G
         mRam.show(PowerMenuStatsFormat.ramValue(s.ramUsedMb),
