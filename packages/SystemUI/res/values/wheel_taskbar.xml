@@ -21,11 +21,12 @@
     <dimen name="wheel_taskbar_top">24dp</dimen>
     <dimen name="wheel_taskbar_gap">8dp</dimen>
     <dimen name="wheel_taskbar_badge_size">16dp</dimen>
-    <dimen name="wheel_taskbar_menu_width">168dp</dimen>
+    <dimen name="wheel_taskbar_menu_width">184dp</dimen>
     <dimen name="wheel_taskbar_menu_top">24dp</dimen>
     <dimen name="wheel_taskbar_item_height">44dp</dimen>
     <dimen name="wheel_taskbar_item_icon">28dp</dimen>
     <dimen name="wheel_taskbar_ring">2dp</dimen>
+    <dimen name="wheel_taskbar_preview_width">144dp</dimen>
 
     <color name="wheel_taskbar_background">@android:color/system_neutral1_900</color>
     <color name="wheel_taskbar_button">@android:color/system_neutral2_800</color>
@@ -33,11 +34,19 @@
     <color name="wheel_taskbar_text">@android:color/system_neutral1_50</color>
     <color name="wheel_taskbar_text_secondary">@android:color/system_neutral2_200</color>
     <color name="wheel_taskbar_badge">#ffe5534b</color>
+    <color name="wheel_taskbar_card">@android:color/system_neutral1_800</color>
+    <color name="wheel_taskbar_divider">#26ffffff</color>
 
     <style name="TextAppearance.WheelTaskbar.Label" parent="">
         <item name="android:fontFamily">@*android:string/config_bodyFontFamilyMedium</item>
         <item name="android:textSize">13sp</item>
         <item name="android:textColor">@color/wheel_taskbar_text</item>
+    </style>
+
+    <style name="TextAppearance.WheelTaskbar.Hint" parent="">
+        <item name="android:fontFamily">@*android:string/config_bodyFontFamily</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:textColor">@color/wheel_taskbar_text_secondary</item>
     </style>
 
     <style name="TextAppearance.WheelTaskbar.Title" parent="">
