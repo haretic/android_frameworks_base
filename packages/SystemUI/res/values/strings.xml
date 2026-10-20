@@ -5068,4 +5068,32 @@
     <!-- Accessibility label for the thumbs down button on attribution dialog. [CHAR_LIMIT=NONE] -->
     <string name="ace_attribution_thumbs_down_button_accessibility_description">Thumbs down feedback button</string>
 
+    <!-- Wheel taskbar (WheelTaskbar): its buttons, also read out by TalkBack [CHAR LIMIT=24] -->
+    <string name="wheel_taskbar_home">Home</string>
+    <!-- Wheel taskbar: button and list of all apps, A to Z [CHAR LIMIT=24] -->
+    <string name="wheel_taskbar_drawer">All apps</string>
+    <!-- Wheel taskbar: label of the app in front [CHAR LIMIT=32] -->
+    <string name="wheel_taskbar_app_front"><xliff:g id="app" example="Chrome">%1$s</xliff:g>, in front</string>
+    <!-- Wheel taskbar: label of an app running in the background [CHAR LIMIT=32] -->
+    <string name="wheel_taskbar_app_running"><xliff:g id="app" example="Chrome">%1$s</xliff:g>, running</string>
+    <!-- Wheel taskbar, all apps: summary of an app pinned to the taskbar [CHAR LIMIT=32] -->
+    <string name="wheel_taskbar_pinned">Pinned</string>
+    <!-- Wheel taskbar, all apps: the list when there are none [CHAR LIMIT=32] -->
+    <string name="wheel_taskbar_no_apps">No apps</string>
+    <!-- Wheel taskbar: button that opens the notifications [CHAR LIMIT=24] -->
+    <string name="wheel_taskbar_notifications">Notifications</string>
+    <!-- Wheel taskbar: button and list of what the wheel does in the app in front [CHAR LIMIT=24] -->
+    <string name="wheel_taskbar_mode">Wheel mode</string>
+    <!-- Wheel taskbar, Wheel mode: the wheel opens and moves the taskbar [CHAR LIMIT=32] -->
+    <string name="wheel_taskbar_mode_taskbar">Taskbar</string>
+    <!-- Wheel taskbar, Wheel mode: the wheel moves through the app, as arrow keys [CHAR LIMIT=32] -->
+    <string name="wheel_taskbar_mode_app">Scroll <xliff:g id="app" example="Chrome">%1$s</xliff:g></string>
+    <!-- Wheel taskbar, Wheel mode: the wheel sets the volume [CHAR LIMIT=32] -->
+    <string name="wheel_taskbar_mode_volume">Volume</string>
+    <!-- Wheel taskbar, Wheel mode: summary of the current mode [CHAR LIMIT=32] -->
+    <string name="wheel_taskbar_mode_current">Now</string>
+    <!-- Wheel taskbar, Wheel mode: summary of the app modes, back to the taskbar [CHAR LIMIT=48] -->
+    <string name="wheel_taskbar_mode_back">Double-press the side button for the taskbar</string>
+    <!-- Wheel taskbar: its last button, opens the taskbar's settings [CHAR LIMIT=24] -->
+    <string name="wheel_taskbar_settings">Taskbar settings</string>
 </resources>

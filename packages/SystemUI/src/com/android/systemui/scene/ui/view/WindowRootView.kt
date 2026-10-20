@@ -21,9 +21,12 @@ import android.content.Context
 import android.util.AttributeSet
 import android.util.Pair
 import android.view.DisplayCutout
+import android.view.FocusFinder
+import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowInsets
+import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.core.view.updateMargins
 import com.android.systemui.compose.ComposeInitializer
@@ -140,6 +143,58 @@ open class WindowRootView(context: Context, attrs: AttributeSet?) : FrameLayout(
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         windowRootViewKeyEventHandler.collectKeyEvent(event)
+
+        // Only here with INPUT_FEATURE_POWER_KEY_SELECTS (wheel UI, shade over an app): the
+        // side button clicks the focused notification or tile, or first shows the focus
+        if (event.keyCode == KeyEvent.KEYCODE_POWER) {
+            if (
+                event.action == KeyEvent.ACTION_UP &&
+                    !event.isCanceled &&
+                    (event.flags and KeyEvent.FLAG_LONG_PRESS) == 0
+            ) {
+                val focused = findFocus()
+                if (focused != null && !isInTouchMode) {
+                    focused.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                    focused.performClick()
+                } else {
+                    FocusFinder.getInstance()
+                        .findNextFocus(this, null, View.FOCUS_DOWN)
+                        ?.requestFocusFromTouch()
+                }
+            }
+            return true
+        }
+
+        // With the same feature the wheel starts at the top and goes round: past the last
+        // item to the first
+        if (
+            (event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN ||
+                event.keyCode == KeyEvent.KEYCODE_DPAD_UP) &&
+                ((layoutParams as? WindowManager.LayoutParams)?.inputFeatures ?: 0) and
+                    WindowManager.LayoutParams.INPUT_FEATURE_POWER_KEY_SELECTS != 0
+        ) {
+            val focused = findFocus()
+            if (isInTouchMode || focused == null) {
+                if (event.action == KeyEvent.ACTION_DOWN) {
+                    FocusFinder.getInstance()
+                        .findNextFocus(this, null, View.FOCUS_DOWN)
+                        ?.requestFocusFromTouch()
+                }
+                return true
+            }
+            val direction =
+                if (event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) View.FOCUS_DOWN
+                else View.FOCUS_UP
+            if (FocusFinder.getInstance().findNextFocus(this, focused, direction) == null) {
+                if (event.action == KeyEvent.ACTION_DOWN) {
+                    FocusFinder.getInstance().findNextFocus(this, null, direction)?.let {
+                        it.requestFocus()
+                        it.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                    }
+                }
+                return true
+            }
+        }
 
         if (windowRootViewKeyEventHandler.interceptMediaKey(event)) {
             return true

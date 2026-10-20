@@ -659,6 +659,17 @@ public class NotificationShadeWindowControllerImpl
             mLpChanged.inputFeatures &=
                     ~LayoutParams.INPUT_FEATURE_DISABLE_USER_ACTIVITY;
         }
+
+        // With the wheel UI the side button picks the focused notification or tile while the
+        // shade is pulled down over an app (WindowRootView), as in the power menu
+        if (state.shadeOrQsExpanded && !state.isKeyguardShowingAndNotOccluded()
+                && mContext.getResources().getBoolean(R.bool.config_powerMenuWheelNavigation)
+                && LineageSettings.Secure.getInt(mContext.getContentResolver(),
+                        LineageSettings.Secure.WHEEL_UI, 1) != 0) {
+            mLpChanged.inputFeatures |= LayoutParams.INPUT_FEATURE_POWER_KEY_SELECTS;
+        } else {
+            mLpChanged.inputFeatures &= ~LayoutParams.INPUT_FEATURE_POWER_KEY_SELECTS;
+        }
     }
 
     private void applyStatusBarColorSpaceAgnosticFlag(NotificationShadeWindowState state) {
