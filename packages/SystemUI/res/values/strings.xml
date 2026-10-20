@@ -5096,4 +5096,44 @@
     <string name="wheel_taskbar_mode_back">Double-press the side button for the taskbar</string>
     <!-- Wheel taskbar: its last button, opens the taskbar's settings [CHAR LIMIT=24] -->
     <string name="wheel_taskbar_settings">Taskbar settings</string>
+    <!-- Wheel taskbar: label of an app running with only a background service, playing music or navigating [CHAR LIMIT=40] -->
+    <string name="wheel_taskbar_app_background"><xliff:g id="app" example="Music">%1$s</xliff:g>, in the background</string>
+    <!-- Wheel taskbar: label of a pinned app that isn't running [CHAR LIMIT=32] -->
+    <string name="wheel_taskbar_app_pinned"><xliff:g id="app" example="Chrome">%1$s</xliff:g>, pinned</string>
+    <!-- Wheel taskbar: hint under the name of the app in front [CHAR LIMIT=24] -->
+    <string name="wheel_taskbar_state_front">In front</string>
+    <!-- Wheel taskbar: hint under the name of an app running with only a background service [CHAR LIMIT=24] -->
+    <string name="wheel_taskbar_state_background">In the background</string>
+    <!-- Wheel taskbar: an app's state and then what holding the side button does, under its name [CHAR LIMIT=64] -->
+    <string name="wheel_taskbar_hint_state"><xliff:g id="state" example="Running">%1$s</xliff:g> · <xliff:g id="hint" example="Hold for options">%2$s</xliff:g></string>
+    <!-- Wheel taskbar: hint under an app's name, the side button held opens its options [CHAR LIMIT=32] -->
+    <string name="wheel_taskbar_hint_hold">Hold for options</string>
+    <!-- Wheel taskbar: hint under the notifications button, how many there are [CHAR LIMIT=32] -->
+    <plurals name="wheel_taskbar_hint_notifications">
+        <item quantity="one"><xliff:g id="count" example="1">%d</xliff:g> new</item>
+        <item quantity="other"><xliff:g id="count" example="3">%d</xliff:g> new</item>
+    </plurals>
+    <!-- Wheel taskbar: hint under the notifications button when there are none [CHAR LIMIT=32] -->
+    <string name="wheel_taskbar_hint_no_notifications">Nothing new</string>
+    <!-- Wheel taskbar: hint under the all apps button, how many apps there are [CHAR LIMIT=32] -->
+    <plurals name="wheel_taskbar_hint_drawer">
+        <item quantity="one"><xliff:g id="count" example="1">%d</xliff:g> app</item>
+        <item quantity="other"><xliff:g id="count" example="42">%d</xliff:g> apps</item>
+    </plurals>
+    <!-- Wheel taskbar, an app's options: closes it [CHAR LIMIT=32] -->
+    <string name="wheel_taskbar_app_close">Close</string>
+    <!-- Wheel taskbar, an app's options: stops an app running in the background [CHAR LIMIT=32] -->
+    <string name="wheel_taskbar_app_stop">Stop</string>
+    <!-- Wheel taskbar, an app's options: closes every running app [CHAR LIMIT=32] -->
+    <string name="wheel_taskbar_app_close_all">Close all</string>
+    <!-- Wheel taskbar, an app's options [CHAR LIMIT=32] -->
+    <string name="wheel_taskbar_app_pin">Pin</string>
+    <!-- Wheel taskbar, an app's options [CHAR LIMIT=32] -->
+    <string name="wheel_taskbar_app_unpin">Unpin</string>
+    <!-- Wheel taskbar, an app's options: the app's page in Settings [CHAR LIMIT=32] -->
+    <string name="wheel_taskbar_app_info">App info</string>
+    <!-- Wheel taskbar, all apps: summary of a running app [CHAR LIMIT=32] -->
+    <string name="wheel_taskbar_running">Running</string>
+    <!-- Wheel taskbar, all apps: summary of a pinned running app [CHAR LIMIT=32] -->
+    <string name="wheel_taskbar_pinned_running">Pinned, running</string>
 </resources>
