@@ -247,6 +247,7 @@ import com.android.internal.policy.IShortcutService;
 import com.android.internal.policy.KeyInterceptionInfo;
 import com.android.internal.policy.PhoneWindow;
 import com.android.internal.statusbar.IStatusBarService;
+import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.NamedLock;
 import com.android.internal.util.ScreenshotHelper;
 import com.android.internal.widget.LockPatternUtils;
@@ -357,6 +358,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     // Deprecated: static final int MULTI_PRESS_POWER_THEATER_MODE = 1;
     static final int MULTI_PRESS_POWER_BRIGHTNESS_BOOST = 2;
     static final int MULTI_PRESS_POWER_LAUNCH_TARGET_ACTIVITY = 3;
+    static final int MULTI_PRESS_POWER_WHEEL_TASKBAR = 4;
 
     // must match: config_longPressOnBackBehavior in config.xml
     static final int LONG_PRESS_BACK_NOTHING = 0;
@@ -1610,6 +1612,13 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 break;
             case MULTI_PRESS_POWER_LAUNCH_TARGET_ACTIVITY:
                 launchTargetActivityOnMultiPressPower();
+                break;
+            case MULTI_PRESS_POWER_WHEEL_TASKBAR:
+                // SystemUI opens its wheel taskbar, whatever the wheel does in the app
+                if (interactive && !keyguardOn()) {
+                    sendSystemKeyToStatusBarAsync(new KeyEvent(eventTime, eventTime,
+                            KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_NAVIGATE_IN, 0));
+                }
                 break;
         }
     }
@@ -3936,6 +3945,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         switch (keyCode) {
             case KeyEvent.KEYCODE_HOME:
                 return handleHomeShortcuts(focusedToken, event);
+            case KeyEvent.KEYCODE_NAVIGATE_PREVIOUS:
+            case KeyEvent.KEYCODE_NAVIGATE_NEXT:
+                if (isWheelTaskbarStep(focusedToken, event)) {
+                    if (down) {
+                        sendSystemKeyToStatusBarAsync(event);
+                    }
+                    return true;
+                }
+                return false;
             case KeyEvent.KEYCODE_MENU:
                 if (virtualKey || keyguardOn) {
                     // Let the app handle the key
@@ -4490,7 +4508,44 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             sendSystemKeyToStatusBarAsync(event);
             return true;
         }
+        if ((keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN)
+                && isFromScrollWheel(event)) {
+            // A turn of the wheel the app has no use for: SystemUI may open its wheel taskbar
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                sendSystemKeyToStatusBarAsync(event);
+            }
+            return true;
+        }
         return false;
+    }
+
+    /**
+     * Whether a key is a taskbar step of the wheel daemon (config_wheelDaemonInputDevice) for
+     * SystemUI: one an app would get. A system window (a menu, the shade, the taskbar) gets it
+     * itself, the device's key character map makes it a D-pad step there.
+     */
+    private boolean isWheelTaskbarStep(IBinder focusedToken, KeyEvent event) {
+        final String daemon = mContext.getResources().getString(
+                com.android.internal.R.string.config_wheelDaemonInputDevice);
+        final InputDevice device = mInputManager.getInputDevice(event.getDeviceId());
+        if (daemon.isEmpty() || device == null || !daemon.equals(device.getName())) {
+            return false;
+        }
+        final KeyInterceptionInfo info = focusedToken == null ? null
+                : mWindowManagerInternal.getKeyInterceptionInfoFromToken(focusedToken);
+        return info == null || (info.layoutParamsType >= FIRST_APPLICATION_WINDOW
+                && info.layoutParamsType <= LAST_APPLICATION_WINDOW);
+    }
+
+    /** Whether the key comes from a scroll wheel (config_scrollWheelInputDevices). */
+    private boolean isFromScrollWheel(KeyEvent event) {
+        final String[] wheels = mContext.getResources().getStringArray(
+                com.android.internal.R.array.config_scrollWheelInputDevices);
+        if (wheels.length == 0) {
+            return false;
+        }
+        final InputDevice device = mInputManager.getInputDevice(event.getDeviceId());
+        return device != null && ArrayUtils.contains(wheels, device.getName());
     }
 
     /**
@@ -7570,6 +7625,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 return "MULTI_PRESS_POWER_BRIGHTNESS_BOOST";
             case MULTI_PRESS_POWER_LAUNCH_TARGET_ACTIVITY:
                 return "MULTI_PRESS_POWER_LAUNCH_TARGET_ACTIVITY";
+            case MULTI_PRESS_POWER_WHEEL_TASKBAR:
+                return "MULTI_PRESS_POWER_WHEEL_TASKBAR";
             default:
                 return Integer.toString(behavior);
         }
