@@ -22,6 +22,7 @@
     android:gravity="center"
     android:layout_gravity="center"
     android:orientation="vertical"
+    android:defaultFocusHighlightEnabled="false"
     android:stateListAnimator="@anim/control_state_list_animator">
         <ImageView
             android:id="@*android:id/icon"
