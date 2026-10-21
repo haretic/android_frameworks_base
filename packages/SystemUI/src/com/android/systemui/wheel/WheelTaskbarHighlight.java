@@ -78,9 +78,11 @@ final class WheelTaskbarHighlight extends View implements ViewTreeObserver.OnPre
     /** 1 for the full glide, smaller for a quicker one, 0 to jump. */
     void setSpeed(float speed) {
         mJump = speed <= 0;
-        final float stiffness = speed >= 1 ? 700f : 1500f;
+        // Quick and barely bouncing: a fast spin steps again before a softer spring settles,
+        // and its overshoot then reads as the focus wobbling about
+        final float stiffness = speed >= 1 ? 1200f : 2400f;
         for (SpringAnimation spring : mSprings) {
-            spring.setSpring(new SpringForce().setStiffness(stiffness).setDampingRatio(0.78f));
+            spring.setSpring(new SpringForce().setStiffness(stiffness).setDampingRatio(0.92f));
         }
     }
 
