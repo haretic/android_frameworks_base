@@ -1331,7 +1331,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         } else if (count > 3 && count <= getMaxMultiPressPowerCount()) {
             Slog.d(TAG, "No behavior defined for power press count " + count);
         } else if (count == 1 && shouldHandleShortPressPowerAction(interactive, eventTime)) {
-            if (interactive && powerPressIsWheelEnter(eventTime)) {
+            if (interactive && powerPressForWheelMode()) {
                 return;
             }
             switch (mShortPressOnPowerBehavior) {
@@ -4578,11 +4578,13 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     /**
-     * In an app the wheel scrolls (its wheel mode is app, see config_wheelAppModeDefaults and
-     * LineageSettings.Secure.WHEEL_APP_MODES), a press of the side button is Enter for it:
-     * sent to the app, true. Any other window, the keyguard or the stock look: false.
+     * A press of the side button in an app as its wheel mode has it (config_wheelAppModeDefaults
+     * and LineageSettings.Secure.WHEEL_APP_MODES): Enter where the wheel moves through the app
+     * (app, scroll, tab, arrows, page), play or pause where it skips tracks (media). Sent to
+     * the app, true. Other modes, other windows, the keyguard or the stock look: false, the
+     * press does what it always does.
      */
-    private boolean powerPressIsWheelEnter(long eventTime) {
+    private boolean powerPressForWheelMode() {
         final WindowState focus = mDefaultDisplayFocus;
         if (focus == null || keyguardOn() || mContext.getResources().getString(
                 com.android.internal.R.string.config_wheelDaemonInputDevice).isEmpty()) {
@@ -4597,12 +4599,28 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 UserHandle.USER_CURRENT) == 0) {
             return false;
         }
-        if (!"app".equals(wheelAppMode(resolver, focus.getOwningPackage()))) {
+        final String mode = wheelAppMode(resolver, focus.getOwningPackage());
+        final int keyCode;
+        if (mode == null) {
             return false;
+        }
+        switch (mode) {
+            case "app":
+            case "scroll":
+            case "tab":
+            case "arrows":
+            case "page":
+                keyCode = KeyEvent.KEYCODE_ENTER;
+                break;
+            case "media":
+                keyCode = KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE;
+                break;
+            default:
+                return false;
         }
         final long now = SystemClock.uptimeMillis();
         for (int action : new int[] {KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP}) {
-            final KeyEvent enter = new KeyEvent(now, now, action, KeyEvent.KEYCODE_ENTER, 0, 0,
+            final KeyEvent enter = new KeyEvent(now, now, action, keyCode, 0, 0,
                     KeyCharacterMap.VIRTUAL_KEYBOARD, 0, KeyEvent.FLAG_FROM_SYSTEM,
                     InputDevice.SOURCE_KEYBOARD);
             enter.setDisplayId(Display.DEFAULT_DISPLAY);
