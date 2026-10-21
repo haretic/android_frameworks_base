@@ -25,8 +25,9 @@ final class WheelTaskbarSettings {
     static final String BUTTON_APPS = "apps";
     static final String BUTTON_NOTIFICATIONS = "notifications";
     static final String BUTTON_MODE = "mode";
+    static final String BUTTON_POWER = "power";
     private static final String[] BUTTONS = {
-        BUTTON_HOME, BUTTON_DRAWER, BUTTON_APPS, BUTTON_NOTIFICATIONS, BUTTON_MODE,
+        BUTTON_HOME, BUTTON_DRAWER, BUTTON_APPS, BUTTON_NOTIFICATIONS, BUTTON_MODE, BUTTON_POWER,
     };
 
     static final int LIST_END_BACK = 0;
@@ -42,7 +43,6 @@ final class WheelTaskbarSettings {
     /** 0: stays open. */
     long timeoutMs = 3000;
     boolean labels = true;
-    boolean haptics = true;
     /** 1 full, 0.5 quick, 0 none. */
     float animation = 1f;
     int size = 1;
@@ -68,7 +68,6 @@ final class WheelTaskbarSettings {
         timeoutMs = 1000L * Math.max(0, getInt(resolver,
                 LineageSettings.Secure.WHEEL_TASKBAR_TIMEOUT, 3, userId));
         labels = getInt(resolver, LineageSettings.Secure.WHEEL_TASKBAR_LABELS, 1, userId) != 0;
-        haptics = getInt(resolver, LineageSettings.Secure.WHEEL_TASKBAR_HAPTICS, 1, userId) != 0;
         final int animations = getInt(resolver, LineageSettings.Secure.WHEEL_TASKBAR_ANIMATIONS,
                 2, userId);
         animation = animations >= 2 ? 1f : animations == 1 ? 0.5f : 0f;
@@ -83,16 +82,28 @@ final class WheelTaskbarSettings {
         return (long) (ms * animation);
     }
 
-    /** Every shown button once, in order; a '!' in front hides one. Unset: all of them. */
+    /**
+     * Every shown button once, in order; a '!' in front hides one. Unset: all of them. One the
+     * value doesn't name is newer than it and shows where the defaults have it.
+     */
     private static List<String> parseButtons(String value) {
         if (TextUtils.isEmpty(value)) {
             return List.of(BUTTONS);
         }
         final List<String> shown = new ArrayList<>();
+        final List<String> named = new ArrayList<>();
         for (String button : value.split(",")) {
-            if (!button.startsWith("!") && List.of(BUTTONS).contains(button)
-                    && !shown.contains(button)) {
-                shown.add(button);
+            final String name = button.startsWith("!") ? button.substring(1) : button;
+            if (List.of(BUTTONS).contains(name) && !named.contains(name)) {
+                named.add(name);
+                if (name.equals(button)) {
+                    shown.add(button);
+                }
+            }
+        }
+        for (int i = 0; i < BUTTONS.length; i++) {
+            if (!named.contains(BUTTONS[i])) {
+                shown.add(Math.min(i, shown.size()), BUTTONS[i]);
             }
         }
         return shown;
