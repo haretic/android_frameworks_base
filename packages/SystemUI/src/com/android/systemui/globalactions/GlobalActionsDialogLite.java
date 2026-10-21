@@ -712,6 +712,10 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
      * layout is being used.
      */
     private int getMaxShownPowerItems() {
+        if (GlobalActionsLayoutLite.isListStyle(mContext)) {
+            return mResources.getInteger(
+                    com.android.systemui.res.R.integer.global_actions_list_max_items);
+        }
         return mResources.getInteger(com.android.systemui.res.R.integer.power_menu_lite_max_columns)
                 * mResources.getInteger(
                     com.android.systemui.res.R.integer.power_menu_lite_max_rows);
@@ -899,6 +903,16 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
                 default:
                     Log.e(TAG, "Unknown global action type: " + actionType.getConfigKey());
                     break;
+            }
+        }
+
+        if (GlobalActionsLayoutLite.isListStyle(mContext)) {
+            // The list starts where the wheel does: a stray press must not call for help
+            for (int i = tempActions.size() - 1; i >= 0; i--) {
+                if (tempActions.get(i) instanceof EmergencyDialerAction) {
+                    tempActions.add(tempActions.remove(i));
+                    break;
+                }
             }
         }
 
@@ -1138,7 +1152,10 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
             ImageView icon = v.findViewById(R.id.icon);
             icon.getDrawable().setTint(iconColor);
             icon.setBackgroundTintList(ColorStateList.valueOf(backgroundColor));
-            v.setBackgroundTintList(ColorStateList.valueOf(backgroundColor));
+            if (!GlobalActionsLayoutLite.isListStyle(context)) {
+                // A list row's background is its focus ring, the icon says emergency enough
+                v.setBackgroundTintList(ColorStateList.valueOf(backgroundColor));
+            }
             return v;
         }
 
@@ -2384,6 +2401,13 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
     }
 
     private int getGridItemLayoutResource() {
+        return getGridItemLayoutResource(mContext);
+    }
+
+    private static int getGridItemLayoutResource(Context context) {
+        if (GlobalActionsLayoutLite.isListStyle(context)) {
+            return com.android.systemui.res.R.layout.global_actions_list_item_lite;
+        }
         return com.android.systemui.res.R.layout.global_actions_grid_item_lite;
     }
 
@@ -2477,8 +2501,8 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
                 LayoutInflater inflater) {
             willCreate();
 
-            View v = inflater.inflate(com.android.systemui.res.R.layout.global_actions_grid_item_lite,
-                    parent, false /* attach */);
+            View v = inflater.inflate(getGridItemLayoutResource(context), parent,
+                    false /* attach */);
             v.setId(View.generateViewId());
 
             ImageView icon = v.findViewById(R.id.icon);
@@ -3154,7 +3178,9 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
         }
 
         private void initializeLayout(@NonNull SystemUIDialog dialog, boolean firstTime) {
-            dialog.setContentView(com.android.systemui.res.R.layout.global_actions_grid_lite);
+            dialog.setContentView(GlobalActionsLayoutLite.isListStyle(mContext)
+                    ? com.android.systemui.res.R.layout.global_actions_list_lite
+                    : com.android.systemui.res.R.layout.global_actions_grid_lite);
             fixNavBarClipping(dialog);
 
             mGlobalActionsLayout =

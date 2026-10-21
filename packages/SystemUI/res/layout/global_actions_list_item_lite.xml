@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     SPDX-FileCopyrightText: 2026 The LineageOS Project
+     SPDX-License-Identifier: Apache-2.0
+-->
+<!-- One power menu action as a row of the list style (config_powerMenuList): icon, then its
+     name, the whole row ringed while the wheel is on it -->
+<com.android.systemui.globalactions.GlobalActionsItem
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="0dp"
+    android:layout_height="@dimen/global_actions_list_row_height"
+    android:paddingHorizontal="@dimen/global_actions_list_row_padding"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:background="@drawable/global_actions_list_row_background"
+    android:defaultFocusHighlightEnabled="false">
+        <ImageView
+            android:id="@*android:id/icon"
+            android:layout_width="@dimen/global_actions_list_icon_size"
+            android:layout_height="@dimen/global_actions_list_icon_size"
+            android:padding="@dimen/global_actions_list_icon_padding"
+            android:scaleType="centerInside"
+            android:tint="@color/materialColorOnSurface"
+            android:background="@drawable/global_actions_lite_button"
+            android:duplicateParentState="true"/>
+        <TextView
+            android:id="@*android:id/message"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="@dimen/global_actions_list_text_gap"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:textSize="@dimen/global_actions_list_text_size"
+            android:textColor="@color/materialColorOnSurface"
+            android:textAppearance="?android:attr/textAppearanceMedium" />
+</com.android.systemui.globalactions.GlobalActionsItem>

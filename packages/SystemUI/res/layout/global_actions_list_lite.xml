@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     SPDX-FileCopyrightText: 2026 The LineageOS Project
+     SPDX-License-Identifier: Apache-2.0
+-->
+<!-- The power menu in the list style (config_powerMenuList, portrait): global_actions_grid_lite
+     as wide as the screen, one action a row -->
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/global_actions_container"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipChildren="false"
+    android:gravity="center"
+    android:layout_gravity="center">
+  <com.android.systemui.globalactions.GlobalActionsLayoutLite
+      android:id="@id/global_actions_view"
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_marginHorizontal="@dimen/global_actions_list_margin"
+      android:focusable="false"
+      android:orientation="vertical"
+      android:clipChildren="false"
+      android:clipToPadding="false"
+      app:layout_constraintBottom_toBottomOf="parent"
+      app:layout_constraintTop_toTopOf="parent"
+      app:layout_constraintStart_toStartOf="parent"
+      app:layout_constraintEnd_toEndOf="parent">
+    <com.android.systemui.common.ui.view.LaunchableConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:id="@android:id/list"
+        android:translationZ="@dimen/global_actions_translate"
+        android:background="@drawable/global_actions_lite_background"
+        android:padding="@dimen/global_actions_list_padding"
+        android:layoutDirection="ltr">
+      <androidx.constraintlayout.helper.widget.Flow
+          android:id="@+id/list_flow"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          app:layout_constraintStart_toStartOf="parent"
+          app:layout_constraintEnd_toEndOf="parent"
+          app:layout_constraintTop_toTopOf="parent"
+          app:flow_wrapMode="chain"
+          app:flow_maxElementsWrap="1"
+          app:flow_verticalGap="@dimen/global_actions_list_row_gap"
+          app:flow_horizontalStyle="spread"/>
+    </com.android.systemui.common.ui.view.LaunchableConstraintLayout>
+  </com.android.systemui.globalactions.GlobalActionsLayoutLite>
+</androidx.constraintlayout.widget.ConstraintLayout>
