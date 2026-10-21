@@ -7,13 +7,13 @@ package com.android.systemui.globalactions;
 
 import android.app.Dialog;
 import android.content.DialogInterface;
-import android.view.HapticFeedbackConstants;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 
 import com.android.systemui.res.R;
+import com.android.systemui.wheel.WheelFeedback;
 import com.android.systemui.wheel.WheelSystemWindows;
 
 import java.util.ArrayList;
@@ -24,8 +24,9 @@ import java.util.List;
  * The power menu on a device with a scroll wheel and one side button
  * (config_powerMenuWheelNavigation): the wheel, which sends DPAD up and down, walks the focus
  * through the buttons and then the pinned apps in reading order, round and round, with a
- * haptic tick per step; the side button, which is the power key, presses the focused one
- * instead of turning the screen off (INPUT_FEATURE_POWER_KEY_SELECTS).
+ * tick and a quiet click per step (WheelFeedback); the side button, which is the power key,
+ * presses the focused one instead of turning the screen off
+ * (INPUT_FEATURE_POWER_KEY_SELECTS).
  */
 final class PowerMenuWheelNavigation implements DialogInterface.OnKeyListener {
 
@@ -106,6 +107,12 @@ final class PowerMenuWheelNavigation implements DialogInterface.OnKeyListener {
                     press();
                 }
                 return true;
+            case KeyEvent.KEYCODE_BACK:
+                if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) {
+                    WheelFeedback.get(mWindow.getContext()).back();
+                }
+                // The dialog closes itself
+                return false;
             default:
                 return false;
         }
@@ -125,7 +132,7 @@ final class PowerMenuWheelNavigation implements DialogInterface.OnKeyListener {
         final View target = targets.get(next);
         // Also leaves touch mode, so the ring shows after a tap
         target.requestFocusFromTouch();
-        target.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+        WheelFeedback.get(target.getContext()).step(step < 0);
     }
 
     private void press() {
@@ -135,7 +142,7 @@ final class PowerMenuWheelNavigation implements DialogInterface.OnKeyListener {
             move(1);
             return;
         }
-        focused.performHapticFeedback(HapticFeedbackConstants.CONFIRM);
+        WheelFeedback.get(focused.getContext()).select();
         focused.performClick();
     }
 
