@@ -1269,6 +1269,11 @@
          side button presses the focused one instead of turning the screen off. -->
     <bool name="config_powerMenuWheelNavigation">false</bool>
 
+    <!-- Whether the power menu is a list in portrait, one action a row with the emergency
+         action last, under a stats card as wide as it: what a scroll wheel walks best, and no
+         label gets cut off on a small screen. Landscape keeps the grid. -->
+    <bool name="config_powerMenuList">false</bool>
+
     <!-- Battery level of a last low battery warning, below the critical one, saying that the
          device turns itself off soon. -1 for none. -->
     <integer name="config_lastBatteryWarningLevel">-1</integer>
