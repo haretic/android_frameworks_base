@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     SPDX-FileCopyrightText: 2026 The LineageOS Project
+     SPDX-License-Identifier: Apache-2.0
+-->
+<!-- Power menu stats of the list style (config_powerMenuList): the card as wide as the list,
+     two metrics a line, so no value or line under it gets cut off. Nothing in it can take the
+     focus. -->
+<com.android.systemui.globalactions.PowerMenuStatsPanel
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/global_actions_stats"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/global_actions_stats_background"
+    android:paddingHorizontal="@dimen/global_actions_stats_padding_horizontal"
+    android:paddingVertical="@dimen/global_actions_stats_padding_vertical"
+    android:translationZ="@dimen/global_actions_translate"
+    android:orientation="vertical"
+    android:focusable="false"
+    android:focusableInTouchMode="false"
+    android:descendantFocusability="blocksDescendants"
+    android:contentDescription="@string/global_actions_stats_description">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:baselineAligned="false">
+
+        <include
+            android:id="@+id/global_actions_stats_cpu"
+            layout="@layout/global_actions_stats_cell_wide" />
+
+        <include
+            android:id="@+id/global_actions_stats_temp"
+            layout="@layout/global_actions_stats_cell_wide" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/global_actions_stats_wide_row_gap"
+        android:orientation="horizontal"
+        android:baselineAligned="false">
+
+        <include
+            android:id="@+id/global_actions_stats_bat"
+            layout="@layout/global_actions_stats_cell_wide" />
+
+        <include
+            android:id="@+id/global_actions_stats_ram"
+            layout="@layout/global_actions_stats_cell_wide" />
+    </LinearLayout>
+</com.android.systemui.globalactions.PowerMenuStatsPanel>

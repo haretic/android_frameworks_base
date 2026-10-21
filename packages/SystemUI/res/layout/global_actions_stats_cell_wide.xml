@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     SPDX-FileCopyrightText: 2026 The LineageOS Project
+     SPDX-License-Identifier: Apache-2.0
+-->
+<!-- One metric of the list style's stats card, half its width: label with the value at the
+     end of the line, the graph, a short line under it -->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="0dp"
+    android:layout_height="wrap_content"
+    android:layout_weight="1"
+    android:layout_marginHorizontal="@dimen/global_actions_stats_wide_gap_half"
+    android:orientation="vertical"
+    android:focusable="false">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:baselineAligned="true">
+
+        <TextView
+            android:id="@+id/global_actions_stats_label"
+            style="@style/GlobalActionsStats.Label"
+            android:layout_width="0dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/global_actions_stats_value"
+            style="@style/GlobalActionsStats.Value"
+            android:textSize="@dimen/global_actions_stats_wide_value_size" />
+    </LinearLayout>
+
+    <com.android.systemui.globalactions.PowerMenuSparklineView
+        android:id="@+id/global_actions_stats_graph"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/global_actions_stats_graph_height"
+        android:layout_marginVertical="@dimen/global_actions_stats_graph_gap" />
+
+    <TextView
+        android:id="@+id/global_actions_stats_extra"
+        style="@style/GlobalActionsStats.Extra" />
+</LinearLayout>

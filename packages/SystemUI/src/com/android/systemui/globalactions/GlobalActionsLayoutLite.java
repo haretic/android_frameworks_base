@@ -17,6 +17,8 @@
 package com.android.systemui.globalactions;
 
 import android.content.Context;
+import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewGroup;
@@ -58,9 +60,24 @@ public class GlobalActionsLayoutLite extends GlobalActionsLayout {
         return null;
     }
 
+    /** Whether the menu is the list style here, see config_powerMenuList. */
+    public static boolean isListStyle(Context context) {
+        final Resources res = context.getResources();
+        return res.getBoolean(R.bool.config_powerMenuList)
+                && res.getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE;
+    }
+
     @Override
     public void onUpdateList() {
         super.onUpdateList();
+        if (isListStyle(getContext())) {
+            // One action a row, the footer under them
+            if (mFooter != null) {
+                mFooter.setVisibility(mShowFooter.getAsBoolean() ? View.VISIBLE : View.GONE);
+            }
+            ((Flow) findViewById(R.id.list_flow)).setMaxElementsWrap(1);
+            return;
+        }
         int nElementsWrap = getResources().getInteger(
                 com.android.systemui.res.R.integer.power_menu_lite_max_columns);
         // don't count the flow element or the footer

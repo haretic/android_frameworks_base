@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     SPDX-FileCopyrightText: 2026 The LineageOS Project
+     SPDX-License-Identifier: Apache-2.0
+-->
+<!-- A list style power menu row: a ripple when pressed, filled and ringed while it has the
+     focus, so the scroll wheel always shows where it is -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="?android:attr/colorControlHighlight">
+    <item>
+        <selector>
+            <item android:state_focused="true">
+                <shape android:shape="rectangle">
+                    <solid android:color="@color/materialColorSurfaceContainerHighest" />
+                    <stroke
+                        android:width="@dimen/global_actions_focus_ring_width"
+                        android:color="@color/materialColorOnSurface" />
+                    <corners android:radius="@dimen/global_actions_list_row_corner_radius" />
+                </shape>
+            </item>
+        </selector>
+    </item>
+    <item android:id="@android:id/mask">
+        <shape android:shape="rectangle">
+            <solid android:color="@android:color/white" />
+            <corners android:radius="@dimen/global_actions_list_row_corner_radius" />
+        </shape>
+    </item>
+</ripple>
