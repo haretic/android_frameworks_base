@@ -1331,6 +1331,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         } else if (count > 3 && count <= getMaxMultiPressPowerCount()) {
             Slog.d(TAG, "No behavior defined for power press count " + count);
         } else if (count == 1 && shouldHandleShortPressPowerAction(interactive, eventTime)) {
+            if (interactive && powerPressIsWheelEnter(eventTime)) {
+                return;
+            }
             switch (mShortPressOnPowerBehavior) {
                 case SHORT_PRESS_POWER_NOTHING:
                     break;
@@ -4572,6 +4575,60 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 : mWindowManagerInternal.getKeyInterceptionInfoFromToken(focusedToken);
         return info == null || (info.layoutParamsType >= FIRST_APPLICATION_WINDOW
                 && info.layoutParamsType <= LAST_APPLICATION_WINDOW);
+    }
+
+    /**
+     * In an app the wheel scrolls (its wheel mode is app, see config_wheelAppModeDefaults and
+     * LineageSettings.Secure.WHEEL_APP_MODES), a press of the side button is Enter for it:
+     * sent to the app, true. Any other window, the keyguard or the stock look: false.
+     */
+    private boolean powerPressIsWheelEnter(long eventTime) {
+        final WindowState focus = mDefaultDisplayFocus;
+        if (focus == null || keyguardOn() || mContext.getResources().getString(
+                com.android.internal.R.string.config_wheelDaemonInputDevice).isEmpty()) {
+            return false;
+        }
+        final int type = focus.getBaseType();
+        if (type < FIRST_APPLICATION_WINDOW || type > LAST_APPLICATION_WINDOW) {
+            return false;
+        }
+        final ContentResolver resolver = mContext.getContentResolver();
+        if (LineageSettings.Secure.getIntForUser(resolver, LineageSettings.Secure.WHEEL_UI, 1,
+                UserHandle.USER_CURRENT) == 0) {
+            return false;
+        }
+        if (!"app".equals(wheelAppMode(resolver, focus.getOwningPackage()))) {
+            return false;
+        }
+        final long now = SystemClock.uptimeMillis();
+        for (int action : new int[] {KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP}) {
+            final KeyEvent enter = new KeyEvent(now, now, action, KeyEvent.KEYCODE_ENTER, 0, 0,
+                    KeyCharacterMap.VIRTUAL_KEYBOARD, 0, KeyEvent.FLAG_FROM_SYSTEM,
+                    InputDevice.SOURCE_KEYBOARD);
+            enter.setDisplayId(Display.DEFAULT_DISPLAY);
+            mInputManager.injectInputEvent(enter, InputManager.INJECT_INPUT_EVENT_MODE_ASYNC);
+        }
+        return true;
+    }
+
+    /** The wheel mode of an app: the user's pick, else the device's default, else taskbar. */
+    private String wheelAppMode(ContentResolver resolver, String packageName) {
+        final String picked = LineageSettings.Secure.getStringForUser(resolver,
+                LineageSettings.Secure.WHEEL_APP_MODES, UserHandle.USER_CURRENT);
+        final String mode = wheelModeIn(picked == null ? new String[0] : picked.split(","),
+                packageName);
+        return mode != null ? mode : wheelModeIn(mContext.getResources().getStringArray(
+                com.android.internal.R.array.config_wheelAppModeDefaults), packageName);
+    }
+
+    private static String wheelModeIn(String[] entries, String packageName) {
+        for (String entry : entries) {
+            final int equals = entry.indexOf('=');
+            if (equals > 0 && entry.substring(0, equals).equals(packageName)) {
+                return entry.substring(equals + 1);
+            }
+        }
+        return null;
     }
 
     /** Whether the key comes from a scroll wheel (config_scrollWheelInputDevices). */

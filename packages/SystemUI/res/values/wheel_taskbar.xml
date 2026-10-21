@@ -13,11 +13,6 @@
          Settings app. -->
     <string name="config_wheelTaskbarSettings" translatable="false"></string>
 
-    <!-- What the wheel does in apps the user hasn't picked a wheel mode for, package=mode with
-         the modes taskbar, app and volume (LineageSettings.Secure.WHEEL_APP_MODES); for apps
-         made for the wheel. Any other app has taskbar. -->
-    <string-array name="config_wheelAppModeDefaults" translatable="false" />
-
     <dimen name="wheel_taskbar_top">24dp</dimen>
     <dimen name="wheel_taskbar_gap">8dp</dimen>
     <dimen name="wheel_taskbar_badge_size">16dp</dimen>
