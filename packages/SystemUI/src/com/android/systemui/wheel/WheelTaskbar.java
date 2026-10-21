@@ -19,6 +19,8 @@ import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Outline;
 import android.graphics.PixelFormat;
+import android.graphics.Rect;
+import android.graphics.Region;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.StateListDrawable;
@@ -52,7 +54,6 @@ import android.view.animation.PathInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
 
 import androidx.dynamicanimation.animation.DynamicAnimation;
@@ -134,9 +135,19 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private static final String MODE_APP = "app";
     private static final String MODE_VOLUME = "volume";
 
-    /** Steps closer than this make a fast spin, which skips by letter in the list of apps. */
-    private static final long FAST_STEP_MS = 70;
-    private static final int FAST_STEPS = 3;
+    /**
+     * A spin's speed is its steps over the last SPIN_WINDOW_MS. Above STRIDE_RATE steps a
+     * second each step moves on further through a long list, one more item each
+     * STRIDE_RATE_STEP, up to MAX_STRIDE: spinning faster goes faster, steadily.
+     */
+    private static final long SPIN_WINDOW_MS = 250;
+    private static final int SPIN_STEPS = 16;
+    private static final int STRIDE_RATE = 14;
+    private static final int STRIDE_RATE_STEP = 8;
+    private static final int MAX_STRIDE = 4;
+    private static final int STRIDE_LIST = 10;
+    /** A step after a pause this long starts a new spin, which may go round past an end. */
+    private static final long SPIN_PAUSE_MS = 300;
 
     private static final long SLIDE_MS = 280;
     private static final long PANEL_MS = 200;
@@ -196,7 +207,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private LinearLayout mBar;
     private WheelTaskbarHighlight mBarHighlight;
     private AppsColumn mAppsColumn;
-    private ScrollView mAppsScroll;
+    private WheelTaskbarScroll mAppsScroll;
     private View mDrawerButton;
     private View mNotificationsButton;
     private View mModeButton;
@@ -215,8 +226,10 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private float mLabelTargetY;
 
     private LinearLayout mPanel;
+    private View mBarFrame;
+    private final Rect mTouchRect = new Rect();
     private TextView mPanelTitle;
-    private ScrollView mPanelScroll;
+    private WheelTaskbarScroll mPanelScroll;
     private FrameLayout mPanelContent;
     private LinearLayout mPanelItems;
     private WheelTaskbarHighlight mPanelHighlight;
@@ -227,8 +240,10 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
 
     /** A long press of the side button already acted, ignore the rest of it. */
     private boolean mLongPressed;
-    private long mLastStep;
-    private int mFastSteps;
+    /** The times of this spin's steps, for its speed. */
+    private final long[] mSteps = new long[SPIN_STEPS];
+    private int mStepCount;
+    private int mSpinDirection;
 
     /** An open list. */
     private static final class Menu {
@@ -445,7 +460,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             // Steps that came before the bar had the focus
             if (step != 0) {
                 keepOpen();
-                move(step);
+                move(step, key.getEventTime());
             }
             return;
         }
@@ -759,7 +774,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         row.setLayoutDirection(mSettings.left ? View.LAYOUT_DIRECTION_RTL
                 : View.LAYOUT_DIRECTION_LTR);
         root.addView(row, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.MATCH_PARENT));
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                mSettings.left ? Gravity.START : Gravity.END));
 
         final FrameLayout side = new FrameLayout(mContext);
         side.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
@@ -788,10 +804,14 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 mSettings.left ? Gravity.RIGHT : Gravity.LEFT));
         row.addView(frame, new LinearLayout.LayoutParams(barWidth(),
                 ViewGroup.LayoutParams.MATCH_PARENT));
+        mBarFrame = frame;
         buildBar();
 
+        // As wide as the screen, so the cards changing size never resize it: a window resizing
+        // shows the bar a frame out of place, and it shakes. Only the bar and an open list
+        // take touches, the rest of it lets them through to the app.
         final WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
-                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.MATCH_PARENT,
                 // Outside the OneHanded display area, so it stays put while the app slides
                 WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL,
@@ -825,6 +845,15 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             trackLabel();
             return true;
         });
+        root.getViewTreeObserver().addOnComputeInternalInsetsListener(info -> {
+            info.setTouchableInsets(ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_REGION);
+            final Region region = info.touchableRegion;
+            region.setEmpty();
+            addTouchable(region, mBarFrame);
+            if (mPanel.getVisibility() == View.VISIBLE) {
+                addTouchable(region, mPanel);
+            }
+        });
         mWindowManager.addView(root, lp);
         staggerIn();
         // The wheel starts at the top, the light shows at once
@@ -835,6 +864,13 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         prefetchThumbnails();
         requestApps();
         loadDrawer();
+    }
+
+    private void addTouchable(Region region, View view) {
+        final int[] at = new int[2];
+        view.getLocationInWindow(at);
+        mTouchRect.set(at[0], at[1], at[0] + view.getWidth(), at[1] + view.getHeight());
+        region.op(mTouchRect, Region.Op.UNION);
     }
 
     /** Moves the screen to {@code x} with the bar, or only the bar when it covers the app. */
@@ -943,12 +979,9 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
 
     /** The pinned and running apps, scrolling between the buttons when they don't fit. */
     private void buildApps() {
-        final ScrollView scroll = new ScrollView(mContext);
-        scroll.setVerticalScrollBarEnabled(false);
-        scroll.setVerticalFadingEdgeEnabled(true);
+        final WheelTaskbarScroll scroll = new WheelTaskbarScroll(mContext);
         scroll.setFadingEdgeLength(dp(16));
-        scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        scroll.setSmoothScrollingEnabled(mSettings.animation > 0);
+        scroll.setSpeed(mSettings.animation);
         mAppsColumn = new AppsColumn(mContext);
         mAppsColumn.setOrientation(LinearLayout.VERTICAL);
         mAppsColumn.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -1109,7 +1142,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 ? cell : null;
 
         // Where each one is drawn now, and the apps' buttons by app
-        final ScrollView scroll = mAppsScroll;
+        final WheelTaskbarScroll scroll = mAppsScroll;
         final int wasScrolled = scroll.getScrollY();
         final Map<View, Float> was = new ArrayMap<>();
         final Map<String, AppCell> cells = new ArrayMap<>();
@@ -1290,29 +1323,28 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             if (hasFocus) {
                 mBarHighlight.follow(v, cellSize(), cellSize());
                 showLabel(v);
-                revealAppsEnd(v);
+                revealApps(v);
             }
         });
     }
 
     /**
-     * A button above or below the apps scrolls them to that end, so the wheel enters the list
-     * at its first or last app, none half under a button. A focused app scrolls itself in view.
+     * A focused app scrolls in view with half an app of the next one showing. A button above
+     * or below the apps scrolls them to that end, so the wheel enters the list at its first or
+     * last app, none half under a button.
      */
-    private void revealAppsEnd(View button) {
+    private void revealApps(View button) {
         if (mAppsScroll == null || mBar == null) {
             return;
         }
-        final int at = mBar.indexOfChild((View) button.getParent());
-        if (at < 0) {
+        final View cell = (View) button.getParent();
+        if (cell.getParent() == mAppsColumn) {
+            mAppsScroll.reveal(cell, cellSize() / 2, false);
             return;
         }
-        final int y = at < mBar.indexOfChild(mAppsScroll) ? 0
-                : Math.max(0, mAppsColumn.getHeight() - mAppsScroll.getHeight());
-        if (mSettings.animation > 0) {
-            mAppsScroll.smoothScrollTo(0, y);
-        } else {
-            mAppsScroll.scrollTo(0, y);
+        final int at = mBar.indexOfChild(cell);
+        if (at >= 0) {
+            mAppsScroll.glideTo(at < mBar.indexOfChild(mAppsScroll) ? 0 : Integer.MAX_VALUE);
         }
     }
 
@@ -1641,13 +1673,13 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             case KeyEvent.KEYCODE_DPAD_UP:
             case KeyEvent.KEYCODE_NAVIGATE_PREVIOUS:
                 if (down) {
-                    move(-1);
+                    move(-1, event.getEventTime());
                 }
                 return true;
             case KeyEvent.KEYCODE_DPAD_DOWN:
             case KeyEvent.KEYCODE_NAVIGATE_NEXT:
                 if (down) {
-                    move(1);
+                    move(1, event.getEventTime());
                 }
                 return true;
             case KeyEvent.KEYCODE_POWER:
@@ -1673,31 +1705,30 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         }
     }
 
-    private void move(int step) {
+    private void move(int step, long time) {
         final boolean inList = !mMenus.isEmpty();
         final ViewGroup list = inList ? mPanelItems : mBar;
         final List<View> targets = targets(list);
         if (targets.isEmpty()) {
             return;
         }
-        final long now = SystemClock.uptimeMillis();
-        mFastSteps = now - mLastStep < FAST_STEP_MS ? mFastSteps + 1 : 0;
-        mLastStep = now;
+        final boolean spinning = spin(step, time);
         final int current = targets.indexOf(mRoot.findFocus());
         if (current < 0) {
             focusAndTick(targets.get(0));
             return;
         }
-        if (menuType() == MENU_DRAWER && mFastSteps >= FAST_STEPS) {
-            // A fast spin through all apps skips to the next letter
-            final View jump = letterJump(targets, current, step);
-            if (jump != null) {
-                focusAndTick(jump);
+        final int stride = targets.size() >= STRIDE_LIST ? stride() : 1;
+        final int next = current + step * stride;
+        if (next < 0 || next >= targets.size()) {
+            if (spinning) {
+                // A spin stops at the end: it goes round only on a step of its own
+                final int end = next < 0 ? 0 : targets.size() - 1;
+                if (end != current) {
+                    focusAndTick(targets.get(end));
+                }
                 return;
             }
-        }
-        final int next = current + step;
-        if (next < 0 || next >= targets.size()) {
             final int end = mSettings.listEnd;
             if (end == WheelTaskbarSettings.LIST_END_CLOSE
                     || (inList && end == WheelTaskbarSettings.LIST_END_BACK && next < 0)) {
@@ -1715,33 +1746,41 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         focusAndTick(targets.get(Math.floorMod(next, targets.size())));
     }
 
+    /**
+     * Counts a step into the spin it belongs to: a turn the other way or after a pause starts
+     * a new one. True when it carries one on.
+     */
+    private boolean spin(int step, long time) {
+        final boolean carries = mStepCount > 0 && step == mSpinDirection
+                && time - mSteps[(mStepCount - 1) % SPIN_STEPS] < SPIN_PAUSE_MS;
+        if (!carries) {
+            mStepCount = 0;
+            mSpinDirection = step;
+        }
+        mSteps[mStepCount % SPIN_STEPS] = time;
+        mStepCount++;
+        return carries;
+    }
+
+    /** How far a step goes at the spin's speed. */
+    private int stride() {
+        final long now = mSteps[(mStepCount - 1) % SPIN_STEPS];
+        int recent = 0;
+        for (int i = 0; i < Math.min(mStepCount, SPIN_STEPS); i++) {
+            if (now - mSteps[(mStepCount - 1 - i) % SPIN_STEPS] < SPIN_WINDOW_MS) {
+                recent++;
+            }
+        }
+        final int rate = (int) (recent * 1000 / SPIN_WINDOW_MS);
+        if (rate < STRIDE_RATE) {
+            return 1;
+        }
+        return Math.min(MAX_STRIDE, 2 + (rate - STRIDE_RATE) / STRIDE_RATE_STEP);
+    }
+
     private void focusAndTick(View target) {
         target.requestFocusFromTouch();
         tick(target);
-    }
-
-    /** The first app under the next (or this, going up) letter. */
-    private View letterJump(List<View> targets, int current, int step) {
-        final char letter = initial(targets.get(current));
-        for (int i = current + step; i >= 0 && i < targets.size(); i += step) {
-            final char other = initial(targets.get(i));
-            if (other != letter && other != 0) {
-                if (step < 0) {
-                    // Up: to the top of that letter
-                    while (i > 0 && initial(targets.get(i - 1)) == other) {
-                        i--;
-                    }
-                }
-                return targets.get(i);
-            }
-        }
-        return null;
-    }
-
-    private static char initial(View row) {
-        final CharSequence description = row.getContentDescription();
-        return TextUtils.isEmpty(description) ? 0
-                : Character.toUpperCase(description.charAt(0));
     }
 
     private void onSideButton(KeyEvent event) {
@@ -1856,11 +1895,9 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         mPanelTitle.setTextAppearance(R.style.TextAppearance_WheelTaskbar_Title);
         mPanelTitle.setPadding(dp(12), 0, dp(12), dp(8));
         mPanel.addView(mPanelTitle);
-        mPanelScroll = new ScrollView(mContext);
-        mPanelScroll.setVerticalScrollBarEnabled(false);
-        mPanelScroll.setVerticalFadingEdgeEnabled(true);
+        mPanelScroll = new WheelTaskbarScroll(mContext);
         mPanelScroll.setFadingEdgeLength(dp(24));
-        mPanelScroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        mPanelScroll.setSpeed(mSettings.animation);
         // The rows over their focus light, which scrolls with them
         mPanelContent = new FrameLayout(mContext);
         mPanelHighlight = highlight(dp(12));
@@ -1912,7 +1949,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         // Shown first: only rows on screen take the focus
         mPanel.setVisibility(View.VISIBLE);
         refill(top(), -1);
-        mPanelScroll.scrollTo(0, 0);
+        mPanelScroll.jumpTo(0);
         final long duration = mSettings.duration(PANEL_MS);
         if (nested) {
             slideContent(1);
@@ -2192,9 +2229,10 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             if (hasFocus && !mRefilling) {
                 mPanelHighlight.follow(v, 0, 0);
                 if (v.isLaidOut()) {
-                    revealRow(v);
+                    revealRow(v, false);
                 } else {
-                    v.post(() -> revealRow(v));
+                    // A list just filled shows its focus at once
+                    v.post(() -> revealRow(v, true));
                 }
             }
         });
@@ -2203,24 +2241,9 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     }
 
     /** Keeps a row of context visible around the focus while scrolling. */
-    private void revealRow(View row) {
-        if (!row.hasFocus() && !row.isFocused()) {
-            return;
-        }
-        final int margin = dp(24);
-        final int top = row.getTop() - margin;
-        final int bottom = row.getBottom() + margin;
-        final int scrollY = mPanelScroll.getScrollY();
-        final int height = mPanelScroll.getHeight();
-        final int y = top < scrollY ? Math.max(0, top)
-                : bottom > scrollY + height ? bottom - height : scrollY;
-        if (y == scrollY) {
-            return;
-        }
-        if (mSettings.animation > 0) {
-            mPanelScroll.smoothScrollTo(0, y);
-        } else {
-            mPanelScroll.scrollTo(0, y);
+    private void revealRow(View row, boolean jump) {
+        if (row.hasFocus() || row.isFocused()) {
+            mPanelScroll.reveal(row, dp(24), jump);
         }
     }
 
