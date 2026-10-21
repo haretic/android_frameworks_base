@@ -50,6 +50,7 @@ public class PowerMenuStatsPanel extends LinearLayout implements PowerMenuStatsS
     private final int mBadColor;
     private float[] mBuffer = new float[PowerMenuStatsSampler.HISTORY_SIZE];
     private boolean mAttached;
+    private boolean mClustersOnOneLine;
 
     public PowerMenuStatsPanel(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -75,7 +76,9 @@ public class PowerMenuStatsPanel extends LinearLayout implements PowerMenuStatsS
         }
         final Resources res = context.getResources();
         final View panel = LayoutInflater.from(context).inflate(
-                R.layout.global_actions_stats, container, false);
+                GlobalActionsLayoutLite.isListStyle(context)
+                        ? R.layout.global_actions_stats_grid : R.layout.global_actions_stats,
+                container, false);
         final ConstraintLayout.LayoutParams lp =
                 new ConstraintLayout.LayoutParams(0, ConstraintLayout.LayoutParams.WRAP_CONTENT);
         if (res.getBoolean(R.bool.global_actions_stats_strip)) {
@@ -106,7 +109,9 @@ public class PowerMenuStatsPanel extends LinearLayout implements PowerMenuStatsS
         super.onFinishInflate();
         mCpu = new Cell(findViewById(R.id.global_actions_stats_cpu),
                 R.string.global_actions_stats_cpu, R.color.global_actions_stats_cpu);
-        if (mCpu.extra != null) {
+        // The list style's cells are wide enough for both clusters on a line
+        mClustersOnOneLine = GlobalActionsLayoutLite.isListStyle(getContext());
+        if (mCpu.extra != null && !mClustersOnOneLine) {
             // One line per cluster
             mCpu.extra.setSingleLine(false);
             mCpu.extra.setMaxLines(2);
@@ -189,8 +194,10 @@ public class PowerMenuStatsPanel extends LinearLayout implements PowerMenuStatsS
 
     private void showNumbers(PowerMenuStatsReader s, float maxTemp) {
         // 34%, big 2.2 GHz over little 1.6 GHz (only the portrait card has the extra line)
+        final String clusters = PowerMenuStatsFormat.cpuClusters(s.bigMhz, s.littleMhz,
+                s.cpuMhz);
         mCpu.show(PowerMenuStatsFormat.cpuValue(s.cpuPercent),
-                PowerMenuStatsFormat.cpuClusters(s.bigMhz, s.littleMhz, s.cpuMhz),
+                mClustersOnOneLine ? clusters.replace("\n", " · ") : clusters,
                 PowerMenuStatsFormat.LEVEL_NORMAL);
         // 48°C, max 61°C: the hottest sample in the graph's window (about 10 minutes)
         mTemp.show(PowerMenuStatsFormat.tempValue(s.tempC),

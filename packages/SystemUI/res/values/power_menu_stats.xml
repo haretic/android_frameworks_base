@@ -86,6 +86,22 @@
     <dimen name="global_actions_pinned_icon_size">44dp</dimen>
     <dimen name="global_actions_pinned_label_gap">4dp</dimen>
     <dimen name="global_actions_pinned_label_size">12sp</dimen>
+    <!-- The list style (config_powerMenuList): one action a row under a stats card as wide as
+         the list, two metrics a line -->
+    <dimen name="global_actions_list_margin">12dp</dimen>
+    <dimen name="global_actions_list_padding">8dp</dimen>
+    <dimen name="global_actions_list_row_height">42dp</dimen>
+    <dimen name="global_actions_list_row_gap">0dp</dimen>
+    <dimen name="global_actions_list_row_padding">8dp</dimen>
+    <dimen name="global_actions_list_row_corner_radius">16dp</dimen>
+    <dimen name="global_actions_list_icon_size">32dp</dimen>
+    <dimen name="global_actions_list_icon_padding">7dp</dimen>
+    <dimen name="global_actions_list_text_gap">14dp</dimen>
+    <dimen name="global_actions_list_text_size">16sp</dimen>
+    <integer name="global_actions_list_max_items">8</integer>
+    <dimen name="global_actions_stats_wide_gap_half">7dp</dimen>
+    <dimen name="global_actions_stats_wide_row_gap">8dp</dimen>
+    <dimen name="global_actions_stats_wide_value_size">15sp</dimen>
 
     <!-- Power menu stats label for the processor load [CHAR LIMIT=5] -->
     <string name="global_actions_stats_cpu">CPU</string>
