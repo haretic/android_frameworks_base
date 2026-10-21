@@ -6631,4 +6631,5 @@
   <java-symbol type="array" name="config_scrollWheelInputDevices" />
   <java-symbol type="string" name="config_wheelDaemonInputDevice" />
   <java-symbol type="string" name="config_wheelDaemonSocket" />
+  <java-symbol type="array" name="config_wheelAppModeDefaults" />
 </resources>

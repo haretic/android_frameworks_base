@@ -8086,4 +8086,9 @@
     <string name="config_wheelDaemonInputDevice" translatable="false"></string>
     <!-- Its init socket, where SystemUI sets the mode for the app in front. -->
     <string name="config_wheelDaemonSocket" translatable="false"></string>
+    <!-- What the wheel does in apps the user hasn't picked a wheel mode for, package=mode with
+         the modes taskbar, app and volume (LineageSettings.Secure.WHEEL_APP_MODES); for apps
+         made for the wheel. Any other app has taskbar. In app mode a press of the side button
+         is Enter for the app. -->
+    <string-array name="config_wheelAppModeDefaults" translatable="false" />
 </resources>

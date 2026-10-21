@@ -148,6 +148,11 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private static final int STRIDE_LIST = 10;
     /** A step after a pause this long starts a new spin, which may go round past an end. */
     private static final long SPIN_PAUSE_MS = 300;
+    /**
+     * A lone step this soon before the side button goes down is the press nudging the wheel:
+     * the press goes to where the focus was.
+     */
+    private static final long PRESS_NUDGE_MS = 120;
 
     private static final long SLIDE_MS = 280;
     private static final long PANEL_MS = 200;
@@ -244,6 +249,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private final long[] mSteps = new long[SPIN_STEPS];
     private int mStepCount;
     private int mSpinDirection;
+    /** Where the last step took the focus from, for a press that nudged the wheel. */
+    private View mStepFrom;
 
     /** An open list. */
     private static final class Menu {
@@ -293,7 +300,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         mCommandQueue.addCallback(this);
         mSettings.read(mUserTracker.getUserId());
         for (String entry : mContext.getResources().getStringArray(
-                R.array.config_wheelAppModeDefaults)) {
+                com.android.internal.R.array.config_wheelAppModeDefaults)) {
             final int equals = entry.indexOf('=');
             if (equals > 0) {
                 mDefaultModes.put(entry.substring(0, equals), entry.substring(equals + 1));
@@ -1713,7 +1720,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             return;
         }
         final boolean spinning = spin(step, time);
-        final int current = targets.indexOf(mRoot.findFocus());
+        mStepFrom = mRoot.findFocus();
+        final int current = targets.indexOf(mStepFrom);
         if (current < 0) {
             focusAndTick(targets.get(0));
             return;
@@ -1778,6 +1786,18 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         return Math.min(MAX_STRIDE, 2 + (rate - STRIDE_RATE) / STRIDE_RATE_STEP);
     }
 
+    /** Takes back a lone step the press of the side button nudged the wheel into. */
+    private void undoNudge(long pressTime) {
+        if (mStepCount != 1 || mStepFrom == null
+                || pressTime - mSteps[0] > PRESS_NUDGE_MS || !mStepFrom.isShown()) {
+            return;
+        }
+        final View from = mStepFrom;
+        mStepFrom = null;
+        mStepCount = 0;
+        from.requestFocusFromTouch();
+    }
+
     private void focusAndTick(View target) {
         target.requestFocusFromTouch();
         tick(target);
@@ -1787,6 +1807,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
             if (event.getRepeatCount() == 0) {
                 mLongPressed = false;
+                undoNudge(event.getEventTime());
             } else if (event.isLongPress() && !mLongPressed) {
                 mLongPressed = true;
                 onLongPress();
