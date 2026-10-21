@@ -25,21 +25,23 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.StateListDrawable;
 import android.net.Uri;
+import android.os.BatteryManager;
 import android.os.Handler;
 import android.os.PowerManager;
 import android.os.RemoteException;
+import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.service.notification.NotificationListenerService.RankingMap;
 import android.service.notification.StatusBarNotification;
+import android.telecom.TelecomManager;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
-import android.view.HapticFeedbackConstants;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -48,6 +50,7 @@ import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.ViewTreeObserver;
 import android.view.WindowManager;
+import android.view.WindowManagerGlobal;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.OvershootInterpolator;
 import android.view.animation.PathInterpolator;
@@ -60,12 +63,15 @@ import androidx.dynamicanimation.animation.DynamicAnimation;
 import androidx.dynamicanimation.animation.SpringAnimation;
 import androidx.dynamicanimation.animation.SpringForce;
 
+import com.android.internal.statusbar.IStatusBarService;
+import com.android.internal.util.ScreenshotHelper;
 import com.android.systemui.CoreStartable;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.res.R;
 import com.android.systemui.settings.UserTracker;
+import com.android.systemui.settings.brightness.BrightnessDialog;
 import com.android.systemui.shade.ShadeController;
 import com.android.systemui.shade.domain.interactor.ShadeInteractor;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
@@ -82,6 +88,7 @@ import org.lineageos.internal.util.PowerMenuUtils;
 
 import dagger.Lazy;
 
+import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -129,11 +136,24 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private static final int MENU_DRAWER = 1;
     private static final int MENU_MODES = 2;
     private static final int MENU_APP = 3;
+    private static final int MENU_POWER = 4;
+    private static final int MENU_RESTART = 5;
 
     /** The wheel daemon's modes (r1-wheeld on the rabbit r1). */
     private static final String MODE_TASKBAR = "taskbar";
     private static final String MODE_APP = "app";
+    private static final String MODE_SCROLL = "scroll";
+    private static final String MODE_TAB = "tab";
+    private static final String MODE_ARROWS = "arrows";
+    private static final String MODE_PAGE = "page";
     private static final String MODE_VOLUME = "volume";
+    private static final String MODE_BRIGHTNESS = "brightness";
+    private static final String MODE_MEDIA = "media";
+    private static final String MODE_ZOOM = "zoom";
+    /** Every mode, in the order the Wheel mode list shows them. */
+    private static final List<String> MODES = List.of(MODE_TASKBAR, MODE_APP, MODE_SCROLL,
+            MODE_TAB, MODE_ARROWS, MODE_PAGE, MODE_VOLUME, MODE_BRIGHTNESS, MODE_MEDIA,
+            MODE_ZOOM);
 
     /**
      * A spin's speed is its steps over the last SPIN_WINDOW_MS. Above STRIDE_RATE steps a
@@ -155,6 +175,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private static final long PRESS_NUDGE_MS = 120;
 
     private static final long SLIDE_MS = 280;
+    /** After the slide, for the app's next frame. */
+    private static final long HIDE_SETTLE_MS = 50;
     private static final long PANEL_MS = 200;
     private static final long FOCUS_MS = 120;
     /** Apps coming, going and moving in the open bar. */
@@ -216,6 +238,11 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private View mDrawerButton;
     private View mNotificationsButton;
     private View mModeButton;
+    private View mPowerButton;
+    private IStatusBarService mBarService;
+    private WheelFeedback mFeedback;
+    /** Whether the wheel's latest step went up, for its click. */
+    private boolean mStepUp;
     private TextView mBadge;
     private ImageView mModeIcon;
 
@@ -296,6 +323,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         if (!mContext.getResources().getBoolean(R.bool.config_wheelTaskbar)) {
             return;
         }
+        mFeedback = WheelFeedback.get(mContext);
         mSlide.register();
         mCommandQueue.addCallback(this);
         mSettings.read(mUserTracker.getUserId());
@@ -310,6 +338,9 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 new TaskStackChangeListener() {
                     @Override
                     public void onTaskMovedToFront(ActivityManager.RunningTaskInfo info) {
+                        if (isOverlay(info)) {
+                            return;
+                        }
                         mForegroundPackage = packageOf(info);
                         mForegroundTask = info == null ? -1 : info.taskId;
                         updateMode();
@@ -394,7 +425,9 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         if (socket.isEmpty()) {
             return;
         }
-        mModeClient = new WheelModeClient(socket, mBackground);
+        // An app's steps tick but don't click: the app has its own sounds
+        mModeClient = new WheelModeClient(socket, mBackground, mHandler::post,
+                up -> mFeedback.tick());
         WheelSystemWindows.addListener(this::updateMode);
         final android.database.ContentObserver modes =
                 new android.database.ContentObserver(mHandler) {
@@ -428,6 +461,10 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             final ActivityManager.RunningTaskInfo front =
                     ActivityManagerWrapper.getInstance().getRunningTask();
             mHandler.post(() -> {
+                if (isOverlay(front)) {
+                    requestApps();
+                    return;
+                }
                 final String packageName = packageOf(front);
                 final int taskId = front == null ? -1 : front.taskId;
                 if (taskId != mForegroundTask || !TextUtils.equals(packageName,
@@ -486,6 +523,15 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
 
     // ---- The wheel daemon's mode ----
 
+    /**
+     * Whether a task is the brightness slider the wheel's brightness keys bring up: it shows
+     * over the app, whose wheel mode stays, or the next step would go to the taskbar.
+     */
+    private static boolean isOverlay(ActivityManager.RunningTaskInfo info) {
+        return info != null && info.topActivity != null
+                && info.topActivity.getClassName().equals(BrightnessDialog.class.getName());
+    }
+
     private static String packageOf(ActivityManager.RunningTaskInfo info) {
         if (info == null) {
             return null;
@@ -507,8 +553,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             final int equals = entry.indexOf('=');
             if (equals > 0) {
                 final String mode = entry.substring(equals + 1);
-                if (MODE_TASKBAR.equals(mode) || MODE_APP.equals(mode)
-                        || MODE_VOLUME.equals(mode)) {
+                if (MODES.contains(mode)) {
                     mAppModes.put(entry.substring(0, equals), mode);
                 }
             }
@@ -937,6 +982,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         mDrawerButton = null;
         mNotificationsButton = null;
         mModeButton = null;
+        mPowerButton = null;
         for (String button : mSettings.buttons) {
             switch (button) {
                 case WheelTaskbarSettings.BUTTON_HOME:
@@ -960,6 +1006,11 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                     mBadge = badge(cell);
                     break;
                 }
+                case WheelTaskbarSettings.BUTTON_POWER:
+                    mPowerButton = ((ViewGroup) addButton(R.drawable.ic_wheel_taskbar_power,
+                            mContext.getString(R.string.wheel_taskbar_power),
+                            () -> openMenu(MENU_POWER, null))).getChildAt(0);
+                    break;
                 case WheelTaskbarSettings.BUTTON_MODE:
                     // The home screen has no mode of its own
                     if (mModeClient != null && mForegroundPackage != null
@@ -1522,6 +1573,11 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                         mDrawerApps.size());
             } else if (button == mModeButton) {
                 hint = modeName(appMode(mForegroundPackage));
+            } else if (button == mPowerButton) {
+                final int level = mContext.getSystemService(BatteryManager.class)
+                        .getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
+                hint = level >= 0 ? mContext.getString(R.string.wheel_taskbar_hint_power,
+                        NumberFormat.getPercentInstance().format(level / 100f)) : null;
             }
         }
         mLabelTitle.setText(title);
@@ -1694,6 +1750,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 return true;
             case KeyEvent.KEYCODE_BACK:
                 if (!down && !event.isCanceled()) {
+                    mFeedback.back();
                     if (!mMenus.isEmpty()) {
                         closeMenu();
                     } else {
@@ -1707,12 +1764,13 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     }
 
     private void tick(View view) {
-        if (mSettings.haptics && view != null) {
-            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+        if (view != null) {
+            mFeedback.step(mStepUp);
         }
     }
 
     private void move(int step, long time) {
+        mStepUp = step < 0;
         final boolean inList = !mMenus.isEmpty();
         final ViewGroup list = inList ? mPanelItems : mBar;
         final List<View> targets = targets(list);
@@ -1743,7 +1801,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 // Out of a list back to where it opened from, out of the bar closes it
                 if (inList) {
                     closeMenu();
-                    tick(mRoot.findFocus());
+                    mFeedback.back();
                 } else {
                     hide();
                 }
@@ -1824,9 +1882,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             focus(list, 0);
             return;
         }
-        if (mSettings.haptics) {
-            focused.performHapticFeedback(HapticFeedbackConstants.CONFIRM);
-        }
+        mFeedback.select();
         (mMenus.isEmpty() ? mBarHighlight : mPanelHighlight).press();
         focused.performClick();
     }
@@ -1845,7 +1901,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             app = launchable.packageName();
         }
         if (app != null && menuType() != MENU_APP) {
-            focused.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+            mFeedback.select();
             openMenu(MENU_APP, app);
             return;
         }
@@ -2043,6 +2099,14 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 mPanelTitle.setText(R.string.wheel_taskbar_mode);
                 own = fillModes();
                 break;
+            case MENU_POWER:
+                mPanelTitle.setText(R.string.wheel_taskbar_power);
+                own = fillPower();
+                break;
+            case MENU_RESTART:
+                mPanelTitle.setText(R.string.wheel_taskbar_power_restart);
+                own = fillRestart();
+                break;
             default:
                 own = fillAppMenu(menu.app);
                 break;
@@ -2111,10 +2175,9 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private int fillModes() {
         final String app = mForegroundPackage;
         final String current = appMode(app);
-        final String[] modes = {MODE_TASKBAR, MODE_APP, MODE_VOLUME};
         int focusIndex = 0;
-        for (int i = 0; i < modes.length; i++) {
-            final String mode = modes[i];
+        for (int i = 0; i < MODES.size(); i++) {
+            final String mode = MODES.get(i);
             final boolean isCurrent = mode.equals(current);
             if (isCurrent) {
                 focusIndex = i;
@@ -2193,14 +2256,159 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         return 0;
     }
 
+    /**
+     * What the side button did before it was the wheel's: the screen off first, then power off,
+     * restart, a screenshot, an emergency call and the full power menu. Nothing here asks
+     * again, as the power menu doesn't.
+     */
+    private int fillPower() {
+        addRow(mContext.getDrawable(R.drawable.ic_wheel_taskbar_standby),
+                mContext.getString(R.string.wheel_taskbar_power_standby), null, true)
+                .setOnClickListener(v -> afterHide(() -> mContext.getSystemService(
+                        PowerManager.class).goToSleep(SystemClock.uptimeMillis(),
+                        PowerManager.GO_TO_SLEEP_REASON_POWER_BUTTON, 0)));
+        addRow(mContext.getDrawable(R.drawable.ic_wheel_taskbar_power),
+                mContext.getString(R.string.wheel_taskbar_power_off), null, true)
+                .setOnClickListener(v -> {
+                    hide();
+                    try {
+                        barService().shutdown();
+                    } catch (RemoteException e) {
+                        Log.w(TAG, "Power off failed", e);
+                    }
+                });
+        final boolean advanced = PowerMenuUtils.isAdvancedRestartPossible(mContext);
+        addRow(mContext.getDrawable(R.drawable.ic_wheel_taskbar_restart),
+                mContext.getString(R.string.wheel_taskbar_power_restart),
+                advanced ? mContext.getString(R.string.wheel_taskbar_power_restart_more) : null,
+                true).setOnClickListener(v -> {
+                    if (advanced) {
+                        openMenu(MENU_RESTART, null);
+                    } else {
+                        restart(null);
+                    }
+                });
+        addRow(mContext.getDrawable(R.drawable.ic_wheel_taskbar_screenshot),
+                mContext.getString(R.string.wheel_taskbar_power_screenshot), null, true)
+                .setOnClickListener(v -> afterHide(() -> new ScreenshotHelper(mContext)
+                        .takeScreenshot(WindowManager.ScreenshotSource.SCREENSHOT_GLOBAL_ACTIONS,
+                                mHandler, null)));
+        if (mContext.getPackageManager().hasSystemFeature(
+                PackageManager.FEATURE_TELEPHONY_CALLING)) {
+            addRow(mContext.getDrawable(R.drawable.ic_wheel_taskbar_emergency),
+                    mContext.getString(R.string.wheel_taskbar_power_emergency), null, true)
+                    .setOnClickListener(v -> {
+                        hide();
+                        final TelecomManager telecom =
+                                mContext.getSystemService(TelecomManager.class);
+                        if (telecom != null) {
+                            startActivity(telecom.createLaunchEmergencyDialerIntent(null)
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                                            | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+                                            | Intent.FLAG_ACTIVITY_CLEAR_TOP));
+                        }
+                    });
+        }
+        addRow(mContext.getDrawable(R.drawable.ic_wheel_taskbar_power_menu),
+                mContext.getString(R.string.wheel_taskbar_power_menu), null, true)
+                .setOnClickListener(v -> {
+                    hide();
+                    try {
+                        WindowManagerGlobal.getWindowManagerService().showGlobalActions();
+                    } catch (RemoteException e) {
+                        Log.w(TAG, "No power menu", e);
+                    }
+                });
+        return 0;
+    }
+
+    /** Where to restart to, as the power menu's advanced restart lists them. */
+    private int fillRestart() {
+        for (String key : mContext.getResources().getStringArray(
+                org.lineageos.platform.internal.R.array.config_restartActionsList)) {
+            final int icon;
+            final int label;
+            final String reason;
+            switch (key) {
+                case "restart":
+                    icon = R.drawable.ic_wheel_taskbar_restart;
+                    label = R.string.wheel_taskbar_power_restart;
+                    reason = null;
+                    break;
+                case "restart_recovery":
+                    icon = R.drawable.ic_lock_restart_recovery;
+                    label = R.string.global_action_restart_recovery;
+                    reason = PowerManager.REBOOT_RECOVERY;
+                    break;
+                case "restart_bootloader":
+                    icon = R.drawable.ic_lock_restart_bootloader;
+                    label = R.string.global_action_restart_bootloader;
+                    reason = PowerManager.REBOOT_BOOTLOADER;
+                    break;
+                case "restart_fastboot":
+                    icon = R.drawable.ic_lock_restart_fastboot;
+                    label = R.string.global_action_restart_fastboot;
+                    reason = PowerManager.REBOOT_FASTBOOT;
+                    break;
+                case "restart_download":
+                    icon = R.drawable.ic_lock_restart_bootloader;
+                    label = R.string.global_action_restart_download;
+                    reason = PowerManager.REBOOT_DOWNLOAD;
+                    break;
+                default:
+                    continue;
+            }
+            addRow(mContext.getDrawable(icon), mContext.getString(label), null, true)
+                    .setOnClickListener(v -> restart(reason));
+        }
+        return 0;
+    }
+
+    private void restart(String reason) {
+        hide();
+        try {
+            barService().reboot(false, reason);
+        } catch (RemoteException e) {
+            Log.w(TAG, "Restart failed", e);
+        }
+    }
+
+    /** Runs {@code action} once the bar slid out, so the screen it acts on is the app's. */
+    private void afterHide(Runnable action) {
+        hide();
+        mHandler.postDelayed(action, mSettings.duration(SLIDE_MS) + HIDE_SETTLE_MS);
+    }
+
+    private IStatusBarService barService() {
+        if (mBarService == null) {
+            mBarService = IStatusBarService.Stub.asInterface(
+                    ServiceManager.getService(Context.STATUS_BAR_SERVICE));
+        }
+        return mBarService;
+    }
+
     private String modeName(String mode) {
         switch (mode) {
             case MODE_APP:
                 return mContext.getString(R.string.wheel_taskbar_mode_app,
                         WheelTaskbarApps.appLabel(userContext().getPackageManager(),
                                 mForegroundPackage));
+            case MODE_SCROLL:
+                return mContext.getString(R.string.wheel_taskbar_mode_scroll);
+            case MODE_TAB:
+                return mContext.getString(R.string.wheel_taskbar_mode_tab);
+            case MODE_ARROWS:
+                return mContext.getString(R.string.wheel_taskbar_mode_arrows);
+            case MODE_PAGE:
+                return mContext.getString(R.string.wheel_taskbar_mode_page);
             case MODE_VOLUME:
                 return mContext.getString(R.string.wheel_taskbar_mode_volume);
+            case MODE_BRIGHTNESS:
+                return mContext.getString(R.string.wheel_taskbar_mode_brightness);
+            case MODE_MEDIA:
+                return mContext.getString(R.string.wheel_taskbar_mode_media);
+            case MODE_ZOOM:
+                return mContext.getString(R.string.wheel_taskbar_mode_zoom);
             default:
                 return mContext.getString(R.string.wheel_taskbar_mode_taskbar);
         }
@@ -2214,8 +2422,22 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         switch (mode) {
             case MODE_APP:
                 return R.drawable.ic_wheel_taskbar_mode_app;
+            case MODE_SCROLL:
+                return R.drawable.ic_wheel_taskbar_mode_scroll;
+            case MODE_TAB:
+                return R.drawable.ic_wheel_taskbar_mode_tab;
+            case MODE_ARROWS:
+                return R.drawable.ic_wheel_taskbar_mode_arrows;
+            case MODE_PAGE:
+                return R.drawable.ic_wheel_taskbar_mode_page;
             case MODE_VOLUME:
                 return R.drawable.ic_wheel_taskbar_mode_volume;
+            case MODE_BRIGHTNESS:
+                return R.drawable.ic_wheel_taskbar_mode_brightness;
+            case MODE_MEDIA:
+                return R.drawable.ic_wheel_taskbar_mode_media;
+            case MODE_ZOOM:
+                return R.drawable.ic_wheel_taskbar_mode_zoom;
             default:
                 return R.drawable.ic_wheel_taskbar_mode;
         }
