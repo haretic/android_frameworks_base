@@ -72,6 +72,14 @@ public class PowerMenuStatsPanel extends LinearLayout implements PowerMenuStatsS
     public static void addTo(ConstraintLayout container, View menu) {
         final Context context = container.getContext();
         if (!PowerMenuStatsSampler.isEnabled(context)) {
+            if (GlobalActionsLayoutLite.isListStyle(context)) {
+                final ConstraintLayout.LayoutParams menuLp =
+                        (ConstraintLayout.LayoutParams) menu.getLayoutParams();
+                menuLp.topMargin = SystemBarUtils.getStatusBarHeight(context)
+                        + context.getResources().getDimensionPixelSize(
+                                R.dimen.global_actions_list_margin);
+                menu.setLayoutParams(menuLp);
+            }
             return;
         }
         final Resources res = context.getResources();

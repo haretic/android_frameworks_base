@@ -83,6 +83,7 @@ import android.telecom.TelecomManager;
 import android.telephony.ServiceState;
 import android.telephony.TelephonyCallback;
 import android.telephony.TelephonyManager;
+import android.text.TextUtils;
 import android.util.Log;
 import android.util.ArraySet;
 import android.view.ContextThemeWrapper;
@@ -1231,6 +1232,25 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
                     shouldShowRestartSubmenu()
                             ? com.android.systemui.res.R.string.global_action_restart_more
                             : R.string.global_action_restart);
+        }
+
+        @Override
+        public View create(Context context, View convertView, ViewGroup parent,
+                LayoutInflater inflater) {
+            final View view = super.create(context, convertView, parent, inflater);
+            final TextView summary = view.findViewById(
+                    com.android.systemui.res.R.id.global_actions_restart_summary);
+            if (summary != null && shouldShowRestartSubmenu()) {
+                final List<CharSequence> targets = new ArrayList<>();
+                for (Action action : mRestartItems) {
+                    if (shouldShowAction(action)) {
+                        targets.add(action.getLabelForAccessibility(context));
+                    }
+                }
+                summary.setText(TextUtils.join(" · ", targets));
+                summary.setVisibility(targets.isEmpty() ? View.GONE : View.VISIBLE);
+            }
+            return view;
         }
 
         @Override
@@ -3197,13 +3217,16 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
             mGlobalActionsLayout.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             mGlobalActionsLayout.setRotationListener(this::onRotate);
             mGlobalActionsLayout.setAdapter(mAdapter);
-            final PowerMenuPinnedApps pinnedApps = PowerMenuPinnedApps.create(
-                    dialog.getContext(), dialog.findViewById(android.R.id.list),
-                    mUserTracker.getUserHandle(), mActivityStarter, this::dismiss);
-            if (pinnedApps != null) {
-                // Not with the restart options, they replace the actions for a moment
-                mGlobalActionsLayout.setFooter(pinnedApps,
-                        () -> !mAdapter.isShowingRestartOptions());
+            if (dialog.getContext().getResources().getBoolean(
+                    com.android.systemui.res.R.bool.config_powerMenuPinnedApps)) {
+                final PowerMenuPinnedApps pinnedApps = PowerMenuPinnedApps.create(
+                        dialog.getContext(), dialog.findViewById(android.R.id.list),
+                        mUserTracker.getUserHandle(), mActivityStarter, this::dismiss);
+                if (pinnedApps != null) {
+                    // Not with the restart options, they replace the actions for a moment
+                    mGlobalActionsLayout.setFooter(pinnedApps,
+                            () -> !mAdapter.isShowingRestartOptions());
+                }
             }
             final WindowRootViewBlurInteractor blurInteractor = dialog.getBlurInteractor();
             collectFlow(mGlobalActionsLayout, blurInteractor.isBlurCurrentlySupported(),
