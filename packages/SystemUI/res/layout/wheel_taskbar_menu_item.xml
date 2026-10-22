@@ -34,7 +34,9 @@
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:maxLines="1"
-            android:textAppearance="@style/TextAppearance.WheelTaskbar.Item" />
+            android:textAppearance="@style/TextAppearance.WheelTaskbar.Item" 
+            android:marqueeRepeatLimit="marquee_forever"
+            android:requiresFadingEdge="horizontal"/>
 
         <TextView
             android:id="@+id/wheel_taskbar_item_summary"

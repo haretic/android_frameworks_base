@@ -16,7 +16,7 @@
     <dimen name="wheel_taskbar_top">24dp</dimen>
     <dimen name="wheel_taskbar_gap">8dp</dimen>
     <dimen name="wheel_taskbar_badge_size">16dp</dimen>
-    <dimen name="wheel_taskbar_menu_width">184dp</dimen>
+    <dimen name="wheel_taskbar_menu_width">208dp</dimen>
     <dimen name="wheel_taskbar_menu_top">24dp</dimen>
     <dimen name="wheel_taskbar_item_height">44dp</dimen>
     <dimen name="wheel_taskbar_item_icon">28dp</dimen>

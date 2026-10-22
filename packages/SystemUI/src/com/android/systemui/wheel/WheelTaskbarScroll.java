@@ -6,6 +6,7 @@
 package com.android.systemui.wheel;
 
 import android.content.Context;
+import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.view.View;
 import android.widget.ScrollView;
@@ -31,6 +32,7 @@ final class WheelTaskbarScroll extends ScrollView {
         setVerticalScrollBarEnabled(false);
         setVerticalFadingEdgeEnabled(true);
         setOverScrollMode(View.OVER_SCROLL_NEVER);
+        setClipChildren(false);
         mSpring = new SpringAnimation(this, new FloatPropertyCompat<WheelTaskbarScroll>("scroll") {
             @Override
             public float getValue(WheelTaskbarScroll view) {
@@ -44,6 +46,20 @@ final class WheelTaskbarScroll extends ScrollView {
         });
         mSpring.setMinimumVisibleChange(1f);
         setSpeed(1f);
+    }
+
+    @Override
+    protected void dispatchDraw(Canvas canvas) {
+        // Apps scrolled out stay hidden above and below; to the sides one grows out of the bar,
+        // and at an end with nothing past it the first or last one moves out a little too
+        final int save = canvas.save();
+        final int margin = getHeight();
+        canvas.clipRect(getScrollX() - getWidth(),
+                getScrollY() - (canScrollVertically(-1) ? 0 : margin),
+                getScrollX() + 2 * getWidth(),
+                getScrollY() + getHeight() + (canScrollVertically(1) ? 0 : margin));
+        super.dispatchDraw(canvas);
+        canvas.restoreToCount(save);
     }
 
     /** 1 full, 0.5 quick, 0 none, as the animation setting has it. */

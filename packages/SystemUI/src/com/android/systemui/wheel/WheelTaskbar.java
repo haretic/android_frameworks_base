@@ -280,6 +280,19 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private View mStepFrom;
 
     /** An open list. */
+    /** How much the focused item of the bar grows, and the ones one and two away. */
+    private static final float[] MAGNIFY = {0.3f, 0.08f};
+    /** How far, in dp, the ones one and two away from it move out of its way. */
+    private static final float[] GIVE_WAY = {0f, 6f, 2f};
+
+    /** The bar's item the wheel was on when it last closed, see remember(). */
+    private String mRememberedKey;
+    private int mRememberedIndex;
+    /** Whether the bar has put the focus where it was left since it opened. */
+    private boolean mPlaced;
+    /** Whether the wheel has moved along the bar since it opened: only then is it noted. */
+    private boolean mMoved;
+
     private static final class Menu {
         final int type;
         /** The bar's button it was opened from, null when opened from another list. */
@@ -819,6 +832,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         };
         mRoot = root;
         mMenus.clear();
+        mPlaced = false;
+        mMoved = false;
 
         // [label and lists] [bar], mirrored on the left edge
         final LinearLayout row = new LinearLayout(mContext);
@@ -840,8 +855,11 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         final FrameLayout frame = new FrameLayout(mContext);
         frame.setBackgroundColor(barColor());
         mBarHighlight = highlight(dp(14));
-        frame.addView(mBarHighlight, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        // Wider than the bar on the app's side, for the magnified item's light
+        frame.addView(mBarHighlight, new FrameLayout.LayoutParams(barWidth() + cellSize(),
+                ViewGroup.LayoutParams.MATCH_PARENT, mSettings.left ? Gravity.LEFT : Gravity.RIGHT));
+        frame.setClipChildren(false);
+        row.setClipChildren(false);
         mBar = new LinearLayout(mContext);
         mBar.setOrientation(LinearLayout.VERTICAL);
         mBar.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -889,8 +907,13 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         }));
         // The focus asked for before the window has it may not stick: ask again once it does
         root.getViewTreeObserver().addOnWindowFocusChangeListener(hasFocus -> {
-            if (hasFocus && mRoot == root && root.findFocus() == null) {
-                focus(mBar, 0);
+            // Not the first button the window gives the focus to of its own: after it did
+            if (hasFocus && mRoot == root && !mMoved) {
+                root.post(() -> {
+                    if (mRoot == root && !mMoved) {
+                        focusRemembered();
+                    }
+                });
             }
         });
         root.getViewTreeObserver().addOnPreDrawListener(() -> {
@@ -908,8 +931,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         });
         mWindowManager.addView(root, lp);
         staggerIn();
-        // The wheel starts at the top, the light shows at once
-        focus(mBar, 0);
+        // The wheel starts where it was left, the light shows at once
+        focusRemembered();
         keepOpen();
         updateMode();
         updateNotifications(false);
@@ -1251,6 +1274,11 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             }
         }
 
+        // The apps came in after the bar opened: the one it was left on, until the wheel moves
+        if (mPlaced && !mMoved && mRememberedKey != null) {
+            focusKey(mRememberedKey);
+        }
+
         // The focus moves on before its button goes
         if (focusedCell != null && gone.contains(focusedCell)) {
             final int at = oldCells.indexOf(focusedCell);
@@ -1369,21 +1397,62 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         return cell;
     }
 
-    /** The focus lights a button up, grows it a little and names it beside the bar. */
+    /** The focus lights a button up, magnifies it and names it beside the bar. */
     private void decorate(View button) {
+        // Grown out of its cell and the bar
+        button.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            @Override
+            public void onViewAttachedToWindow(View v) {
+                for (View p = (View) v.getParent(); p != null && p != mBarFrame;
+                        p = p.getParent() instanceof View parent ? parent : null) {
+                    if (p instanceof ViewGroup group && !(p instanceof WheelTaskbarScroll)) {
+                        group.setClipChildren(false);
+                    }
+                }
+            }
+
+            @Override
+            public void onViewDetachedFromWindow(View v) {
+            }
+        });
         button.setOnFocusChangeListener((v, hasFocus) -> {
             if (mRefilling) {
                 return;
             }
-            final float scale = hasFocus ? 1.06f : 1f;
-            v.animate().scaleX(scale).scaleY(scale).setDuration(mSettings.duration(FOCUS_MS))
-                    .setInterpolator(new DecelerateInterpolator()).start();
             if (hasFocus) {
-                mBarHighlight.follow(v, cellSize(), cellSize());
+                magnify(v);
+                if (mMoved) {
+                    remember(v);
+                }
+                final int ring = Math.round(cellSize() * (1f + MAGNIFY[0]));
+                mBarHighlight.follow(v, ring, ring);
                 showLabel(v);
                 revealApps(v);
             }
         });
+    }
+
+    /**
+     * Grows the focused item of the bar out towards the app, as a dock magnifies under the
+     * pointer, and moves the ones next to it a little out of its way.
+     */
+    private void magnify(View focused) {
+        final List<View> targets = targets(mBar);
+        final int at = targets.indexOf(focused);
+        if (at < 0) {
+            return;
+        }
+        final float out = (mSettings.left ? 1 : -1) * cellSize() * MAGNIFY[0] * 0.6f;
+        for (int i = 0; i < targets.size(); i++) {
+            final int distance = Math.abs(i - at);
+            final float scale = 1f + (distance < MAGNIFY.length ? MAGNIFY[distance] : 0f);
+            final float away = distance < GIVE_WAY.length
+                    ? Math.signum(i - at) * dp(GIVE_WAY[distance]) : 0f;
+            targets.get(i).animate().scaleX(scale).scaleY(scale)
+                    .translationX(distance == 0 ? out : 0f).translationY(away)
+                    .setDuration(mSettings.duration(FOCUS_MS))
+                    .setInterpolator(new DecelerateInterpolator()).start();
+        }
     }
 
     /**
@@ -1512,7 +1581,11 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         mLabelTitle = new TextView(mContext);
         mLabelTitle.setTextAppearance(R.style.TextAppearance_WheelTaskbar_Label);
         mLabelTitle.setSingleLine(true);
-        mLabelTitle.setEllipsize(TextUtils.TruncateAt.END);
+        // Too long to read whole, the focused item's name runs by
+        mLabelTitle.setEllipsize(TextUtils.TruncateAt.MARQUEE);
+        mLabelTitle.setMarqueeRepeatLimit(-1);
+        mLabelTitle.setHorizontalFadingEdgeEnabled(true);
+        mLabelTitle.setSelected(true);
         mLabelTitle.setMaxWidth(maxWidth);
         // Each line as wide as its words; a vertical LinearLayout's default fills the card
         mLabel.addView(mLabelTitle, new LinearLayout.LayoutParams(
@@ -1772,6 +1845,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private void move(int step, long time) {
         mStepUp = step < 0;
         final boolean inList = !mMenus.isEmpty();
+        mMoved |= !inList;
         final ViewGroup list = inList ? mPanelItems : mBar;
         final List<View> targets = targets(list);
         if (targets.isEmpty()) {
@@ -1929,10 +2003,58 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         requestApps();
     }
 
+    /** Notes the bar's item the wheel is on, for the next time the bar opens. */
+    private void remember(View item) {
+        final int index = targets(mBar).indexOf(item);
+        if (index >= 0) {
+            mRememberedKey = barKey(item);
+            mRememberedIndex = index;
+        }
+    }
+
+    /**
+     * The item the bar was left on: the same app or button, else the same place. An app the
+     * bar has yet to load gets the focus when it comes, see applyApps().
+     */
+    private void focusRemembered() {
+        if (targets(mBar).isEmpty()) {
+            // Not in the window yet: once it has the focus
+            return;
+        }
+        mPlaced = true;
+        if (mRememberedKey == null || !focusKey(mRememberedKey)) {
+            focus(mBar, mRememberedIndex);
+        }
+    }
+
+    private boolean focusKey(String key) {
+        for (View target : targets(mBar)) {
+            if (key.equals(barKey(target))) {
+                target.requestFocusFromTouch();
+                // Given while the bar fills, when the focus itself doesn't
+                magnify(target);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String barKey(View view) {
+        if (view.getTag() instanceof WheelTaskbarApps.Entry entry) {
+            return "app:" + entry.packageName;
+        }
+        final CharSequence description = view.getContentDescription();
+        return description != null ? "button:" + description : null;
+    }
+
     private void focus(ViewGroup list, int index) {
         final List<View> targets = targets(list);
         if (!targets.isEmpty()) {
-            targets.get(Math.max(0, Math.min(index, targets.size() - 1))).requestFocusFromTouch();
+            final View target = targets.get(Math.max(0, Math.min(index, targets.size() - 1)));
+            target.requestFocusFromTouch();
+            if (list == mBar) {
+                magnify(target);
+            }
         }
     }
 
@@ -2468,7 +2590,13 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         final TextView summaryView = row.findViewById(R.id.wheel_taskbar_item_summary);
         summaryView.setText(summary);
         summaryView.setVisibility(TextUtils.isEmpty(summary) ? View.GONE : View.VISIBLE);
+        final TextView titleView = row.findViewById(R.id.wheel_taskbar_item_title);
+        // One line that can run, which maxLines alone can't
+        titleView.setSingleLine(true);
         row.setOnFocusChangeListener((v, hasFocus) -> {
+            titleView.setEllipsize(hasFocus ? TextUtils.TruncateAt.MARQUEE
+                    : TextUtils.TruncateAt.END);
+            titleView.setSelected(hasFocus);
             if (hasFocus && !mRefilling) {
                 mPanelHighlight.follow(v, 0, 0);
                 if (v.isLaidOut()) {
