@@ -29,6 +29,9 @@ final class WheelTaskbarScroll extends ScrollView {
 
     WheelTaskbarScroll(Context context) {
         super(context);
+        // A ScrollView takes the focus itself when it has no app to give it to, as while the
+        // bar fills: the wheel then stopped on the whole section instead of a button
+        setFocusable(false);
         setVerticalScrollBarEnabled(false);
         setVerticalFadingEdgeEnabled(true);
         setOverScrollMode(View.OVER_SCROLL_NEVER);
