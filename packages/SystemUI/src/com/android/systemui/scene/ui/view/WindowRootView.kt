@@ -17,12 +17,11 @@
 package com.android.systemui.scene.ui.view
 
 import android.annotation.SuppressLint
+import android.app.StatusBarManager
 import android.content.Context
 import android.util.AttributeSet
 import android.util.Pair
 import android.view.DisplayCutout
-import android.view.FocusFinder
-import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
 import android.view.View
 import android.view.WindowInsets
@@ -31,6 +30,7 @@ import android.widget.FrameLayout
 import androidx.core.view.updateMargins
 import com.android.systemui.compose.ComposeInitializer
 import com.android.systemui.res.R
+import com.android.systemui.wheel.WheelNavigator
 
 /** A view that can serve as the root of the main SysUI window. */
 open class WindowRootView(context: Context, attrs: AttributeSet?) : FrameLayout(context, attrs) {
@@ -40,6 +40,26 @@ open class WindowRootView(context: Context, attrs: AttributeSet?) : FrameLayout(
     private var rightInset = 0
 
     private var previousInsets: WindowInsets? = null
+
+    /** The wheel's walk through the shade, see WheelNavigator. Up past the top closes it. */
+    private var wheelNavigator: WheelNavigator? = null
+
+    private fun wheelNavigator() =
+        wheelNavigator
+            ?: WheelNavigator(this, { it.id == R.id.split_shade_status_bar }) {
+                    context.getSystemService(StatusBarManager::class.java)?.collapsePanels()
+                }
+                .also {
+                    it.setLevels(wheelLevels)
+                    wheelNavigator = it
+                }
+
+    /** The shade's levels for the wheel, see WheelNavigator.Levels. */
+    var wheelLevels: WheelNavigator.Levels? = null
+        set(value) {
+            field = value
+            wheelNavigator?.setLevels(value)
+        }
     private lateinit var windowRootViewKeyEventHandler: WindowRootViewKeyEventHandler
 
     fun setWindowRootViewKeyEventHandler(wrvkeh: WindowRootViewKeyEventHandler) {
@@ -56,6 +76,7 @@ open class WindowRootView(context: Context, attrs: AttributeSet?) : FrameLayout(
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
+        wheelNavigator?.reset()
 
         if (isRoot()) {
             ComposeInitializer.onDetachedFromWindow(this)
@@ -144,54 +165,11 @@ open class WindowRootView(context: Context, attrs: AttributeSet?) : FrameLayout(
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         windowRootViewKeyEventHandler.collectKeyEvent(event)
 
-        // Only here with INPUT_FEATURE_POWER_KEY_SELECTS (wheel UI, shade over an app): the
-        // side button clicks the focused notification or tile, or first shows the focus
-        if (event.keyCode == KeyEvent.KEYCODE_POWER) {
-            if (
-                event.action == KeyEvent.ACTION_UP &&
-                    !event.isCanceled &&
-                    (event.flags and KeyEvent.FLAG_LONG_PRESS) == 0
-            ) {
-                val focused = findFocus()
-                if (focused != null && !isInTouchMode) {
-                    focused.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                    focused.performClick()
-                } else {
-                    FocusFinder.getInstance()
-                        .findNextFocus(this, null, View.FOCUS_DOWN)
-                        ?.requestFocusFromTouch()
-                }
-            }
-            return true
-        }
-
-        // With the same feature the wheel starts at the top and goes round: past the last
-        // item to the first
-        if (
-            (event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN ||
-                event.keyCode == KeyEvent.KEYCODE_DPAD_UP) &&
-                ((layoutParams as? WindowManager.LayoutParams)?.inputFeatures ?: 0) and
-                    WindowManager.LayoutParams.INPUT_FEATURE_POWER_KEY_SELECTS != 0
-        ) {
-            val focused = findFocus()
-            if (isInTouchMode || focused == null) {
-                if (event.action == KeyEvent.ACTION_DOWN) {
-                    FocusFinder.getInstance()
-                        .findNextFocus(this, null, View.FOCUS_DOWN)
-                        ?.requestFocusFromTouch()
-                }
-                return true
-            }
-            val direction =
-                if (event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) View.FOCUS_DOWN
-                else View.FOCUS_UP
-            if (FocusFinder.getInstance().findNextFocus(this, focused, direction) == null) {
-                if (event.action == KeyEvent.ACTION_DOWN) {
-                    FocusFinder.getInstance().findNextFocus(this, null, direction)?.let {
-                        it.requestFocus()
-                        it.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-                    }
-                }
+        // With INPUT_FEATURE_POWER_KEY_SELECTS (wheel UI, shade over an app) the wheel walks the
+        // shade's tiles, sliders and notifications and the side button presses them. The side
+        // button only comes here with it.
+        if (isRoot() && (event.keyCode == KeyEvent.KEYCODE_POWER || wheelSelects())) {
+            if (wheelNavigator().dispatchKey(event) || event.keyCode == KeyEvent.KEYCODE_POWER) {
                 return true
             }
         }
@@ -206,6 +184,17 @@ open class WindowRootView(context: Context, attrs: AttributeSet?) : FrameLayout(
 
         return windowRootViewKeyEventHandler.dispatchKeyEvent(event)
     }
+
+    override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
+        super.onWindowFocusChanged(hasWindowFocus)
+        if (!hasWindowFocus) {
+            wheelNavigator?.reset()
+        }
+    }
+
+    private fun wheelSelects() =
+        ((layoutParams as? WindowManager.LayoutParams)?.inputFeatures ?: 0) and
+            WindowManager.LayoutParams.INPUT_FEATURE_POWER_KEY_SELECTS != 0
 
     override fun dispatchKeyEventPreIme(event: KeyEvent): Boolean {
         return windowRootViewKeyEventHandler.dispatchKeyEventPreIme(event) ?: false
