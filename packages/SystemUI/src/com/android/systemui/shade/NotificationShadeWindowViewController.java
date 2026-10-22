@@ -80,6 +80,7 @@ import com.android.systemui.unfold.SysUIUnfoldComponent;
 import com.android.systemui.unfold.UnfoldTransitionProgressProvider;
 import com.android.systemui.util.kotlin.JavaAdapter;
 import com.android.systemui.util.time.SystemClock;
+import com.android.systemui.wheel.WheelNavigator;
 import com.android.systemui.window.ui.BlurChoreographer;
 import com.android.systemui.window.ui.WindowRootViewBinder;
 import com.android.systemui.window.ui.viewmodel.WindowRootViewModel;
@@ -389,6 +390,32 @@ public class NotificationShadeWindowViewController implements Dumpable {
                 mQQSGestureListener);
         mView.setLayoutInsetsController(mNotificationInsetsController);
         mView.setWindowRootViewKeyEventHandler(mWindowRootViewKeyEventHandler);
+        // The wheel walks the quick tiles and notifications, then past them the full panel
+        mView.setWheelLevels(new WheelNavigator.Levels() {
+            @Override
+            public boolean deeper() {
+                final StatusBarManager statusBar =
+                        mView.getContext().getSystemService(StatusBarManager.class);
+                if (mQuickSettingsController.getExpanded() || statusBar == null) {
+                    return false;
+                }
+                statusBar.expandSettingsPanel();
+                return true;
+            }
+
+            @Override
+            public boolean shallower() {
+                if (!mQuickSettingsController.getExpanded()) {
+                    return false;
+                }
+                if (mQuickSettingsController instanceof QuickSettingsControllerImpl impl) {
+                    impl.animateCloseQs(false /* animateAway */);
+                } else {
+                    mQuickSettingsController.closeQs();
+                }
+                return true;
+            }
+        });
         mView.setInteractionEventHandler(new NotificationShadeWindowView.InteractionEventHandler() {
             boolean mLastInterceptWasDragDownHelper = false;
 
