@@ -23,15 +23,26 @@
             android:tint="@color/materialColorOnSurface"
             android:background="@drawable/global_actions_lite_button"
             android:duplicateParentState="true"/>
-        <TextView
-            android:id="@*android:id/message"
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:layout_marginStart="@dimen/global_actions_list_text_gap"
-            android:ellipsize="end"
-            android:singleLine="true"
-            android:textSize="@dimen/global_actions_list_text_size"
-            android:textColor="@color/materialColorOnSurface"
-            android:textAppearance="?android:attr/textAppearanceMedium" />
+            android:orientation="vertical">
+            <TextView
+                android:id="@*android:id/message"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:singleLine="true"
+                android:textSize="@dimen/global_actions_list_text_size"
+                android:textColor="@color/materialColorOnSurface"
+                android:textAppearance="?android:attr/textAppearanceMedium" />
+            <TextView
+                android:id="@+id/global_actions_restart_summary"
+                style="@style/GlobalActionsStats.Extra"
+                android:layout_width="match_parent"
+                android:ellipsize="end"
+                android:visibility="gone" />
+        </LinearLayout>
 </com.android.systemui.globalactions.GlobalActionsItem>

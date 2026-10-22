@@ -1274,6 +1274,9 @@
          label gets cut off on a small screen. Landscape keeps the grid. -->
     <bool name="config_powerMenuList">false</bool>
 
+    <!-- Whether the power menu shows the user's pinned apps below or beside the actions. -->
+    <bool name="config_powerMenuPinnedApps">true</bool>
+
     <!-- Battery level of a last low battery warning, below the critical one, saying that the
          device turns itself off soon. -1 for none. -->
     <integer name="config_lastBatteryWarningLevel">-1</integer>

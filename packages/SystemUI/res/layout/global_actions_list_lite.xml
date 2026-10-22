@@ -17,8 +17,9 @@
   <com.android.systemui.globalactions.GlobalActionsLayoutLite
       android:id="@id/global_actions_view"
       android:layout_width="0dp"
-      android:layout_height="wrap_content"
+      android:layout_height="0dp"
       android:layout_marginHorizontal="@dimen/global_actions_list_margin"
+      android:layout_marginBottom="@dimen/global_actions_list_margin"
       android:focusable="false"
       android:orientation="vertical"
       android:clipChildren="false"
@@ -27,25 +28,33 @@
       app:layout_constraintTop_toTopOf="parent"
       app:layout_constraintStart_toStartOf="parent"
       app:layout_constraintEnd_toEndOf="parent">
-    <com.android.systemui.common.ui.view.LaunchableConstraintLayout
+    <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:id="@android:id/list"
-        android:translationZ="@dimen/global_actions_translate"
-        android:background="@drawable/global_actions_lite_background"
-        android:padding="@dimen/global_actions_list_padding"
-        android:layoutDirection="ltr">
-      <androidx.constraintlayout.helper.widget.Flow
-          android:id="@+id/list_flow"
+        android:layout_height="match_parent"
+        android:fillViewport="true"
+        android:focusable="false"
+        android:scrollbars="none">
+      <com.android.systemui.common.ui.view.LaunchableConstraintLayout
           android:layout_width="match_parent"
           android:layout_height="wrap_content"
-          app:layout_constraintStart_toStartOf="parent"
-          app:layout_constraintEnd_toEndOf="parent"
-          app:layout_constraintTop_toTopOf="parent"
-          app:flow_wrapMode="chain"
-          app:flow_maxElementsWrap="1"
-          app:flow_verticalGap="@dimen/global_actions_list_row_gap"
-          app:flow_horizontalStyle="spread"/>
-    </com.android.systemui.common.ui.view.LaunchableConstraintLayout>
+          android:id="@android:id/list"
+          android:translationZ="@dimen/global_actions_translate"
+          android:background="@drawable/global_actions_lite_background"
+          android:padding="@dimen/global_actions_list_padding"
+          android:layoutDirection="ltr">
+        <androidx.constraintlayout.helper.widget.Flow
+            android:id="@+id/list_flow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:flow_wrapMode="chain"
+            app:flow_maxElementsWrap="1"
+            app:flow_verticalGap="@dimen/global_actions_list_row_gap"
+            app:flow_verticalStyle="spread"
+            app:flow_horizontalStyle="spread"/>
+      </com.android.systemui.common.ui.view.LaunchableConstraintLayout>
+    </ScrollView>
   </com.android.systemui.globalactions.GlobalActionsLayoutLite>
 </androidx.constraintlayout.widget.ConstraintLayout>

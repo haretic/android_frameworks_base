@@ -20,7 +20,7 @@
     <bool name="global_actions_stats_strip">false</bool>
     <dimen name="global_actions_stats_menu_gap">12dp</dimen>
     <dimen name="global_actions_stats_padding_horizontal">12dp</dimen>
-    <dimen name="global_actions_stats_padding_vertical">9dp</dimen>
+    <dimen name="global_actions_stats_padding_vertical">8dp</dimen>
     <dimen name="global_actions_stats_cell_gap_half">5dp</dimen>
     <dimen name="global_actions_stats_graph_height">18dp</dimen>
     <dimen name="global_actions_stats_graph_width">0dp</dimen>
@@ -91,6 +91,7 @@
     <dimen name="global_actions_list_margin">12dp</dimen>
     <dimen name="global_actions_list_padding">8dp</dimen>
     <dimen name="global_actions_list_row_height">42dp</dimen>
+    <dimen name="global_actions_list_row_max_height">64dp</dimen>
     <dimen name="global_actions_list_row_gap">0dp</dimen>
     <dimen name="global_actions_list_row_padding">8dp</dimen>
     <dimen name="global_actions_list_row_corner_radius">16dp</dimen>

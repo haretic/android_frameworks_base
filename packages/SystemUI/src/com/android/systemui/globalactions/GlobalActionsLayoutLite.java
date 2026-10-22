@@ -160,7 +160,8 @@ public class GlobalActionsLayoutLite extends GlobalActionsLayout {
 
     @Override
     protected void removeAllListViews() {
-        View flow = findViewById(R.id.list_flow);
+        Flow flow = findViewById(R.id.list_flow);
+        flow.setReferencedIds(new int[0]);
         super.removeAllListViews();
 
         // Add flow element back after clearing the list view
@@ -170,6 +171,50 @@ public class GlobalActionsLayoutLite extends GlobalActionsLayout {
         }
         mLastView = null;
         mCurrentIds.clear();
+    }
+
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        if (!isListStyle(getContext()) || mCurrentIds.isEmpty()
+                || MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.UNSPECIFIED) {
+            return;
+        }
+        final ViewGroup list = getListView();
+        final Flow flow = findViewById(R.id.list_flow);
+        final Resources res = getResources();
+        final int count = mCurrentIds.size();
+        final int gap = res.getDimensionPixelSize(R.dimen.global_actions_list_row_gap);
+        final int footerHeight = mFooter != null && mFooter.getVisibility() != GONE
+                ? mFooter.getMeasuredHeight() : 0;
+        final int availableHeight = Math.max(0, MeasureSpec.getSize(heightMeasureSpec)
+                - getPaddingTop() - getPaddingBottom()
+                - list.getPaddingTop() - list.getPaddingBottom() - footerHeight);
+        final int rowHeight = Math.max(
+                res.getDimensionPixelSize(R.dimen.global_actions_list_row_height),
+                Math.min(res.getDimensionPixelSize(R.dimen.global_actions_list_row_max_height),
+                        (availableHeight - gap * (count - 1)) / count));
+        boolean needsMeasure = false;
+        for (int id : mCurrentIds) {
+            final View row = list.findViewById(id);
+            final ViewGroup.LayoutParams lp = row.getLayoutParams();
+            if (lp.height != rowHeight) {
+                lp.height = rowHeight;
+                row.setLayoutParams(lp);
+                needsMeasure = true;
+            }
+        }
+        // Spread any space left by the height cap; scroll when the minimum rows don't fit.
+        final int flowHeight = Math.max(availableHeight, rowHeight * count + gap * (count - 1));
+        final ViewGroup.LayoutParams flowLp = flow.getLayoutParams();
+        if (flowLp.height != flowHeight) {
+            flowLp.height = flowHeight;
+            flow.setLayoutParams(flowLp);
+            needsMeasure = true;
+        }
+        if (needsMeasure) {
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        }
     }
 
     @Override
