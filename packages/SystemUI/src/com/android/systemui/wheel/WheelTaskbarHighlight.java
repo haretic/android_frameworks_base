@@ -171,7 +171,8 @@ final class WheelTaskbarHighlight extends View implements ViewTreeObserver.OnPre
         if (view == null || view.getWidth() == 0 || !isAttachedToWindow()) {
             return false;
         }
-        ((View) getParent()).getLocationInWindow(mHere);
+        // From its own corner, which may lie out of its parent's
+        getLocationInWindow(mHere);
         // The view's place without its own scale, which the focus gives the buttons
         view.getLocationInWindow(mThere);
         final float scaledWidth = view.getWidth() * view.getScaleX();
