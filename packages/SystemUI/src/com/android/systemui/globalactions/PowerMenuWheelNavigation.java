@@ -101,6 +101,7 @@ final class PowerMenuWheelNavigation implements DialogInterface.OnKeyListener {
                     move(keyCode == KeyEvent.KEYCODE_DPAD_DOWN ? 1 : -1);
                 }
                 return true;
+            case KeyEvent.KEYCODE_DPAD_CENTER:
             case KeyEvent.KEYCODE_POWER:
                 if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()
                         && (event.getFlags() & KeyEvent.FLAG_LONG_PRESS) == 0) {

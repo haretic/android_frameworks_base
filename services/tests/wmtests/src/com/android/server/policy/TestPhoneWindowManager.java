@@ -49,6 +49,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.after;
@@ -487,6 +488,25 @@ class TestPhoneWindowManager {
         mPhoneWindowManager.mRingerToggleChord = VOLUME_HUSH_MUTE;
         doReturn(mAudioManagerInternal).when(
                 () -> LocalServices.getService(eq(AudioManagerInternal.class)));
+    }
+
+    void overrideWheelSideButton(boolean enabled) {
+        doReturn(enabled).when(mPhoneWindowManager).isWheelSideButtonInput();
+        doReturn(0).when(mPhoneWindowManager).wheelSideButtonAction(anyBoolean());
+        if (enabled) {
+            mPhoneWindowManager.mStatusBarService =
+                    mock(com.android.internal.statusbar.IStatusBarService.class);
+        }
+    }
+
+    void assertWheelTaskbarRequested() {
+        mTestLooper.dispatchAll();
+        try {
+            verify(mPhoneWindowManager.mStatusBarService).handleSystemKey(
+                    argThat(event -> event.getKeyCode() == KeyEvent.KEYCODE_NAVIGATE_IN));
+        } catch (android.os.RemoteException e) {
+            throw new AssertionError(e);
+        }
     }
 
     void overrideShortPressOnPower(int behavior) {

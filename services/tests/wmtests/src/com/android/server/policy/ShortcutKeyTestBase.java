@@ -109,6 +109,9 @@ class ShortcutKeyTestBase {
     public void setup() {
         mContext = spy(getInstrumentation().getTargetContext());
         mResources = spy(mContext.getResources());
+        // Stock gesture tests must not inherit an r1 device overlay; wheel cases opt in.
+        doReturn(false).when(mResources).getBoolean(
+                com.android.internal.R.bool.config_r1SideButtonInput);
         mPackageManager = spy(mContext.getPackageManager());
         doReturn(mContext).when(mContext).createContextAsUser(any(), anyInt());
         doReturn(mResources).when(mContext).getResources();

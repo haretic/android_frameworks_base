@@ -198,12 +198,7 @@ private fun FooterBar(
 
     val wheel = LocalWheelLayout.current
     if (wheel.enabled) {
-        WheelPageControls(
-            wheel.columns,
-            pagerState,
-            editButtonViewModel,
-            buildNumberViewModelFactory,
-        )
+        WheelPageControls(pagerState, editButtonViewModel, buildNumberViewModelFactory)
         return
     }
 
@@ -241,7 +236,6 @@ private fun FooterBar(
 
 @Composable
 private fun WheelPageControls(
-    columns: Int,
     pagerState: PagerState,
     editButtonViewModel: EditModeButtonViewModel,
     buildNumberViewModelFactory: BuildNumberViewModel.Factory,
@@ -268,31 +262,14 @@ private fun WheelPageControls(
             )
         }
     }
-    val edit: @Composable () -> Unit = {
-        if (editButtonViewModel.isEditButtonVisible) {
-            FilledTonalButton(
-                onClick = editButtonViewModel::onButtonClick,
-                modifier =
-                    Modifier.fillMaxWidth().heightIn(min = 48.dp).sysuiResTag("qs_edit_mode_button"),
-            ) {
-                androidx.compose.material3.Icon(
-                    imageVector = com.android.systemui.common.ui.icons.Edit,
-                    contentDescription = null,
-                )
-                Spacer(Modifier.size(8.dp))
-                Text(stringResource(R.string.wheel_qs_edit))
-            }
-        }
-    }
     Column(Modifier.fillMaxWidth(), verticalArrangement = spacedBy(8.dp)) {
-        if (columns == 1) {
-            page()
-            edit()
-        } else {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = spacedBy(8.dp)) {
-                androidx.compose.foundation.layout.Box(Modifier.weight(1f)) { page() }
-                androidx.compose.foundation.layout.Box(Modifier.weight(1f)) { edit() }
-            }
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = spacedBy(8.dp),
+        ) {
+            androidx.compose.foundation.layout.Box(Modifier.weight(1f)) { page() }
+            EditModeButton(viewModel = editButtonViewModel, isVisible = true)
         }
         BuildNumber(viewModelFactory = buildNumberViewModelFactory)
     }
