@@ -41,7 +41,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -206,7 +205,6 @@ fun FooterActions(viewModel: FooterActionsViewModel, modifier: Modifier = Modifi
     val wheel = LocalWheelLayout.current
     if (wheel.enabled) {
         WheelFooterActions(
-            columns = wheel.columns,
             textFeedback = textFeedback,
             security = security,
             foregroundServices = foregroundServices,
@@ -293,7 +291,6 @@ fun FooterActions(viewModel: FooterActionsViewModel, modifier: Modifier = Modifi
 
 @Composable
 private fun WheelFooterActions(
-    columns: Int,
     textFeedback: TextFeedbackViewModel,
     security: FooterActionsSecurityButtonViewModel?,
     foregroundServices: FooterActionsForegroundServicesButtonViewModel?,
@@ -309,24 +306,13 @@ private fun WheelFooterActions(
         }
         security?.let { AnimatedFooterTextButton(it, true, Modifier.fillMaxWidth()) }
         foregroundServices?.let { AnimatedFooterTextButton(it, true, Modifier.fillMaxWidth()) }
-        userSwitcher?.let { LabelledFooterButton(it, it.icon.contentDescription?.load() ?: "") }
-        val buttons: @Composable () -> Unit = {
-            settings?.let { LabelledFooterButton(it, stringResource(R.string.wheel_qs_settings)) }
-            power?.let { LabelledFooterButton(it, stringResource(R.string.wheel_qs_power)) }
-        }
-        if (columns == 1) {
-            buttons()
-        } else {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = spacedBy(8.dp)) {
-                settings?.let {
-                    Box(Modifier.weight(1f)) {
-                        LabelledFooterButton(it, stringResource(R.string.wheel_qs_settings))
-                    }
-                }
-                Box(Modifier.weight(1f)) {
-                    power?.let { LabelledFooterButton(it, stringResource(R.string.wheel_qs_power)) }
-                }
-            }
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End,
+        ) {
+            IconButton({ userSwitcher }, true, Modifier.sysuiResTag("multi_user_switch"))
+            IconButton({ settings }, true, Modifier.sysuiResTag("settings_button_container"))
+            IconButton({ power }, true, Modifier.sysuiResTag("pm_lite"))
         }
     }
 }
@@ -428,26 +414,6 @@ private fun ForegroundServicesNumberButton(
             useModifierBasedExpandable,
             modifier = Modifier.graphicsLayer { this.alpha = alpha },
         )
-    }
-}
-
-@Composable
-private fun LabelledFooterButton(model: FooterActionsButtonViewModel, label: String) {
-    val colors = buttonColorsForModel(model)
-    CircleExpandable(
-        color = colors.background,
-        onClick = model.onClick,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-        useModifierBasedImplementation = true,
-    ) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = spacedBy(12.dp),
-        ) {
-            FooterIcon(model.icon, Modifier.size(24.dp), colors.icon)
-            Text(label, color = colors.icon, style = MaterialTheme.typography.titleMedium)
-        }
     }
 }
 

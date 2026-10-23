@@ -6628,6 +6628,7 @@
   <java-symbol type="bool" name="config_disable_video_capability_when_wfc_off" />
 
   <!-- Scroll wheel input devices, for the wheel taskbar -->
+  <java-symbol type="bool" name="config_r1SideButtonInput" />
   <java-symbol type="array" name="config_scrollWheelInputDevices" />
   <java-symbol type="string" name="config_wheelDaemonInputDevice" />
   <java-symbol type="string" name="config_wheelDaemonSocket" />

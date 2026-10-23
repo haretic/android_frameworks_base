@@ -96,8 +96,8 @@ import static android.view.contentprotection.flags.Flags.createAccessibilityOver
 import static com.android.hardware.input.Flags.useEventDisplayIdForKeyWakeup;
 import static com.android.internal.policy.IKeyguardService.SCREEN_TURNING_ON_REASON_DISPLAY_SWITCH;
 import static com.android.internal.policy.IKeyguardService.SCREEN_TURNING_ON_REASON_UNKNOWN;
-import static com.android.server.policy.Flags.wearKeyguardDrawnTimeoutOnBootConfig;
 import static com.android.server.policy.Flags.brightnessDialogOverrideToast;
+import static com.android.server.policy.Flags.wearKeyguardDrawnTimeoutOnBootConfig;
 import static com.android.server.policy.SingleKeyGestureEvent.ACTION_CANCEL;
 import static com.android.server.policy.SingleKeyGestureEvent.ACTION_COMPLETE;
 import static com.android.server.policy.SingleKeyGestureEvent.ACTION_START;
@@ -1222,6 +1222,16 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mPowerKeyWakeLock.acquire();
         }
 
+        if (isWheelSideButtonInput()) {
+            // The hardware remains a wake key. Do not run call, proximity, torch or power policy.
+            mResolvedLongPressOnPowerBehavior = LONG_PRESS_POWER_NOTHING;
+            if ((!interactive || mDefaultDisplay.getState() != Display.STATE_ON)
+                    && event.getRepeatCount() == 0) {
+                wakeUpFromWakeKey(event);
+            }
+            return;
+        }
+
         mWindowManagerFuncs.onPowerKeyDown(interactive);
 
         // Stop ringing or end call if configured to do so when power is pressed.
@@ -1300,6 +1310,23 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     @VisibleForTesting
     void powerPress(long eventTime, int count, int displayId) {
+        if (isWheelSideButtonInput()) {
+            if (!mDefaultDisplayPolicy.isAwake()
+                    || mSingleKeyGestureDetector.beganFromNonInteractive()
+                    || !mSingleKeyGestureDetector.beganFromDefaultDisplayOn()) {
+                return; // A sequence which woke the device only wakes it.
+            }
+            if (count == 2) {
+                powerMultiPressAction(displayId, eventTime, true, MULTI_PRESS_POWER_WHEEL_TASKBAR);
+            } else if (count == 1) {
+                if (wheelFocusedWindowSelects()) {
+                    injectWheelSideButtonKey(KeyEvent.KEYCODE_DPAD_CENTER, eventTime);
+                } else if (!powerPressForWheelMode()) {
+                    performWheelSideButtonAction(false);
+                }
+            }
+            return;
+        }
         // SideFPS still needs to know about suppressed power buttons, in case it needs to block
         // an auth attempt.
         if (count == 1) {
@@ -1551,6 +1578,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
      * sleep.
      */
     private boolean sleepDefaultDisplayFromPowerButton(long eventTime, int flags) {
+        if (isWheelSideButtonInput()) {
+            return false;
+        }
         // Before we actually go to sleep, we check the last wakeup reason.
         // If the device very recently woke up from a gesture (like user lifting their device)
         // then ignore the sleep instruction. This is because users have developed
@@ -1659,6 +1689,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     private int getMaxMultiPressPowerCount() {
+        if (isWheelSideButtonInput()) {
+            return 2; // Fixed taskbar escape, regardless of saved stock multi-press settings.
+        }
         // The actual max power button press count is 5
         // (EMERGENCY_GESTURE_POWER_TAP_COUNT_THRESHOLD), which is coming from
         // GestureLauncherService.
@@ -1681,6 +1714,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     private void powerLongPress(long eventTime) {
+        if (isWheelSideButtonInput()) {
+            mPowerKeyHandled = true;
+            performWheelSideButtonAction(true);
+            return;
+        }
         final int behavior = mResolvedLongPressOnPowerBehavior;
         Slog.d(TAG, "powerLongPress: eventTime=" + eventTime
                 + " mResolvedLongPressOnPowerBehavior=" + mResolvedLongPressOnPowerBehavior);
@@ -1743,6 +1781,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     private void powerVeryLongPress() {
+        if (isWheelSideButtonInput()) {
+            return;
+        }
         Slog.d(TAG, "powerVeryLongPress: "  + mVeryLongPressOnPowerBehavior);
         switch (mVeryLongPressOnPowerBehavior) {
             case VERY_LONG_PRESS_POWER_NOTHING:
@@ -1876,6 +1917,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     private int getResolvedLongPressOnPowerBehavior() {
+        if (isWheelSideButtonInput()) {
+            return LONG_PRESS_POWER_NOTHING; // Before factory-test, torch and assistant overrides.
+        }
         if (FactoryTest.isLongPressOnPowerOffEnabled()) {
             return LONG_PRESS_POWER_SHUT_OFF_NO_CONFIRM;
         }
@@ -2065,11 +2109,13 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     private boolean hasLongPressOnPowerBehavior() {
-        return getResolvedLongPressOnPowerBehavior() != LONG_PRESS_POWER_NOTHING;
+        return isWheelSideButtonInput()
+                || getResolvedLongPressOnPowerBehavior() != LONG_PRESS_POWER_NOTHING;
     }
 
     private boolean hasVeryLongPressOnPowerBehavior() {
-        return mVeryLongPressOnPowerBehavior != VERY_LONG_PRESS_POWER_NOTHING;
+        return !isWheelSideButtonInput()
+                && mVeryLongPressOnPowerBehavior != VERY_LONG_PRESS_POWER_NOTHING;
     }
 
     private boolean hasLongPressOnBackBehavior() {
@@ -2981,7 +3027,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
 
         private void onPress(long downTime, int displayId) {
-            if (mShouldEarlyShortPressOnPower) {
+            if (mShouldEarlyShortPressOnPower && !isWheelSideButtonInput()) {
                 return;
             }
             powerPress(downTime, 1 /*count*/, displayId);
@@ -2998,7 +3044,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
         private void onLongPress(@NonNull SingleKeyGestureEvent event) {
             if (mSingleKeyGestureDetector.beganFromNonInteractive()
-                    && !mSupportLongPressPowerWhenNonInteractive) {
+                    && !mSupportLongPressPowerWhenNonInteractive
+                    && !isWheelSideButtonInput()) {
                 Slog.v(TAG, "Not support long press power when device is not interactive.");
                 return;
             }
@@ -3017,6 +3064,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
 
         private void onVeryLongPress() {
+            if (isWheelSideButtonInput()) {
+                return;
+            }
             mActivityManagerInternal.prepareForPossibleShutdown();
             powerVeryLongPress();
         }
@@ -3027,7 +3077,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
         @Override
         public void onKeyUp(int count, KeyEvent event) {
-            if (mShouldEarlyShortPressOnPower && count == 1) {
+            if (mShouldEarlyShortPressOnPower && !isWheelSideButtonInput() && count == 1) {
                 powerPress(event.getDownTime(), 1 /*pressCount*/, event.getDisplayId());
             }
         }
@@ -3497,6 +3547,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mTorchLongPressPowerEnabled = LineageSettings.System.getIntForUser(
                     resolver, LineageSettings.System.TORCH_LONG_PRESS_POWER_GESTURE, 0,
                     UserHandle.USER_CURRENT) == 1;
+            if (mContext.getResources().getBoolean(
+                    com.android.internal.R.bool.config_r1SideButtonInput)) {
+                mTorchLongPressPowerEnabled = false; // The r1 has no torch hardware.
+            }
             mTorchTimeout = LineageSettings.System.getIntForUser(
                     resolver, LineageSettings.System.TORCH_LONG_PRESS_POWER_TIMEOUT, 0,
                     UserHandle.USER_CURRENT);
@@ -4122,6 +4176,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         boolean canLaunchApp = isUserSetupComplete() && !keyguardOn;
         boolean isPowerKeyPressed = Arrays.stream(event.getKeycodes()).anyMatch(
                 (keycode) -> keycode == KeyEvent.KEYCODE_POWER);
+        if (isPowerKeyPressed && isWheelSideButtonInput()) {
+            // Power-containing chords cannot reintroduce assistant, lock or global actions.
+            mPowerKeyHandled = true;
+            return;
+        }
         if (complete && isPowerKeyPressed) {
             mPowerKeyHandled = true;
         }
@@ -4575,6 +4634,82 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 : mWindowManagerInternal.getKeyInterceptionInfoFromToken(focusedToken);
         return info == null || (info.layoutParamsType >= FIRST_APPLICATION_WINDOW
                 && info.layoutParamsType <= LAST_APPLICATION_WINDOW);
+    }
+
+    @VisibleForTesting
+    boolean isWheelSideButtonInput() {
+        return WheelSideButtonPolicy.isEnabled(mContext);
+    }
+
+    private boolean wheelFocusedWindowSelects() {
+        final WindowState focus = mDefaultDisplayFocus;
+        return focus != null
+                && focus.canAddInternalSystemWindow()
+                && (focus.getInputFeatures()
+                                & WindowManager.LayoutParams.INPUT_FEATURE_POWER_KEY_SELECTS)
+                        != 0;
+    }
+
+    @VisibleForTesting
+    int wheelSideButtonAction(boolean hold) {
+        return LineageSettings.Secure.getIntForUser(
+                mContext.getContentResolver(),
+                hold
+                        ? LineageSettings.Secure.WHEEL_SIDE_BUTTON_HOLD
+                        : LineageSettings.Secure.WHEEL_SIDE_BUTTON_PRESS,
+                LineageSettings.Secure.WHEEL_SIDE_BUTTON_ACTION_NOTHING,
+                UserHandle.USER_CURRENT);
+    }
+
+    private void performWheelSideButtonAction(boolean hold) {
+        switch (wheelSideButtonAction(hold)) {
+            case LineageSettings.Secure.WHEEL_SIDE_BUTTON_ACTION_BACK:
+                injectWheelSideButtonKey(KeyEvent.KEYCODE_BACK);
+                break;
+            case LineageSettings.Secure.WHEEL_SIDE_BUTTON_ACTION_HOME:
+                launchHomeFromHotKey(DEFAULT_DISPLAY);
+                break;
+            case LineageSettings.Secure.WHEEL_SIDE_BUTTON_ACTION_TASKBAR:
+                powerMultiPressAction(
+                        DEFAULT_DISPLAY,
+                        SystemClock.uptimeMillis(),
+                        true,
+                        MULTI_PRESS_POWER_WHEEL_TASKBAR);
+                break;
+            case LineageSettings.Secure.WHEEL_SIDE_BUTTON_ACTION_MEDIA:
+                injectWheelSideButtonKey(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE);
+                break;
+            case LineageSettings.Secure.WHEEL_SIDE_BUTTON_ACTION_SCREENSHOT:
+                takeScreenshot(TAKE_SCREENSHOT_FULLSCREEN, SCREENSHOT_KEY_OTHER);
+                break;
+            default:
+                break; // Nothing, and any invalid persisted value, have no side effects.
+        }
+    }
+
+    private void injectWheelSideButtonKey(int keyCode) {
+        injectWheelSideButtonKey(keyCode, SystemClock.uptimeMillis());
+    }
+
+    private void injectWheelSideButtonKey(int keyCode, long downTime) {
+        // Preserve physical press time for the taskbar's accidental wheel-nudge correction.
+        final long now = SystemClock.uptimeMillis();
+        for (int action : new int[] {KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP}) {
+            final KeyEvent key =
+                    new KeyEvent(
+                            downTime,
+                            action == KeyEvent.ACTION_DOWN ? downTime : now,
+                            action,
+                            keyCode,
+                            0,
+                            0,
+                            KeyCharacterMap.VIRTUAL_KEYBOARD,
+                            0,
+                            KeyEvent.FLAG_FROM_SYSTEM,
+                            InputDevice.SOURCE_KEYBOARD);
+            key.setDisplayId(DEFAULT_DISPLAY);
+            mInputManager.injectInputEvent(key, InputManager.INJECT_INPUT_EVENT_MODE_ASYNC);
+        }
     }
 
     /**
@@ -5291,7 +5426,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             }
         }
 
-        if (keyCode == KeyEvent.KEYCODE_POWER && !isKeyGestureTriggered
+        if (keyCode == KeyEvent.KEYCODE_POWER
+                && !isWheelSideButtonInput()
+                && !isKeyGestureTriggered
                 && powerKeyGoesToFocusedWindow(event, interactive)) {
             // A system menu took it as its select key: no screen off, no power menu
             mSingleKeyGestureDetector.reset();
@@ -5865,6 +6002,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     // The camera gesture will be detected by GestureLauncherService.
     private boolean handleCameraGesture(KeyEvent event, boolean interactive) {
+        if (isWheelSideButtonInput()) {
+            mPowerButtonLaunchGestureTriggered = false;
+            return false;
+        }
         // camera gesture.
         if (mGestureLauncherService == null) {
             return false;
