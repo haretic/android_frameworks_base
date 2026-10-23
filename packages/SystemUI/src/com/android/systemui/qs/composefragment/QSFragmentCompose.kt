@@ -52,6 +52,7 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -81,6 +82,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
@@ -89,6 +91,7 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.round
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastRoundToInt
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -165,6 +168,8 @@ import com.android.systemui.util.printSection
 import com.android.systemui.util.println
 import com.android.systemui.volume.panel.component.volume.slider.ui.viewmodel.AudioStreamSliderViewModel
 import com.android.systemui.volume.panel.component.volume.ui.composable.VolumeSlider
+import com.android.systemui.wheel.LocalWheelLayout
+import com.android.systemui.wheel.rememberWheelLayout
 import java.io.PrintWriter
 import java.util.function.Consumer
 import javax.inject.Inject
@@ -392,14 +397,24 @@ constructor(
         ) {
             scene(QuickSettings, alwaysCompose = true) {
                 LaunchedEffect(Unit) { viewModel.onQSOpen() }
-                Element(QuickSettings.rootElementKey, Modifier) { QuickSettingsElement() }
+                CompositionLocalProvider(
+                    LocalWheelLayout provides rememberWheelLayout(full = true)
+                ) {
+                    Element(QuickSettings.rootElementKey, Modifier) { QuickSettingsElement() }
+                }
             }
 
             scene(QuickQuickSettings, alwaysCompose = true) {
                 LaunchedEffect(Unit) { viewModel.onQQSOpen() }
                 // Cannot pass the element modifier in because the top element has a `testTag`
                 // and this would overwrite it.
-                Element(QuickQuickSettings.rootElementKey, Modifier) { QuickQuickSettingsElement() }
+                CompositionLocalProvider(
+                    LocalWheelLayout provides rememberWheelLayout(full = false)
+                ) {
+                    Element(QuickQuickSettings.rootElementKey, Modifier) {
+                        QuickQuickSettingsElement()
+                    }
+                }
             }
 
             scene(SceneKeys.EditMode) {
@@ -683,7 +698,10 @@ constructor(
     @Composable
     private fun ContentScope.QuickQuickSettingsElement(modifier: Modifier = Modifier) {
         val qqsPadding = viewModel.qqsHeaderHeight
-        val bottomPadding = viewModel.qqsBottomPadding
+        val bottomPadding =
+            if (LocalWheelLayout.current.enabled)
+                with(androidx.compose.ui.platform.LocalDensity.current) { 16.dp.roundToPx() }
+            else viewModel.qqsBottomPadding
         DisposableEffect(Unit) {
             qqsVisible.value = true
 
@@ -797,7 +815,9 @@ constructor(
     @Composable
     private fun ContentScope.QuickSettingsElement(modifier: Modifier = Modifier) {
         val qqsPadding = viewModel.qqsHeaderHeight
-        val qsExtraPadding = dimensionResource(R.dimen.qs_panel_padding_top)
+        val qsExtraPadding =
+            if (LocalWheelLayout.current.enabled) 49.dp
+            else dimensionResource(R.dimen.qs_panel_padding_top)
         Column(
             modifier =
                 modifier.collapseExpandSemanticAction(
@@ -916,16 +936,27 @@ constructor(
                                 mediaInRow = viewModel.qsMediaInRow,
                             )
                         }
+                        if (LocalWheelLayout.current.enabled) {
+                            QuickSettingsTheme {
+                                Element(
+                                    Elements.FooterActions,
+                                    Modifier.sysuiResTag(ResIdTags.qsFooterActions),
+                                ) {
+                                    FooterActions(viewModel = viewModel.footerActionsViewModel)
+                                }
+                            }
+                        }
                     }
                 }
-                QuickSettingsTheme {
-                    Element(
-                        Elements.FooterActions,
-                        Modifier.sysuiResTag(ResIdTags.qsFooterActions),
-                    ) {
-                        FooterActions(viewModel = viewModel.footerActionsViewModel)
+                if (!LocalWheelLayout.current.enabled)
+                    QuickSettingsTheme {
+                        Element(
+                            Elements.FooterActions,
+                            Modifier.sysuiResTag(ResIdTags.qsFooterActions),
+                        ) {
+                            FooterActions(viewModel = viewModel.footerActionsViewModel)
+                        }
                     }
-                }
             }
             Spacer(Modifier.height { bottomContentPadding }.fillMaxWidth())
         }
@@ -957,16 +988,40 @@ constructor(
                     verticalArrangement =
                         spacedBy(dimensionResource(R.dimen.qs_tile_margin_vertical))
                 ) {
-                    BrightnessSliderContainer(
-                        viewModel =
-                            viewModel.containerViewModel.brightnessSliderViewModel,
-                        containerColors =
-                            ContainerColors(
-                                Color.Transparent,
-                                ContainerColors.defaultContainerColor,
-                            ),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    val wheel = LocalWheelLayout.current
+                    val brightness = viewModel.containerViewModel.brightnessSliderViewModel
+                    Box {
+                        BrightnessSliderContainer(
+                            viewModel = brightness,
+                            containerColors =
+                                ContainerColors(
+                                    Color.Transparent,
+                                    ContainerColors.defaultContainerColor,
+                                ),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        if (wheel.enabled && wheel.full) {
+                            val percent =
+                                ((brightness.currentBrightness.value -
+                                        brightness.minBrightness.value) * 100f /
+                                        (brightness.maxBrightness.value -
+                                                brightness.minBrightness.value)
+                                            .coerceAtLeast(1))
+                                    .toInt()
+                                    .coerceIn(0, 100)
+                            val hasAutoButton =
+                                LocalContext.current.resources.getBoolean(
+                                    com.android.internal.R.bool
+                                        .config_automatic_brightness_available
+                                )
+                            WheelSliderLabel(
+                                stringResource(R.string.wheel_qs_brightness),
+                                percent,
+                                Modifier.align(Alignment.Center),
+                                if (hasAutoButton) 126.dp else 64.dp,
+                            )
+                        }
+                    }
                     viewModel.containerViewModel.mediaVolumeSliderViewModel?.let {
                         MediaVolumeSlider(it)
                     }
@@ -979,16 +1034,64 @@ constructor(
     @Composable
     private fun MediaVolumeSlider(viewModel: AudioStreamSliderViewModel) {
         val state by viewModel.slider.collectAsStateWithLifecycle()
-        VolumeSlider(
-            state = state,
-            onValueChange = { newValue -> viewModel.onValueChanged(state, newValue) },
-            onValueChangeFinished = { viewModel.onValueChangeFinished() },
-            onIconTapped = { viewModel.toggleMuted(state) },
-            sliderColors = PlatformSliderDefaults.defaultPlatformSliderColors(),
-            hapticsViewModelFactory = viewModel.getSliderHapticsViewModelFactory(),
-            showLabel = false,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        Box {
+            VolumeSlider(
+                state = state,
+                onValueChange = { newValue -> viewModel.onValueChanged(state, newValue) },
+                onValueChangeFinished = { viewModel.onValueChangeFinished() },
+                onIconTapped = { viewModel.toggleMuted(state) },
+                sliderColors = PlatformSliderDefaults.defaultPlatformSliderColors(),
+                hapticsViewModelFactory = viewModel.getSliderHapticsViewModelFactory(),
+                showLabel = false,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (LocalWheelLayout.current.let { it.enabled && it.full }) {
+                val percent =
+                    ((state.value - state.valueRange.start) * 100f /
+                            (state.valueRange.endInclusive - state.valueRange.start).coerceAtLeast(
+                                1f
+                            ))
+                        .toInt()
+                        .coerceIn(0, 100)
+                WheelSliderLabel(
+                    stringResource(R.string.wheel_qs_volume),
+                    percent,
+                    Modifier.align(Alignment.Center),
+                )
+            }
+        }
+    }
+
+    @Composable
+    private fun WheelSliderLabel(
+        label: String,
+        percent: Int,
+        modifier: Modifier = Modifier,
+        endPadding: Dp = 64.dp,
+    ) {
+        val colors = com.android.systemui.common.shared.colors.SystemUISliderColors.Defaults
+        Row(
+            modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = endPadding)
+                .clearAndSetSemantics {},
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+        ) {
+            Text(
+                label,
+                fontSize = 16.sp,
+                maxLines = 1,
+                color = if (percent > 18) colors.activeTickColor else colors.inactiveTickColor,
+            )
+            Text(
+                java.text.NumberFormat.getPercentInstance().format(percent / 100f),
+                fontSize = 14.sp,
+                maxLines = 1,
+                color =
+                    if (percent > (if (endPadding > 64.dp) 66 else 82)) colors.activeTickColor
+                    else colors.inactiveTickColor,
+            )
+        }
     }
 
     @Composable
@@ -1515,7 +1618,7 @@ fun QuickSettingsLayout(
 
     Column(
         verticalArrangement = spacedBy(dimensionResource(R.dimen.qs_tile_margin_vertical)),
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         if (showSlider != 0 && sliderAtTop) {
             brightness()
@@ -1593,57 +1696,58 @@ private fun rememberQsBrightnessSettings(): QsBrightnessSettings {
     val cr = remember { context.contentResolver }
 
     fun readCurrent(): QsBrightnessSettings {
-        val position = runCatching {
-            LineageSettings.Secure.getIntForUser(
-                cr, LineageSettings.Secure.QS_BRIGHTNESS_SLIDER_POSITION,
-                0, UserHandle.USER_CURRENT
-            )
-        }.getOrElse { 0 }
+        val position =
+            runCatching {
+                    LineageSettings.Secure.getIntForUser(
+                        cr,
+                        LineageSettings.Secure.QS_BRIGHTNESS_SLIDER_POSITION,
+                        0,
+                        UserHandle.USER_CURRENT,
+                    )
+                }
+                .getOrElse { 0 }
 
-        val showSliderValue = runCatching {
-            LineageSettings.Secure.getIntForUser(
-                cr, LineageSettings.Secure.QS_SHOW_BRIGHTNESS_SLIDER,
-                1, UserHandle.USER_CURRENT
-            )
-        }.getOrElse { 1 }
+        val showSliderValue =
+            runCatching {
+                    LineageSettings.Secure.getIntForUser(
+                        cr,
+                        LineageSettings.Secure.QS_SHOW_BRIGHTNESS_SLIDER,
+                        1,
+                        UserHandle.USER_CURRENT,
+                    )
+                }
+                .getOrElse { 1 }
 
-        return QsBrightnessSettings(
-            sliderAtTop = position == 0,
-            showSlider = showSliderValue,
-        )
+        return QsBrightnessSettings(sliderAtTop = position == 0, showSlider = showSliderValue)
     }
 
-    var state by remember {
-        mutableStateOf(readCurrent())
-    }
+    var state by remember { mutableStateOf(readCurrent()) }
 
     DisposableEffect(Unit) {
-        val observer = object : ContentObserver(null) {
-            override fun onChange(selfChange: Boolean) {
-                context.mainExecutor.execute {
-                    state = readCurrent()
+        val observer =
+            object : ContentObserver(null) {
+                override fun onChange(selfChange: Boolean) {
+                    context.mainExecutor.execute { state = readCurrent() }
                 }
             }
-        }
 
         cr.registerContentObserver(
             LineageSettings.Secure.getUriFor(LineageSettings.Secure.QS_BRIGHTNESS_SLIDER_POSITION),
-            false, observer, UserHandle.USER_ALL
+            false,
+            observer,
+            UserHandle.USER_ALL,
         )
         cr.registerContentObserver(
             LineageSettings.Secure.getUriFor(LineageSettings.Secure.QS_SHOW_BRIGHTNESS_SLIDER),
-            false, observer, UserHandle.USER_ALL
+            false,
+            observer,
+            UserHandle.USER_ALL,
         )
 
-        onDispose {
-            cr.unregisterContentObserver(observer)
-        }
+        onDispose { cr.unregisterContentObserver(observer) }
     }
 
     return state
 }
 
-private data class QsBrightnessSettings(
-    val sliderAtTop: Boolean,
-    val showSlider: Int,
-)
+private data class QsBrightnessSettings(val sliderAtTop: Boolean, val showSlider: Int)
