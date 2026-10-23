@@ -25,22 +25,28 @@ import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction;
 import android.view.accessibility.AccessibilityNodeInfo.RangeInfo;
 import android.view.accessibility.AccessibilityNodeProvider;
 
+import com.android.systemui.res.R;
+import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
+import com.android.systemui.statusbar.notification.row.NotificationContentView;
+
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.Predicate;
 
 /**
  * Walks a system window's controls with the scroll wheel and presses them with the side button,
- * whether they are views or Compose: it reads the window's accessibility nodes in the process,
- * as a screen reader would, so a Compose tile is a stop as much as a notification row.
+ * whether they are views or Compose: it reads the window's accessibility nodes in the process, as a
+ * screen reader would, so a Compose tile is a stop as much as a notification row.
  *
- * <p>The stops are the clickable controls and the sliders in reading order. A clickable control
- * is one stop with what it holds: a quick settings tile toggles with a press (its checkable
- * part) and opens its settings with a hold. A press on a slider grabs it: the wheel then moves
- * its value, a step a tick, until a press or a few seconds without a turn let go. Down past the
- * last stop goes round to the first; up past the first goes back (onBackOut). A ring of its own
- * shows the stop, drawn over the window.
+ * <p>The stops are the clickable controls and the sliders in reading order. A clickable control is
+ * one stop with what it holds: a quick settings tile toggles with a press (its checkable part) and
+ * opens its settings with a hold. A press on a slider grabs it: the wheel then moves its value, a
+ * step a tick, until a press or a few seconds without a turn let go. Down past the last stop goes
+ * round to the first; up past the first goes back (onBackOut). A ring of its own shows the stop,
+ * drawn over the window.
  *
  * <p>Keys: the wheel daemon's taskbar steps (NAVIGATE_NEXT and PREVIOUS, or the D-pad they fall
  * back to) and the side button, which the window gets as KEYCODE_POWER with
@@ -50,14 +56,19 @@ public final class WheelNavigator {
 
     /** Let go of a grabbed slider after this long without a turn. */
     private static final long GRAB_TIMEOUT_MS = 4000;
+
     /** Slider steps: a fiftieth of the range, a tenth for steps that come this close. */
     private static final int SLIDER_STEPS = 50;
+
     private static final int SLIDER_FAST_STEPS = 10;
     private static final long FAST_STEP_MS = 60;
+
     /** How long a scroll the wheel asked for takes to lay out. */
     private static final long SCROLL_SETTLE_MS = 120;
+
     /** How many more times to look for what a scroll brought in while it still moves. */
     private static final int SCROLL_TRIES = 4;
+
     /** How long the shade takes to open or close its full panel. */
     private static final long LEVEL_SETTLE_MS = 450;
 
@@ -66,11 +77,24 @@ public final class WheelNavigator {
         final View host;
         final int virtualId;
         final Rect bounds = new Rect();
+        final View notification;
+        final int notificationTop;
+        final String label;
 
         Stop(View host, int virtualId, Rect bounds) {
             this.host = host;
             this.virtualId = virtualId;
             this.bounds.set(bounds);
+            notification = notificationRow(host);
+            notificationTop =
+                    notification == null
+                            ? bounds.top
+                            : bounds(notification.createAccessibilityNodeInfo()).top;
+            CharSequence text =
+                    host instanceof android.widget.TextView textView
+                            ? textView.getText()
+                            : host.getContentDescription();
+            label = text == null ? "" : text.toString();
         }
 
         boolean same(Stop other) {
@@ -84,23 +108,34 @@ public final class WheelNavigator {
     private Levels mLevels;
     private final Ring mRing;
     private final int[] mRootLocation = new int[2];
-    private final ViewTreeObserver.OnPreDrawListener mFollow = () -> {
-        updateRing();
-        return true;
-    };
+    private final ViewTreeObserver.OnPreDrawListener mFollow =
+            () -> {
+                updateRing();
+                return true;
+            };
     private final Runnable mLetGo = this::letGo;
 
     private Stop mStop;
+
+    /** Child controls stay with their body, irrespective of overlapping row bounds. */
+    private final Map<Stop, List<Stop>> mNotificationControls = new IdentityHashMap<>();
+
     /** The scrolling containers stops() found, outermost first. */
     private final List<Stop> mScrollers = new ArrayList<>();
+
     /** Where the container the wheel last scrolled is on screen. */
     private final Rect mScrolled = new Rect();
+
     private final int[] mRootOnScreen = new int[2];
+
     /** What a scroll the wheel asked for leads to, while it still moves. */
     private Runnable mPendingStep;
+
     private boolean mGrabbed;
+
     /** The side button was held: the long press acted, the release must not. */
     private boolean mHeld;
+
     private long mLastStepTime;
 
     /**
@@ -165,6 +200,7 @@ public final class WheelNavigator {
 
     /** Forgets the stop and hides the ring, as when the window closes. */
     public void reset() {
+        mNotificationControls.clear();
         mStop = null;
         mPendingStep = null;
         letGo();
@@ -191,15 +227,37 @@ public final class WheelNavigator {
             return;
         }
         int index = indexOf(stops, mStop);
-        if (index >= 0 && leavesScroller(stops, index, direction)
-                && scrollOn(mStop, direction)) {
+        if (index >= 0 && leavesScroller(stops, index, direction) && scrollOn(mStop, direction)) {
             // More beyond the edge: once it scrolled in, the first stop it brought
             final Stop from = mStop;
             final List<Stop> before = new ArrayList<>(stops);
             mPendingStep = () -> stepFrom(from, before, direction, 0);
-            mRoot.postDelayed(() -> stepFrom(from, before, direction, SCROLL_TRIES),
-                    SCROLL_SETTLE_MS);
+            mRoot.postDelayed(
+                    () -> stepFrom(from, before, direction, SCROLL_TRIES), SCROLL_SETTLE_MS);
             return;
+        }
+        if (index < 0 && mStop != null) {
+            final View oldRow = mStop.notification;
+            if (oldRow != null) {
+                for (int i = 0; i < stops.size(); i++) {
+                    if (stops.get(i).notification == oldRow
+                            && stops.get(i).host.getId() == mStop.host.getId()
+                            && stops.get(i).label.equals(mStop.label)) {
+                        index = i;
+                        break;
+                    }
+                }
+            }
+        }
+        if (index < 0
+                && mStop != null
+                && mStop.notification != null) {
+            final Stop recovered = afterRemovedNotification(stops, mStop.notificationTop);
+            if (recovered != null) {
+                moveTo(recovered);
+                WheelFeedback.get(mRoot.getContext()).step(direction < 0);
+                return;
+            }
         }
         if (index < 0) {
             // The first turn shows where the wheel is: the first stop, or the last going up
@@ -211,7 +269,16 @@ public final class WheelNavigator {
             WheelFeedback.get(mRoot.getContext()).step(direction < 0);
             mRoot.postDelayed(this::firstStop, LEVEL_SETTLE_MS);
             return;
-        } else if (index + direction < 0) {
+        } else if (index + direction < 0
+                && !(mLevels == null
+                        && WheelLayoutSettings.enabled(mRoot.getContext())
+                        && lineageos.providers.LineageSettings.Secure.getIntForUser(
+                                        mRoot.getContext().getContentResolver(),
+                                        lineageos.providers.LineageSettings.Secure
+                                                .WHEEL_TASKBAR_LIST_END,
+                                        1,
+                                        android.app.ActivityManager.getCurrentUser())
+                                == 1)) {
             reset();
             WheelFeedback.get(mRoot.getContext()).back();
             mOnBackOut.run();
@@ -221,6 +288,29 @@ public final class WheelNavigator {
         }
         moveTo(stops.get(index));
         WheelFeedback.get(mRoot.getContext()).step(direction < 0);
+    }
+
+    private static Stop afterRemovedNotification(List<Stop> stops, int top) {
+        Stop nearest = null;
+        int distance = Integer.MAX_VALUE;
+        for (Stop candidate : stops) {
+            final int candidateTop = candidate.notification == null
+                    ? candidate.bounds.top : candidate.notificationTop;
+            final int delta = Math.abs(candidateTop - top);
+            if (delta < distance) {
+                nearest = candidate;
+                distance = delta;
+            }
+        }
+        return nearest;
+    }
+
+    private static View notificationRow(View view) {
+        while (view != null) {
+            if (view instanceof ExpandableNotificationRow) return view;
+            view = view.getParent() instanceof View parent ? parent : null;
+        }
+        return null;
     }
 
     private void firstStop() {
@@ -244,7 +334,8 @@ public final class WheelNavigator {
         Stop next = null;
         for (Stop stop : stops) {
             if (mScrolled.contains(stop.bounds.centerX(), stop.bounds.centerY())
-                    && indexOf(before, stop) < 0 && (next == null || direction < 0)) {
+                    && indexOf(before, stop) < 0
+                    && (next == null || direction < 0)) {
                 next = stop;
             }
         }
@@ -253,8 +344,7 @@ public final class WheelNavigator {
         if (next == null && tries > 0 && moved) {
             // Still sliding in, as a page of tiles does; one that took the scroll and stayed
             // put had nothing more that way
-            mRoot.postDelayed(() -> stepFrom(from, before, direction, tries - 1),
-                    SCROLL_SETTLE_MS);
+            mRoot.postDelayed(() -> stepFrom(from, before, direction, tries - 1), SCROLL_SETTLE_MS);
             return;
         }
         mPendingStep = null;
@@ -274,8 +364,8 @@ public final class WheelNavigator {
         mStop = stop;
         performAction(stop, AccessibilityAction.ACTION_SHOW_ON_SCREEN.getId(), null);
         if (stop.virtualId == AccessibilityNodeProvider.HOST_VIEW_ID) {
-            stop.host.requestRectangleOnScreen(new Rect(0, 0, stop.host.getWidth(),
-                    stop.host.getHeight()));
+            stop.host.requestRectangleOnScreen(
+                    new Rect(0, 0, stop.host.getWidth(), stop.host.getHeight()));
         }
         showRing();
     }
@@ -324,8 +414,10 @@ public final class WheelNavigator {
         mRoot.postDelayed(mLetGo, GRAB_TIMEOUT_MS);
         final float span = range.getMax() - range.getMin();
         final float step = span / (fast ? SLIDER_FAST_STEPS : SLIDER_STEPS);
-        final float value = Math.max(range.getMin(), Math.min(range.getMax(),
-                range.getCurrent() + direction * step));
+        final float value =
+                Math.max(
+                        range.getMin(),
+                        Math.min(range.getMax(), range.getCurrent() + direction * step));
         if (value == range.getCurrent()) {
             return;
         }
@@ -349,6 +441,7 @@ public final class WheelNavigator {
     private List<Stop> stops() {
         final List<Stop> found = new ArrayList<>();
         mScrollers.clear();
+        mNotificationControls.clear();
         collect(mRoot, found);
         found.sort((a, b) -> Integer.compare(a.bounds.top, b.bounds.top));
         // Rows: stops that overlap the first of the row up and down are side by side
@@ -363,7 +456,11 @@ public final class WheelNavigator {
             }
             final List<Stop> row = new ArrayList<>(found.subList(start, end));
             row.sort((a, b) -> Integer.compare(a.bounds.left, b.bounds.left));
-            stops.addAll(row);
+            for (Stop stop : row) {
+                stops.add(stop);
+                final List<Stop> controls = mNotificationControls.get(stop);
+                if (controls != null) stops.addAll(controls);
+            }
             start = end;
         }
         return stops;
@@ -371,6 +468,11 @@ public final class WheelNavigator {
 
     private void collect(View view, List<Stop> stops) {
         if (!view.isShown() || view.getAlpha() == 0f || mSkip.test(view)) {
+            return;
+        }
+        if (view instanceof ExpandableNotificationRow notification
+                && WheelLayoutSettings.enabled(mRoot.getContext())) {
+            collectNotification(notification, stops);
             return;
         }
         final AccessibilityNodeProvider provider = view.getAccessibilityNodeProvider();
@@ -391,8 +493,96 @@ public final class WheelNavigator {
         }
     }
 
-    private void collectVirtual(View host, AccessibilityNodeProvider provider, int id,
-            List<Stop> stops) {
+    private void collectNotification(ExpandableNotificationRow row, List<Stop> stops) {
+        final AccessibilityNodeInfo bodyNode = row.createAccessibilityNodeInfo();
+        final Stop body =
+                isStop(bodyNode) && onScreen(bodyNode)
+                        ? new Stop(row, AccessibilityNodeProvider.HOST_VIEW_ID, bounds(bodyNode))
+                        : null;
+        final NotificationContentView content = row.getShowingLayout();
+        final List<Stop> controls = new ArrayList<>();
+        final View visible = content.getWheelVisibleChild();
+        if (visible != null) collectNotificationChildren(visible, controls);
+        if (row.isSummaryWithChildren() && row.getChildrenContainer() != null) {
+            collectNotificationChildren(row.getChildrenContainer().getGroupHeader(), controls);
+            collectNotificationChildren(
+                    row.getChildrenContainer().getMinimizedNotificationHeader(), controls);
+        }
+        // Header transitions can briefly expose both versions of the same expander.
+        boolean hasExpander = false;
+        for (int i = 0; i < controls.size(); i++) {
+            if (controls.get(i).host.getId() == com.android.internal.R.id.expand_button) {
+                if (hasExpander) controls.remove(i--);
+                hasExpander = true;
+            }
+        }
+        // Expander first, then app-supplied actions/inline reply/media controls in visual order.
+        // Duplicate header/container click areas are not separate actions.
+        controls.sort(
+                (a, b) -> {
+                    final boolean ae = a.host.getId() == com.android.internal.R.id.expand_button;
+                    final boolean be = b.host.getId() == com.android.internal.R.id.expand_button;
+                    if (ae != be) return ae ? -1 : 1;
+                    final int vertical = Integer.compare(a.bounds.top, b.bounds.top);
+                    if (vertical != 0) return vertical;
+                    final boolean rtl = row.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
+                    return rtl
+                            ? Integer.compare(b.bounds.right, a.bounds.right)
+                            : Integer.compare(a.bounds.left, b.bounds.left);
+                });
+        if (body != null) {
+            stops.add(body);
+            mNotificationControls.put(body, controls);
+        } else {
+            stops.addAll(controls);
+        }
+        // Expanded groups contain real child rows, not alternate templates of the summary.
+        if (row.areChildrenExpanded() && row.getAttachedChildren() != null) {
+            for (ExpandableNotificationRow child : row.getAttachedChildren()) {
+                if (child.isShown()) collectNotification(child, stops);
+            }
+        }
+    }
+
+    private void collectNotificationChildren(View view, List<Stop> stops) {
+        if (view == null || !view.isShown() || view.getAlpha() == 0f || mSkip.test(view)) return;
+        if (view instanceof ExpandableNotificationRow) return;
+        final AccessibilityNodeInfo node = view.createAccessibilityNodeInfo();
+        noteScroller(view, AccessibilityNodeProvider.HOST_VIEW_ID, node);
+        // Notification headers forward clicks to expansion. Use the actual expander once.
+        final boolean header =
+                view instanceof android.view.NotificationHeaderView
+                        || view.getId() == com.android.internal.R.id.alternate_expand_target;
+        if (!header && isStop(node) && onScreen(node)) {
+            final Rect visible = new Rect();
+            final Rect rect = bounds(node);
+            if (view.getGlobalVisibleRect(visible)
+                    && visible.contains(rect.centerX(), rect.centerY())) {
+                boolean duplicate = false;
+                for (Stop stop : stops) {
+                    if (stop.host == view || stop.bounds.equals(rect)) duplicate = true;
+                }
+                if (!duplicate)
+                    stops.add(new Stop(view, AccessibilityNodeProvider.HOST_VIEW_ID, rect));
+            }
+            // A clickable action remains one stop, even if it contains a clickable icon.
+            return;
+        }
+        if (view.getAccessibilityNodeProvider() != null) {
+            collectVirtual(
+                    view,
+                    view.getAccessibilityNodeProvider(),
+                    AccessibilityNodeProvider.HOST_VIEW_ID,
+                    stops);
+        } else if (view instanceof ViewGroup group) {
+            for (int i = 0; i < group.getChildCount(); i++) {
+                collectNotificationChildren(group.getChildAt(i), stops);
+            }
+        }
+    }
+
+    private void collectVirtual(
+            View host, AccessibilityNodeProvider provider, int id, List<Stop> stops) {
         final AccessibilityNodeInfo node = provider.createAccessibilityNodeInfo(id);
         if (node == null || !node.isVisibleToUser()) {
             return;
@@ -407,8 +597,9 @@ public final class WheelNavigator {
             final int virtualId = virtualIdOf(childId);
             if (virtualId == AccessibilityNodeProvider.HOST_VIEW_ID) {
                 // A view inside Compose (AndroidView): walk it as a view
-                final View child = host.findViewByAccessibilityIdTraversal(
-                        AccessibilityNodeInfo.getAccessibilityViewId(childId));
+                final View child =
+                        host.findViewByAccessibilityIdTraversal(
+                                AccessibilityNodeInfo.getAccessibilityViewId(childId));
                 if (child != null && child != host) {
                     collect(child, stops);
                 }
@@ -451,9 +642,28 @@ public final class WheelNavigator {
     private boolean scrollOn(Stop stop, int direction) {
         for (int i = mScrollers.size() - 1; i >= 0; i--) {
             final Stop scroller = mScrollers.get(i);
-            if (stop != null && !scroller.bounds.contains(stop.bounds.centerX(),
-                    stop.bounds.centerY())) {
+            if (stop != null
+                    && !scroller.bounds.contains(stop.bounds.centerX(), stop.bounds.centerY())) {
                 continue;
+            }
+            if (WheelLayoutSettings.enabled(mRoot.getContext())
+                    && hasVerticalOverflow(scroller, direction)) {
+                for (int outer = i - 1; outer >= 0; outer--) {
+                    final Stop parent = mScrollers.get(outer);
+                    if (!parent.bounds.contains(stop.bounds.centerX(), stop.bounds.centerY()))
+                        continue;
+                    final AccessibilityNodeInfo parentNode = node(parent);
+                    final AccessibilityAction action =
+                            direction > 0
+                                    ? AccessibilityAction.ACTION_SCROLL_DOWN
+                                    : AccessibilityAction.ACTION_SCROLL_UP;
+                    if (parentNode != null
+                            && parentNode.getActionList().contains(action)
+                            && performAction(parent, action.getId(), null)) {
+                        mScrolled.set(parent.bounds);
+                        return true;
+                    }
+                }
             }
             // Only the innermost: past the last page of tiles the panel around them stays put
             final int action = scrollAction(scroller, direction);
@@ -468,27 +678,53 @@ public final class WheelNavigator {
 
     /**
      * The action that scrolls the container that way. One that names its directions offers only
-     * those it can still go, as a pager of tiles on its last page offers no more to the right;
-     * its plain forward scroll would drag it half way back. Others go forward or backward.
+     * those it can still go, as a pager of tiles on its last page offers no more to the right; its
+     * plain forward scroll would drag it half way back. Others go forward or backward.
      */
+    private boolean hasVerticalOverflow(Stop scroller, int direction) {
+        final AccessibilityNodeInfo node = node(scroller);
+        if (node == null
+                || !(node.getActionList().contains(AccessibilityAction.ACTION_SCROLL_LEFT)
+                        || node.getActionList().contains(AccessibilityAction.ACTION_SCROLL_RIGHT)
+                        || node.getActionList().contains(AccessibilityAction.ACTION_PAGE_LEFT)
+                        || node.getActionList().contains(AccessibilityAction.ACTION_PAGE_RIGHT)))
+            return false;
+        mRoot.getLocationOnScreen(mRootOnScreen);
+        return direction > 0
+                ? scroller.bounds.bottom > mRootOnScreen[1] + mRoot.getHeight()
+                : scroller.bounds.top < mRootOnScreen[1];
+    }
+
     private static int scrollAction(Stop scroller, int direction) {
         final AccessibilityNodeInfo node = node(scroller);
-        final List<AccessibilityAction> actions =
-                node != null ? node.getActionList() : List.of();
+        final List<AccessibilityAction> actions = node != null ? node.getActionList() : List.of();
         final boolean rtl = scroller.host.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
-        final AccessibilityAction later = rtl ? AccessibilityAction.ACTION_SCROLL_LEFT
-                : AccessibilityAction.ACTION_SCROLL_RIGHT;
-        final AccessibilityAction earlier = rtl ? AccessibilityAction.ACTION_SCROLL_RIGHT
-                : AccessibilityAction.ACTION_SCROLL_LEFT;
-        final AccessibilityAction laterPage = rtl ? AccessibilityAction.ACTION_PAGE_LEFT
-                : AccessibilityAction.ACTION_PAGE_RIGHT;
-        final AccessibilityAction earlierPage = rtl ? AccessibilityAction.ACTION_PAGE_RIGHT
-                : AccessibilityAction.ACTION_PAGE_LEFT;
-        final AccessibilityAction[] ways = direction > 0
-                ? new AccessibilityAction[] {AccessibilityAction.ACTION_PAGE_DOWN, laterPage,
-                        AccessibilityAction.ACTION_SCROLL_DOWN, later}
-                : new AccessibilityAction[] {AccessibilityAction.ACTION_PAGE_UP, earlierPage,
-                        AccessibilityAction.ACTION_SCROLL_UP, earlier};
+        final AccessibilityAction later =
+                rtl
+                        ? AccessibilityAction.ACTION_SCROLL_LEFT
+                        : AccessibilityAction.ACTION_SCROLL_RIGHT;
+        final AccessibilityAction earlier =
+                rtl
+                        ? AccessibilityAction.ACTION_SCROLL_RIGHT
+                        : AccessibilityAction.ACTION_SCROLL_LEFT;
+        final AccessibilityAction laterPage =
+                rtl ? AccessibilityAction.ACTION_PAGE_LEFT : AccessibilityAction.ACTION_PAGE_RIGHT;
+        final AccessibilityAction earlierPage =
+                rtl ? AccessibilityAction.ACTION_PAGE_RIGHT : AccessibilityAction.ACTION_PAGE_LEFT;
+        final AccessibilityAction[] ways =
+                direction > 0
+                        ? new AccessibilityAction[] {
+                            AccessibilityAction.ACTION_PAGE_DOWN,
+                            laterPage,
+                            AccessibilityAction.ACTION_SCROLL_DOWN,
+                            later
+                        }
+                        : new AccessibilityAction[] {
+                            AccessibilityAction.ACTION_PAGE_UP,
+                            earlierPage,
+                            AccessibilityAction.ACTION_SCROLL_UP,
+                            earlier
+                        };
         for (AccessibilityAction way : ways) {
             if (actions.contains(way)) {
                 return way.getId();
@@ -500,20 +736,22 @@ public final class WheelNavigator {
                 return 0;
             }
         }
-        return direction > 0 ? AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
+        return direction > 0
+                ? AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
                 : AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD;
     }
 
     private static final AccessibilityAction[] DIRECTIONS = {
-            AccessibilityAction.ACTION_SCROLL_UP, AccessibilityAction.ACTION_SCROLL_DOWN,
-            AccessibilityAction.ACTION_SCROLL_LEFT, AccessibilityAction.ACTION_SCROLL_RIGHT,
-            AccessibilityAction.ACTION_PAGE_UP, AccessibilityAction.ACTION_PAGE_DOWN,
-            AccessibilityAction.ACTION_PAGE_LEFT, AccessibilityAction.ACTION_PAGE_RIGHT};
+        AccessibilityAction.ACTION_SCROLL_UP, AccessibilityAction.ACTION_SCROLL_DOWN,
+        AccessibilityAction.ACTION_SCROLL_LEFT, AccessibilityAction.ACTION_SCROLL_RIGHT,
+        AccessibilityAction.ACTION_PAGE_UP, AccessibilityAction.ACTION_PAGE_DOWN,
+        AccessibilityAction.ACTION_PAGE_LEFT, AccessibilityAction.ACTION_PAGE_RIGHT
+    };
 
     /**
-     * Whether it shows in the window: a pager keeps the pages next to its own in the tree, a
-     * strip of them peeking in at the window's sides, and going to one of those would drag it
-     * half way over. The shade's controls keep clear of its sides, unless as wide as it.
+     * Whether it shows in the window: a pager keeps the pages next to its own in the tree, a strip
+     * of them peeking in at the window's sides, and going to one of those would drag it half way
+     * over. The shade's controls keep clear of its sides, unless as wide as it.
      */
     private boolean onScreen(AccessibilityNodeInfo node) {
         final Rect rect = bounds(node);
@@ -521,7 +759,8 @@ public final class WheelNavigator {
         final int left = mRootOnScreen[0];
         final int right = left + mRoot.getWidth();
         final boolean atSide = rect.left <= left || rect.right >= right;
-        return !rect.isEmpty() && (!atSide || rect.width() >= mRoot.getWidth() * 3 / 4)
+        return !rect.isEmpty()
+                && (!atSide || rect.width() >= mRoot.getWidth() * 3 / 4)
                 && rect.centerX() >= mRootOnScreen[0]
                 && rect.centerX() < mRootOnScreen[0] + mRoot.getWidth()
                 && rect.centerY() >= mRootOnScreen[1]
@@ -529,7 +768,9 @@ public final class WheelNavigator {
     }
 
     private static boolean isStop(AccessibilityNodeInfo node) {
-        return node != null && node.isEnabled() && node.isVisibleToUser()
+        return node != null
+                && node.isEnabled()
+                && node.isVisibleToUser()
                 && (node.isClickable() || isSlider(node));
     }
 
@@ -570,8 +811,7 @@ public final class WheelNavigator {
 
     private static AccessibilityNodeInfo node(Stop stop) {
         if (stop.virtualId == AccessibilityNodeProvider.HOST_VIEW_ID) {
-            return stop.host.isAttachedToWindow() ? stop.host.createAccessibilityNodeInfo()
-                    : null;
+            return stop.host.isAttachedToWindow() ? stop.host.createAccessibilityNodeInfo() : null;
         }
         final AccessibilityNodeProvider provider = stop.host.getAccessibilityNodeProvider();
         return provider == null ? null : provider.createAccessibilityNodeInfo(stop.virtualId);
@@ -617,11 +857,50 @@ public final class WheelNavigator {
 
     private void updateRing() {
         final AccessibilityNodeInfo node = mStop == null ? null : node(mStop);
+        if ((node == null || !node.isVisibleToUser())
+                && mStop != null
+                && mStop.notification != null
+                && mStop.notification.isAttachedToWindow()) {
+            final Stop previous = mStop;
+            for (Stop candidate : stops()) {
+                if (candidate.notification == previous.notification
+                        && candidate.host.getId() == previous.host.getId()
+                        && candidate.label.equals(previous.label)) {
+                    mStop = candidate;
+                    updateRing();
+                    return;
+                }
+            }
+        }
+        if ((node == null || !node.isVisibleToUser())
+                && mStop != null
+                && mStop.notification != null) {
+            final Stop previous = mStop;
+            final List<Stop> visible = stops();
+            Stop recovered = null;
+            for (Stop candidate : visible) {
+                if (candidate.notification == previous.notification) {
+                    recovered = candidate;
+                    break;
+                }
+            }
+            if (recovered == null) {
+                recovered = afterRemovedNotification(visible, previous.notificationTop);
+            }
+            if (recovered != null) {
+                mStop = recovered;
+                updateRing();
+                return;
+            }
+        }
         if (node == null || !node.isVisibleToUser()) {
             mRing.setBounds(0, 0, 0, 0);
             return;
         }
         final Rect bounds = bounds(node);
+        // Match pill buttons and short rows instead of drawing oversized corners.
+        mRing.radius =
+                Math.min(mRing.defaultRadius, Math.min(bounds.width(), bounds.height()) / 2f);
         mRoot.getLocationOnScreen(mRootLocation);
         bounds.offset(-mRootLocation[0], -mRootLocation[1]);
         if (!Objects.equals(bounds, mRing.getBounds())) {
@@ -635,15 +914,27 @@ public final class WheelNavigator {
         private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final RectF mRect = new RectF();
         private final float mStroke;
-        private final float mRadius;
+        private final float defaultRadius;
+        private float radius;
         boolean attached;
         private boolean mGrabbed;
 
         Ring(Context context) {
-            mStroke = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 3,
-                    context.getResources().getDisplayMetrics());
-            mRadius = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 20,
-                    context.getResources().getDisplayMetrics());
+            mStroke =
+                    context.getResources().getBoolean(R.bool.config_r1CompactQs)
+                            ? context.getResources().getDimension(R.dimen.r1_wheel_ring_width)
+                            : TypedValue.applyDimension(
+                                    TypedValue.COMPLEX_UNIT_DIP,
+                                    3,
+                                    context.getResources().getDisplayMetrics());
+            defaultRadius =
+                    context.getResources().getBoolean(R.bool.config_r1CompactQs)
+                            ? context.getResources().getDimension(R.dimen.qs_corner_radius)
+                            : TypedValue.applyDimension(
+                                    TypedValue.COMPLEX_UNIT_DIP,
+                                    20,
+                                    context.getResources().getDisplayMetrics());
+            radius = defaultRadius;
             mPaint.setStyle(Paint.Style.STROKE);
             mPaint.setColor(context.getColor(com.android.internal.R.color.system_accent1_100));
         }
@@ -663,7 +954,7 @@ public final class WheelNavigator {
             mRect.set(getBounds());
             // Just outside the stop, so the ring doesn't cover it
             mRect.inset(-stroke, -stroke);
-            canvas.drawRoundRect(mRect, mRadius, mRadius, mPaint);
+            canvas.drawRoundRect(mRect, radius, radius, mPaint);
         }
 
         @Override

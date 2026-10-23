@@ -34,11 +34,14 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement.spacedBy
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -107,6 +110,7 @@ import com.android.systemui.qs.shared.ui.QuickSettings
 import com.android.systemui.qs.ui.composable.QuickSettingsTheme
 import com.android.systemui.qs.ui.compose.borderOnFocus
 import com.android.systemui.res.R
+import com.android.systemui.wheel.LocalWheelLayout
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
@@ -199,6 +203,25 @@ fun FooterActions(viewModel: FooterActionsViewModel, modifier: Modifier = Modifi
         }
 
     val horizontalPadding = dimensionResource(R.dimen.qs_content_horizontal_padding)
+    val wheel = LocalWheelLayout.current
+    if (wheel.enabled) {
+        WheelFooterActions(
+            columns = wheel.columns,
+            textFeedback = textFeedback,
+            security = security,
+            foregroundServices = foregroundServices,
+            userSwitcher = userSwitcher,
+            settings = settings,
+            power = viewModel.power,
+            modifier =
+                modifier
+                    .fillMaxWidth()
+                    .graphicsLayer { this.alpha = alpha }
+                    .then(backgroundModifier)
+                    .padding(horizontal = horizontalPadding, vertical = 8.dp),
+        )
+        return
+    }
     Row(
         modifier
             .fillMaxWidth()
@@ -268,6 +291,46 @@ fun FooterActions(viewModel: FooterActionsViewModel, modifier: Modifier = Modifi
     }
 }
 
+@Composable
+private fun WheelFooterActions(
+    columns: Int,
+    textFeedback: TextFeedbackViewModel,
+    security: FooterActionsSecurityButtonViewModel?,
+    foregroundServices: FooterActionsForegroundServicesButtonViewModel?,
+    userSwitcher: FooterActionsButtonViewModel?,
+    settings: FooterActionsButtonViewModel?,
+    power: FooterActionsButtonViewModel?,
+    modifier: Modifier,
+) {
+    Column(modifier, verticalArrangement = spacedBy(8.dp)) {
+        // Keep every security, FGS and feedback entry rather than choosing a single winner.
+        (textFeedback as? TextFeedbackViewModel.LoadedTextFeedback)?.let {
+            AnimatedFooterTextButton(it, true, Modifier.fillMaxWidth())
+        }
+        security?.let { AnimatedFooterTextButton(it, true, Modifier.fillMaxWidth()) }
+        foregroundServices?.let { AnimatedFooterTextButton(it, true, Modifier.fillMaxWidth()) }
+        userSwitcher?.let { LabelledFooterButton(it, it.icon.contentDescription?.load() ?: "") }
+        val buttons: @Composable () -> Unit = {
+            settings?.let { LabelledFooterButton(it, stringResource(R.string.wheel_qs_settings)) }
+            power?.let { LabelledFooterButton(it, stringResource(R.string.wheel_qs_power)) }
+        }
+        if (columns == 1) {
+            buttons()
+        } else {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = spacedBy(8.dp)) {
+                settings?.let {
+                    Box(Modifier.weight(1f)) {
+                        LabelledFooterButton(it, stringResource(R.string.wheel_qs_settings))
+                    }
+                }
+                Box(Modifier.weight(1f)) {
+                    power?.let { LabelledFooterButton(it, stringResource(R.string.wheel_qs_power)) }
+                }
+            }
+        }
+    }
+}
+
 /**
  * Animated text button for [FooterTextButtonViewModel].
  *
@@ -291,7 +354,7 @@ private fun AnimatedFooterTextButton(
 
     Box(
         modifier
-            .height(FooterButtonHeight)
+            .height(if (LocalWheelLayout.current.enabled) 48.dp else FooterButtonHeight)
             .animatedScaledHeight { scaleY }
             .animatedWidth()
             .graphicsLayer { this.alpha = alpha }
@@ -365,6 +428,26 @@ private fun ForegroundServicesNumberButton(
             useModifierBasedExpandable,
             modifier = Modifier.graphicsLayer { this.alpha = alpha },
         )
+    }
+}
+
+@Composable
+private fun LabelledFooterButton(model: FooterActionsButtonViewModel, label: String) {
+    val colors = buttonColorsForModel(model)
+    CircleExpandable(
+        color = colors.background,
+        onClick = model.onClick,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        useModifierBasedImplementation = true,
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = spacedBy(12.dp),
+        ) {
+            FooterIcon(model.icon, Modifier.size(24.dp), colors.icon)
+            Text(label, color = colors.icon, style = MaterialTheme.typography.titleMedium)
+        }
     }
 }
 

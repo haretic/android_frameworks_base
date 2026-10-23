@@ -75,6 +75,7 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -106,6 +107,7 @@ import com.android.systemui.qs.panels.ui.compose.infinitegrid.CommonTileDefaults
 import com.android.systemui.qs.panels.ui.viewmodel.AccessibilityUiState
 import com.android.systemui.qs.ui.compose.borderOnFocus
 import com.android.systemui.res.R
+import com.android.systemui.wheel.LocalWheelLayout
 import kotlin.math.abs
 import platform.test.motion.compose.values.MotionTestValueKey
 import platform.test.motion.compose.values.motionTestValues
@@ -208,26 +210,39 @@ fun LargeTileLabels(
     isVisible: () -> Boolean = { true },
     accessibilityUiState: AccessibilityUiState? = null,
 ) {
+    val displayedSecondaryLabel =
+        if (LocalWheelLayout.current.enabled && secondaryLabel.isNullOrEmpty())
+            accessibilityUiState?.stateDescription?.trim()?.trimStart(',', ' ')
+        else secondaryLabel
     val animatedLabelColor by animateColorAsState(colors.label, label = "QSTileLabelColor")
     val animatedSecondaryLabelColor by
         animateColorAsState(colors.secondaryLabel, label = "QSTileSecondaryLabelColor")
     Column(verticalArrangement = Arrangement.Center, modifier = modifier.fillMaxHeight()) {
         TileLabel(
             text = label,
-            style = MaterialTheme.typography.titleSmallEmphasized,
+            style =
+                if (LocalWheelLayout.current.let { it.enabled && it.full })
+                    MaterialTheme.typography.titleSmallEmphasized.copy(
+                        fontSize =
+                            with(LocalDensity.current) {
+                                dimensionResource(R.dimen.r1_qs_full_tile_label_size).toSp()
+                            }
+                    )
+                else MaterialTheme.typography.titleSmallEmphasized,
             color = { animatedLabelColor },
             isVisible = isVisible,
         )
-        if (!TextUtils.isEmpty(secondaryLabel)) {
+        if (!TextUtils.isEmpty(displayedSecondaryLabel)) {
             TileLabel(
-                secondaryLabel ?: "",
+                displayedSecondaryLabel ?: "",
                 color = { animatedSecondaryLabelColor },
                 style = MaterialTheme.typography.labelMedium,
                 isVisible = isVisible,
                 modifier =
                     Modifier.thenIf(
-                        accessibilityUiState?.stateDescription?.contains(secondaryLabel ?: "") ==
-                            true
+                        accessibilityUiState
+                            ?.stateDescription
+                            ?.contains(displayedSecondaryLabel ?: "") == true
                     ) {
                         Modifier.clearAndSetSemantics {}
                     },
@@ -472,12 +487,20 @@ object CommonTileDefaults {
     val StartPadding: Dp
         @Composable
         @ReadOnlyComposable
-        get() = dimensionResource(id = R.dimen.common_tile_default_start_padding)
+        get() =
+            if (LocalWheelLayout.current.enabled) 8.dp
+            else dimensionResource(id = R.dimen.common_tile_default_start_padding)
 
     val TileHeight: Dp
         @Composable
         @ReadOnlyComposable
-        get() = dimensionResource(id = R.dimen.common_tile_default_tile_height)
+        get() =
+            dimensionResource(
+                id =
+                    if (LocalWheelLayout.current.let { it.enabled && it.full })
+                        R.dimen.r1_qs_full_tile_height
+                    else R.dimen.common_tile_default_tile_height
+            )
 
     val ToggleTargetSize: Dp
         @Composable

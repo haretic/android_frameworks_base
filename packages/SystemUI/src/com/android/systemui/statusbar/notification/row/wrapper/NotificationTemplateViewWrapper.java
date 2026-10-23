@@ -360,7 +360,10 @@ public class NotificationTemplateViewWrapper extends NotificationHeaderViewWrapp
 
     @Override
     public int getExtraMeasureHeight() {
-        int extra = 0;
+        int extra =
+                mActions == null || mActions.getVisibility() == View.GONE
+                        ? 0
+                        : mActions.getButtonListExtraHeight();
         if (mRemoteInputHistory != null && mRemoteInputHistory.getVisibility() != View.GONE) {
             extra += mRow.getContext().getResources().getDimensionPixelSize(
                     R.dimen.remote_input_history_extra_height);
