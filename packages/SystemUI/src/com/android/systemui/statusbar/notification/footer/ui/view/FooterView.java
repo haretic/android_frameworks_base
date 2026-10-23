@@ -30,16 +30,22 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.database.ContentObserver;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.Drawable;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.UserHandle;
 import android.util.AttributeSet;
 import android.util.IndentingPrintWriter;
 import android.view.View;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.constraintlayout.widget.ConstraintLayout;
+import androidx.constraintlayout.widget.ConstraintSet;
 
 import com.android.internal.graphics.ColorUtils;
 import com.android.systemui.common.shared.colors.SurfaceEffectColors;
@@ -53,11 +59,24 @@ import com.android.systemui.statusbar.notification.stack.ExpandableViewState;
 import com.android.systemui.statusbar.notification.stack.ViewState;
 import com.android.systemui.util.DrawableDumpKt;
 import com.android.systemui.util.DumpUtilsKt;
+import com.android.systemui.wheel.WheelLayoutSettings;
+
+import lineageos.providers.LineageSettings;
 
 import java.io.PrintWriter;
 import java.util.function.Consumer;
 
 public class FooterView extends StackScrollerDecorView {
+    private ConstraintLayout mButtonLayout;
+    private ConstraintSet mStockButtonConstraints;
+    private int mButtonColumns;
+    private final ContentObserver mWheelLayoutObserver =
+            new ContentObserver(new Handler(Looper.getMainLooper())) {
+                @Override
+                public void onChange(boolean selfChange) {
+                    requestLayout();
+                }
+            };
     private FooterViewButton mClearAllButton;
     private FooterViewButton mSettingsButton;
     private FooterViewButton mHistoryButton;
@@ -239,8 +258,108 @@ public class FooterView extends StackScrollerDecorView {
         mSettingsButton = findViewById(R.id.settings_button);
         mHistoryButton = findViewById(R.id.history_button);
         mSeenNotifsFooterTextView = findViewById(R.id.unlock_prompt_footer);
+        mButtonLayout = (ConstraintLayout) mClearAllButton.getParent();
+        mStockButtonConstraints = new ConstraintSet();
+        mStockButtonConstraints.clone(mButtonLayout);
         updateContent();
         updateColors();
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        if (getResources().getBoolean(R.bool.config_r1CompactQs)) {
+            getContext()
+                    .getContentResolver()
+                    .registerContentObserver(
+                            LineageSettings.Secure.getUriFor(LineageSettings.Secure.WHEEL_UI),
+                            false,
+                            mWheelLayoutObserver,
+                            UserHandle.USER_ALL);
+            getContext()
+                    .getContentResolver()
+                    .registerContentObserver(
+                            LineageSettings.Secure.getUriFor(
+                                    LineageSettings.Secure.WHEEL_BUTTON_COLUMNS),
+                            false,
+                            mWheelLayoutObserver,
+                            UserHandle.USER_ALL);
+        }
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        getContext().getContentResolver().unregisterContentObserver(mWheelLayoutObserver);
+        super.onDetachedFromWindow();
+    }
+
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        int columns =
+                WheelLayoutSettings.enabled(getContext())
+                        ? WheelLayoutSettings.columns(getContext())
+                        : 0;
+        if (mStockButtonConstraints != null && columns != mButtonColumns) {
+            ConstraintSet layout = new ConstraintSet();
+            layout.clone(mStockButtonConstraints);
+            int[] ids = {R.id.history_button, R.id.dismiss_text, R.id.settings_button};
+            View[] buttons = {mHistoryButton, mClearAllButton, mSettingsButton};
+            int gap = Math.round(8 * getResources().getDisplayMetrics().density);
+            for (int i = 0; i < ids.length; i++) {
+                int id = ids[i];
+                layout.setVisibility(id, buttons[i].getVisibility());
+                if (columns == 0) continue;
+                layout.clear(id, ConstraintSet.START);
+                layout.clear(id, ConstraintSet.END);
+                layout.clear(id, ConstraintSet.TOP);
+                layout.clear(id, ConstraintSet.BOTTOM);
+                layout.constrainWidth(id, 0);
+                layout.setMargin(id, ConstraintSet.START, 0);
+                layout.setMargin(id, ConstraintSet.END, 0);
+                if (i < columns) {
+                    layout.connect(
+                            id, ConstraintSet.TOP, ConstraintSet.PARENT_ID, ConstraintSet.TOP);
+                } else {
+                    layout.connect(
+                            id, ConstraintSet.TOP, ids[i - columns], ConstraintSet.BOTTOM, gap);
+                }
+            }
+            if (columns == 1) {
+                for (int id : ids) {
+                    layout.connect(
+                            id, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START);
+                    layout.connect(
+                            id, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END);
+                }
+            } else if (columns == 2) {
+                layout.createHorizontalChainRtl(
+                        ConstraintSet.PARENT_ID,
+                        ConstraintSet.START,
+                        ConstraintSet.PARENT_ID,
+                        ConstraintSet.END,
+                        new int[] {ids[0], ids[1]},
+                        new float[] {1, 1},
+                        ConstraintSet.CHAIN_SPREAD);
+                layout.setMargin(ids[0], ConstraintSet.END, gap / 2);
+                layout.setMargin(ids[1], ConstraintSet.START, gap / 2);
+                layout.connect(
+                        ids[2], ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START);
+                layout.connect(
+                        ids[2], ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END);
+            }
+            mHistoryButton.setText(
+                    columns == 0
+                            ? null
+                            : getContext().getString(R.string.manage_notifications_history_text));
+            mSettingsButton.setText(
+                    columns == 0
+                            ? null
+                            : getContext()
+                                    .getString(R.string.notification_settings_button_description));
+            layout.applyTo(mButtonLayout);
+            mButtonColumns = columns;
+        }
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
     }
 
     /** Show a message instead of the footer buttons. */
@@ -295,6 +414,8 @@ public class FooterView extends StackScrollerDecorView {
             colorUpdateLogger.logTriggerEvent("Footer.onConfigurationChanged()");
         }
         super.onConfigurationChanged(newConfig);
+        mButtonColumns = -1;
+        requestLayout();
         updateColors();
         updateContent();
     }

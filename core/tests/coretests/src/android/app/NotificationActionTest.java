@@ -321,6 +321,79 @@ public class NotificationActionTest {
                 .isEqualTo(mDefaultColors.getPrimaryEmphasisBackground());
     }
 
+    @Test
+    public void wheelList_actionsAreFullWidthAndKeepTheirClickHandlers() {
+        NotificationActionListLayout layout =
+                makeActionsLayout(
+                        new Notification.Builder(mContext, "channel")
+                                .addAction(
+                                        new Action.Builder(null, "Reply", mPendingIntent).build())
+                                .addAction(
+                                        new Action.Builder(null, "Mark as read", mPendingIntent)
+                                                .build()));
+        View first = layout.getChildAt(0);
+        View second = layout.getChildAt(1);
+        layout.setButtonColumns(1);
+        measureActions(layout);
+        assertThat(first.getWidth()).isEqualTo(second.getWidth());
+        assertThat(second.getTop()).isGreaterThan(first.getBottom());
+        assertThat(first.hasOnClickListeners()).isTrue();
+        assertThat(second.hasOnClickListeners()).isTrue();
+        int minimum =
+                mContext.getResources()
+                        .getDimensionPixelSize(R.dimen.notification_2025_action_list_height);
+        assertThat(first.getHeight()).isAtLeast(minimum);
+        assertThat(layout.getButtonListExtraHeight()).isGreaterThan(0);
+    }
+
+    @Test
+    public void wheelColumns_twoColumnsWrapAndRespectRtlAndGoneActions() {
+        NotificationActionListLayout layout =
+                makeActionsLayout(
+                        new Notification.Builder(mContext, "channel")
+                                .addAction(new Action.Builder(null, "One", mPendingIntent).build())
+                                .addAction(new Action.Builder(null, "Two", mPendingIntent).build())
+                                .addAction(
+                                        new Action.Builder(null, "Three", mPendingIntent).build()));
+        layout.setButtonColumns(2);
+        layout.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        measureActions(layout);
+        View first = layout.getChildAt(0);
+        View second = layout.getChildAt(1);
+        View third = layout.getChildAt(2);
+        assertThat(first.getTop()).isEqualTo(second.getTop());
+        assertThat(first.getLeft()).isGreaterThan(second.getLeft());
+        assertThat(third.getTop()).isGreaterThan(first.getBottom());
+        third.setVisibility(View.GONE);
+        measureActions(layout);
+        assertThat(layout.getButtonListExtraHeight()).isEqualTo(0);
+    }
+
+    @Test
+    public void wheelList_canRestoreStockActionMeasurement() {
+        NotificationActionListLayout layout =
+                makeActionsLayout(
+                        new Notification.Builder(mContext, "channel")
+                                .addAction(new Action.Builder(null, "One", mPendingIntent).build())
+                                .addAction(
+                                        new Action.Builder(null, "Two", mPendingIntent).build()));
+        layout.setButtonColumns(1);
+        measureActions(layout);
+        int listHeight = layout.getMeasuredHeight();
+        layout.setButtonColumns(0);
+        measureActions(layout);
+        assertThat(layout.getMeasuredHeight()).isLessThan(listHeight);
+        assertThat(layout.getChildAt(0).getTop()).isEqualTo(layout.getChildAt(1).getTop());
+        assertThat(layout.getButtonListExtraHeight()).isEqualTo(0);
+    }
+
+    private void measureActions(NotificationActionListLayout layout) {
+        layout.measure(
+                View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        layout.layout(0, 0, layout.getMeasuredWidth(), layout.getMeasuredHeight());
+    }
+
     private NotificationActionListLayout makeActionsLayout(Notification.Builder builder) {
         return requireNonNull(makeLayout(builder).findViewById(R.id.actions));
     }

@@ -22,11 +22,15 @@ import android.app.Flags;
 import android.app.Notification;
 import android.app.PendingIntent;
 import android.content.Context;
+import android.database.ContentObserver;
 import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.RemoteException;
+import android.os.UserHandle;
 import android.service.notification.StatusBarNotification;
 import android.util.ArrayMap;
 import android.util.AttributeSet;
@@ -72,6 +76,10 @@ import com.android.systemui.statusbar.policy.SmartReplyView;
 import com.android.systemui.statusbar.policy.dagger.RemoteInputViewSubcomponent;
 import com.android.systemui.util.Compile;
 import com.android.systemui.util.DumpUtilsKt;
+import com.android.systemui.wheel.WheelLayoutSettings;
+import com.android.systemui.wheel.WheelNotificationLayout;
+
+import lineageos.providers.LineageSettings;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -105,6 +113,13 @@ public class NotificationContentView extends FrameLayout implements Notification
 
     private int mMinContractedHeight;
     private int mMinSingleLineHeight;
+    private final ContentObserver mWheelLayoutObserver =
+            new ContentObserver(new Handler(Looper.getMainLooper())) {
+                @Override
+                public void onChange(boolean selfChange) {
+                    requestLayout();
+                }
+            };
     private View mContractedChild;
     private View mExpandedChild;
     private View mHeadsUpChild;
@@ -266,6 +281,16 @@ public class NotificationContentView extends FrameLayout implements Notification
     // This logic is mirrored in FrameLayoutWithMaxHeight.onMeasure in AODPromotedNotification.kt.
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        if (getResources().getBoolean(R.bool.config_r1CompactQs)) {
+            boolean enabled = WheelLayoutSettings.enabled(getContext());
+            int columns = WheelLayoutSettings.columns(getContext());
+            if (!(mContractedWrapper instanceof NotificationCustomViewWrapper))
+                WheelNotificationLayout.apply(mContractedChild, enabled, columns);
+            if (!(mExpandedWrapper instanceof NotificationCustomViewWrapper))
+                WheelNotificationLayout.apply(mExpandedChild, enabled, columns);
+            if (!(mHeadsUpWrapper instanceof NotificationCustomViewWrapper))
+                WheelNotificationLayout.apply(mHeadsUpChild, enabled, columns);
+        }
         int heightMode = MeasureSpec.getMode(heightMeasureSpec);
         boolean hasFixedHeight = heightMode == MeasureSpec.EXACTLY;
         boolean isHeightLimited = heightMode == MeasureSpec.AT_MOST;
@@ -298,6 +323,13 @@ public class NotificationContentView extends FrameLayout implements Notification
         if (mContractedChild != null) {
             int heightSpec;
             int size = mSmallHeight;
+            if (WheelLayoutSettings.enabled(getContext())) {
+                View actions = mContractedChild.findViewById(com.android.internal.R.id.actions);
+                if (actions
+                        instanceof com.android.internal.widget.NotificationActionListLayout list) {
+                    size += list.getButtonListExtraHeight();
+                }
+            }
             ViewGroup.LayoutParams layoutParams = mContractedChild.getLayoutParams();
             boolean useExactly = false;
             if (layoutParams.height >= 0) {
@@ -403,6 +435,23 @@ public class NotificationContentView extends FrameLayout implements Notification
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
+        if (getResources().getBoolean(R.bool.config_r1CompactQs)) {
+            getContext()
+                    .getContentResolver()
+                    .registerContentObserver(
+                            LineageSettings.Secure.getUriFor(LineageSettings.Secure.WHEEL_UI),
+                            false,
+                            mWheelLayoutObserver,
+                            UserHandle.USER_ALL);
+            getContext()
+                    .getContentResolver()
+                    .registerContentObserver(
+                            LineageSettings.Secure.getUriFor(
+                                    LineageSettings.Secure.WHEEL_BUTTON_COLUMNS),
+                            false,
+                            mWheelLayoutObserver,
+                            UserHandle.USER_ALL);
+        }
         updateVisibility();
     }
 
@@ -644,6 +693,7 @@ public class NotificationContentView extends FrameLayout implements Notification
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        getContext().getContentResolver().unregisterContentObserver(mWheelLayoutObserver);
         getViewTreeObserver().removeOnPreDrawListener(mEnableAnimationPredrawListener);
     }
 
@@ -1054,6 +1104,11 @@ public class NotificationContentView extends FrameLayout implements Notification
         if (mHeadsUpRemoteInput != null) {
             mHeadsUpRemoteInput.setBackgroundTintColor(color, colorized);
         }
+    }
+
+    /** Active template only, for in-process wheel traversal. */
+    public View getWheelVisibleChild() {
+        return getViewForVisibleType(mVisibleType);
     }
 
     public int getVisibleType() {
