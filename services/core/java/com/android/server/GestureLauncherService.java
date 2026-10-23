@@ -646,6 +646,16 @@ public class GestureLauncherService extends SystemService {
      */
     public boolean interceptPowerKeyDown(KeyEvent event, boolean interactive,
             MutableBoolean outLaunched) {
+        if (com.android.server.policy.WheelSideButtonPolicy.isEnabled(mContext)) {
+            outLaunched.value = false;
+            synchronized (this) {
+                mPowerButtonConsecutiveTaps = 0;
+                mPowerButtonSlowConsecutiveTaps = 0;
+                mLastPowerDown = 0;
+                mFirstPowerDown = 0;
+            }
+            return false;
+        }
         if (mEmergencyGestureEnabled && mEmergencyGesturePowerButtonCooldownPeriodMs >= 0
                 && event.getEventTime() - mLastEmergencyGestureTriggered
                 < mEmergencyGesturePowerButtonCooldownPeriodMs) {

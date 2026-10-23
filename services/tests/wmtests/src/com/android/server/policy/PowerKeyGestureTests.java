@@ -160,4 +160,61 @@ public class PowerKeyGestureTests extends ShortcutKeyTestBase {
         sendKey(KEYCODE_POWER);
         mPhoneWindowManager.assertNoPowerSleep();
     }
+
+    @Test
+    public void testWheelSideButtonPressDoesNotSleepOrShowPowerMenu() {
+        mPhoneWindowManager.overrideWheelSideButton(true);
+        mPhoneWindowManager.overrideShortPressOnPower(SHORT_PRESS_POWER_GO_TO_SLEEP);
+        sendKey(KEYCODE_POWER);
+        mPhoneWindowManager.assertNoPowerSleep();
+        mPhoneWindowManager.assertShowGlobalActionsNotCalled();
+    }
+
+    @Test
+    public void testWheelSideButtonHoldNothingConsumesRelease() {
+        mPhoneWindowManager.overrideWheelSideButton(true);
+        mPhoneWindowManager.overrideShortPressOnPower(SHORT_PRESS_POWER_GO_TO_SLEEP);
+        mPhoneWindowManager.overrideLongPressOnPower(LONG_PRESS_POWER_ASSISTANT);
+        sendKey(KEYCODE_POWER, SingleKeyGestureDetector.sDefaultLongPressTimeout);
+        mPhoneWindowManager.assertNoPowerSleep();
+        mPhoneWindowManager.assertShowGlobalActionsNotCalled();
+        mPhoneWindowManager.assertSearchManagerDoesntLaunchAssist();
+    }
+
+    @Test
+    public void testWheelSideButtonOffPressOnlyWakes() {
+        mPhoneWindowManager.overrideWheelSideButton(true);
+        mPhoneWindowManager.overrideShortPressOnPower(SHORT_PRESS_POWER_GO_TO_SLEEP);
+        mPhoneWindowManager.overrideDisplayState(Display.STATE_OFF);
+        sendKey(KEYCODE_POWER);
+        mPhoneWindowManager.assertPowerWakeUp();
+        mPhoneWindowManager.assertNoPowerSleep();
+    }
+
+    @Test
+    public void testWheelSideButtonDoublePressIsAlwaysTaskbar() {
+        mPhoneWindowManager.overrideWheelSideButton(true);
+        sendKey(KEYCODE_POWER);
+        sendKey(KEYCODE_POWER);
+        mPhoneWindowManager.assertWheelTaskbarRequested();
+        mPhoneWindowManager.assertNoPowerSleep();
+    }
+
+    @Test
+    public void testWheelSideButtonOffRestoresStockPress() {
+        mPhoneWindowManager.overrideWheelSideButton(false);
+        mPhoneWindowManager.overrideShortPressOnPower(SHORT_PRESS_POWER_GO_TO_SLEEP);
+        sendKey(KEYCODE_POWER);
+        mPhoneWindowManager.assertPowerSleep();
+    }
+    @Test
+    public void testWheelSideButtonOnKeyguardDoesNotSleep() {
+        mPhoneWindowManager.overrideWheelSideButton(true);
+        mPhoneWindowManager.setKeyguardServiceDelegateIsShowing(true);
+        mPhoneWindowManager.overrideShortPressOnPower(SHORT_PRESS_POWER_GO_TO_SLEEP);
+        sendKey(KEYCODE_POWER);
+        mPhoneWindowManager.assertNoPowerSleep();
+        mPhoneWindowManager.assertShowGlobalActionsNotCalled();
+    }
+
 }

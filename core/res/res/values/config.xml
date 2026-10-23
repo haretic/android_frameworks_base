@@ -8092,4 +8092,6 @@
          the wheel. Any other app has taskbar. Where the wheel moves through the app a press of
          the side button is Enter for it, in media play or pause. -->
     <string-array name="config_wheelAppModeDefaults" translatable="false" />
+    <!-- Device opt-in: a wake/input side button while the wheel UI is enabled. -->
+    <bool name="config_r1SideButtonInput">false</bool>
 </resources>

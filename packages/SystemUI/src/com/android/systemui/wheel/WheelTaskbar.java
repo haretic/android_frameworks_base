@@ -82,11 +82,11 @@ import com.android.systemui.statusbar.NotificationListener;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.kotlin.JavaAdapter;
 
+import dagger.Lazy;
+
 import lineageos.providers.LineageSettings;
 
 import org.lineageos.internal.util.PowerMenuUtils;
-
-import dagger.Lazy;
 
 import java.text.NumberFormat;
 import java.util.ArrayList;
@@ -261,6 +261,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private View mBarFrame;
     private final Rect mTouchRect = new Rect();
     private TextView mPanelTitle;
+    private TextView mPanelHint;
     private WheelTaskbarScroll mPanelScroll;
     private FrameLayout mPanelContent;
     private LinearLayout mPanelItems;
@@ -1818,6 +1819,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                     move(1, event.getEventTime());
                 }
                 return true;
+            case KeyEvent.KEYCODE_DPAD_CENTER:
             case KeyEvent.KEYCODE_POWER:
                 onSideButton(event);
                 return true;
@@ -1921,7 +1923,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     /** Takes back a lone step the press of the side button nudged the wheel into. */
     private void undoNudge(long pressTime) {
         if (mStepCount != 1 || mStepFrom == null
-                || pressTime - mSteps[0] > PRESS_NUDGE_MS || !mStepFrom.isShown()) {
+                || Math.abs(pressTime - mSteps[0]) > PRESS_NUDGE_MS || !mStepFrom.isShown()) {
             return;
         }
         final View from = mStepFrom;
@@ -1962,8 +1964,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     }
 
     /**
-     * Opens the options of the focused app, in the bar or the list of all apps; anywhere else
-     * the r1 sleeps, as the side button does.
+     * Opens the options of the focused app for legacy select events. The r1 side-button hold itself
+     * is resolved by PhoneWindowManager and never turns the screen off.
      */
     private void onLongPress() {
         final View focused = mRoot.findFocus();
@@ -1979,9 +1981,6 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             openMenu(MENU_APP, app);
             return;
         }
-        hide();
-        mContext.getSystemService(PowerManager.class).goToSleep(SystemClock.uptimeMillis(),
-                PowerManager.GO_TO_SLEEP_REASON_POWER_BUTTON, 0);
     }
 
     private void togglePin(String packageName) {
@@ -2094,6 +2093,15 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         mPanelTitle.setTextAppearance(R.style.TextAppearance_WheelTaskbar_Title);
         mPanelTitle.setPadding(dp(12), 0, dp(12), dp(8));
         mPanel.addView(mPanelTitle);
+        mPanelHint = new TextView(mContext);
+        mPanelHint.setText(R.string.wheel_taskbar_mode_back);
+        mPanelHint.setTextAppearance(R.style.TextAppearance_WheelTaskbar_Summary);
+        mPanelHint.setPadding(dp(12), 0, dp(12), dp(12));
+        mPanelHint.setSingleLine(false);
+        mPanelHint.setEllipsize(null);
+        mPanelHint.setFocusable(false);
+        mPanelHint.setVisibility(View.GONE);
+        mPanel.addView(mPanelHint);
         mPanelScroll = new WheelTaskbarScroll(mContext);
         mPanelScroll.setFadingEdgeLength(dp(24));
         mPanelScroll.setSpeed(mSettings.animation);
@@ -2210,6 +2218,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private void refill(Menu menu, int focus) {
         mRefilling = true;
         mPanelItems.removeAllViews();
+        mPanelHint.setVisibility(menu.type == MENU_MODES ? View.VISIBLE : View.GONE);
         mPanelHighlight.follow(null, 0, 0);
         final int own;
         switch (menu.type) {
@@ -2304,10 +2313,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             if (isCurrent) {
                 focusIndex = i;
             }
-            final CharSequence summary = isCurrent
-                    ? mContext.getString(R.string.wheel_taskbar_mode_current)
-                    : MODE_TASKBAR.equals(mode) ? null
-                    : mContext.getString(R.string.wheel_taskbar_mode_back);
+            final CharSequence summary =
+                    isCurrent ? mContext.getString(R.string.wheel_taskbar_mode_current) : null;
             addRow(mContext.getDrawable(modeIconRes(mode)), modeName(mode), summary, true)
                     .setOnClickListener(v -> {
                         setAppMode(app, mode);

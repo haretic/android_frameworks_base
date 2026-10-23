@@ -181,6 +181,11 @@ public final class WheelNavigator {
                     step(-1, event.getEventTime());
                 }
                 return true;
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+                if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) {
+                    press();
+                }
+                return true;
             case KeyEvent.KEYCODE_POWER:
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
                     if (event.getRepeatCount() == 0) {
