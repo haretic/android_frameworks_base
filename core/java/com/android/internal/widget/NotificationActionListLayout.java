@@ -44,6 +44,102 @@ import java.util.Comparator;
 @RemoteViews.RemoteView
 public class NotificationActionListLayout extends LinearLayout {
     private final int mGravity;
+
+    /** 0 is stock; set only by the opted-in SystemUI host, never by an application. */
+    private int mButtonColumns;
+
+    private int[] mButtonRowHeights = new int[0];
+
+    /** @hide */
+    public void setButtonColumns(int columns) {
+        if (mButtonColumns == columns) return;
+        mButtonColumns = Math.max(0, Math.min(2, columns));
+        requestLayout();
+    }
+
+    /** Extra space needed above the standard single action row. @hide */
+    public int getButtonListExtraHeight() {
+        if (mButtonColumns == 0) return 0;
+        int count = 0;
+        for (int i = 0; i < getChildCount(); i++) {
+            if (getChildAt(i).getVisibility() != GONE) count++;
+        }
+        final int rows = (count + mButtonColumns - 1) / mButtonColumns;
+        return Math.max(0, rows - 1) * (getActionRowHeight() + getActionRowGap());
+    }
+
+    private int getActionRowHeight() {
+        return getResources().getDimensionPixelSize(R.dimen.notification_2025_action_list_height);
+    }
+
+    private int getActionRowGap() {
+        return Math.round(8 * getResources().getDisplayMetrics().density);
+    }
+
+    private void measureButtonList(int widthSpec, int heightSpec) {
+        int count = 0;
+        for (int i = 0; i < getChildCount(); i++) {
+            if (getChildAt(i).getVisibility() != GONE) count++;
+        }
+        mButtonRowHeights = new int[(count + mButtonColumns - 1) / mButtonColumns];
+        final int width =
+                Math.max(0, MeasureSpec.getSize(widthSpec) - mPaddingLeft - mPaddingRight);
+        final int gap = getActionRowGap();
+        final int cellWidth = Math.max(0, (width - (mButtonColumns - 1) * gap) / mButtonColumns);
+        int at = 0;
+        for (int i = 0; i < getChildCount(); i++) {
+            View child = getChildAt(i);
+            if (child.getVisibility() == GONE) continue;
+            MarginLayoutParams lp = (MarginLayoutParams) child.getLayoutParams();
+            child.measure(
+                    MeasureSpec.makeMeasureSpec(
+                            Math.max(0, cellWidth - lp.leftMargin - lp.rightMargin),
+                            MeasureSpec.EXACTLY),
+                    MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
+            if (child.getMeasuredHeight() < getActionRowHeight()) {
+                child.measure(
+                        MeasureSpec.makeMeasureSpec(
+                                Math.max(0, cellWidth - lp.leftMargin - lp.rightMargin),
+                                MeasureSpec.EXACTLY),
+                        MeasureSpec.makeMeasureSpec(getActionRowHeight(), MeasureSpec.EXACTLY));
+            }
+            int row = at++ / mButtonColumns;
+            mButtonRowHeights[row] =
+                    Math.max(
+                            mButtonRowHeights[row],
+                            child.getMeasuredHeight() + lp.topMargin + lp.bottomMargin);
+        }
+        int height = mPaddingTop + mPaddingBottom + Math.max(0, mButtonRowHeights.length - 1) * gap;
+        for (int rowHeight : mButtonRowHeights) height += rowHeight;
+        setMeasuredDimension(
+                resolveSize(getSuggestedMinimumWidth(), widthSpec),
+                resolveSize(Math.max(getSuggestedMinimumHeight(), height), heightSpec));
+    }
+
+    private void layoutButtonList() {
+        final int gap = getActionRowGap();
+        final int width = Math.max(0, getWidth() - mPaddingLeft - mPaddingRight);
+        final int cellWidth = Math.max(0, (width - (mButtonColumns - 1) * gap) / mButtonColumns);
+        int at = 0;
+        int top = mPaddingTop;
+        for (int i = 0; i < getChildCount(); i++) {
+            View child = getChildAt(i);
+            if (child.getVisibility() == GONE) continue;
+            int row = at / mButtonColumns;
+            if (at > 0 && at % mButtonColumns == 0) top += mButtonRowHeights[row - 1] + gap;
+            int column = at++ % mButtonColumns;
+            if (isLayoutRtl()) column = mButtonColumns - 1 - column;
+            MarginLayoutParams lp = (MarginLayoutParams) child.getLayoutParams();
+            int left = mPaddingLeft + column * (cellWidth + gap) + lp.leftMargin;
+            int childTop = top + lp.topMargin;
+            child.layout(
+                    left,
+                    childTop,
+                    left + child.getMeasuredWidth(),
+                    childTop + child.getMeasuredHeight());
+        }
+    }
+
     private int mTotalWidth = 0;
     private int mExtraStartPadding = 0;
     private ArrayList<TextViewInfo> mMeasureOrderTextViews = new ArrayList<>();
@@ -247,6 +343,10 @@ public class NotificationActionListLayout extends LinearLayout {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        if (mButtonColumns > 0) {
+            measureButtonList(widthMeasureSpec, heightMeasureSpec);
+            return;
+        }
         countAndRebuildMeasureOrder();
         final int innerWidth = MeasureSpec.getSize(widthMeasureSpec) - mPaddingLeft - mPaddingRight;
         int usedWidth;
@@ -306,6 +406,10 @@ public class NotificationActionListLayout extends LinearLayout {
 
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        if (mButtonColumns > 0) {
+            layoutButtonList();
+            return;
+        }
         final boolean isLayoutRtl = isLayoutRtl();
         final int paddingTop = mPaddingTop;
         final boolean centerAligned = (mGravity & Gravity.CENTER_HORIZONTAL) != 0;

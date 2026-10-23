@@ -50,7 +50,8 @@ class LargeTilesUpgradePathsTest : SysuiTestCase() {
 
     private val kosmos =
         testKosmos().apply {
-            defaultTilesRepository = DefaultTilesQSHostRepository(mainResources, hsuTilesRepository)
+            defaultTilesRepository =
+                DefaultTilesQSHostRepository(mainResources, hsuTilesRepository, context)
         }
 
     private val defaultTiles = kosmos.defaultTilesRepository.getDefaultTiles(false).toSet()

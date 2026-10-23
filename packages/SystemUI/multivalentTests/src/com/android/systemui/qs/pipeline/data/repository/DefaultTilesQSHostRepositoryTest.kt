@@ -40,7 +40,11 @@ class DefaultTilesQSHostRepositoryTest : SysuiTestCase() {
 
     private val Kosmos.underTest by
         Kosmos.Fixture {
-            DefaultTilesQSHostRepository(testCase.context.resources, hsuTilesRepository)
+            DefaultTilesQSHostRepository(
+                testCase.context.resources,
+                hsuTilesRepository,
+                testCase.context,
+            )
         }
 
     @Test

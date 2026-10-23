@@ -39,7 +39,8 @@ final class WheelTaskbarSettings {
     int running = 6;
     boolean left;
     boolean push = true;
-    int listEnd = LIST_END_BACK;
+    int listEnd = LIST_END_LOOP;
+
     /** 0: stays open. */
     long timeoutMs = 3000;
     boolean labels = true;
@@ -63,8 +64,12 @@ final class WheelTaskbarSettings {
                 6, userId));
         left = getInt(resolver, LineageSettings.Secure.WHEEL_TASKBAR_EDGE, 0, userId) == 1;
         push = getInt(resolver, LineageSettings.Secure.WHEEL_TASKBAR_PUSH, 1, userId) != 0;
-        listEnd = getInt(resolver, LineageSettings.Secure.WHEEL_TASKBAR_LIST_END,
-                LIST_END_BACK, userId);
+        listEnd =
+                getInt(
+                        resolver,
+                        LineageSettings.Secure.WHEEL_TASKBAR_LIST_END,
+                        LIST_END_LOOP,
+                        userId);
         timeoutMs = 1000L * Math.max(0, getInt(resolver,
                 LineageSettings.Secure.WHEEL_TASKBAR_TIMEOUT, 3, userId));
         labels = getInt(resolver, LineageSettings.Secure.WHEEL_TASKBAR_LABELS, 1, userId) != 0;

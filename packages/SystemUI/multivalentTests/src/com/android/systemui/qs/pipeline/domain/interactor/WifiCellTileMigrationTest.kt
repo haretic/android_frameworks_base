@@ -657,7 +657,7 @@ class WifiCellTileMigrationTest : SysuiTestCase() {
 
     private fun Kosmos.realTileSpecRepository(): TileSpecRepository {
         val realDefaultTilesRepository =
-            DefaultTilesQSHostRepository(mainResources, hsuTilesRepository)
+            DefaultTilesQSHostRepository(mainResources, hsuTilesRepository, context)
         return TileSpecSettingsRepository(
             mainResources,
             mock(),

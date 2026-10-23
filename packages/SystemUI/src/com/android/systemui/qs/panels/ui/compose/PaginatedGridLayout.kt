@@ -22,21 +22,28 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.requiredHeight
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.integerResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.android.compose.animation.scene.ContentScope
@@ -54,7 +61,9 @@ import com.android.systemui.qs.panels.ui.viewmodel.PaginatedGridViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.TileViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.toolbar.EditModeButtonViewModel
 import com.android.systemui.res.R
+import com.android.systemui.wheel.LocalWheelLayout
 import javax.inject.Inject
+import kotlinx.coroutines.launch
 
 class PaginatedGridLayout
 @Inject
@@ -78,13 +87,23 @@ constructor(
                 delegateGridLayout.viewModelFactory.create()
             }
 
-        val rows = integerResource(R.integer.quick_settings_paginated_grid_num_rows)
+        val wheel = LocalWheelLayout.current
+        val rows =
+            if (wheel.enabled) 2
+            else integerResource(R.integer.quick_settings_paginated_grid_num_rows)
         val pages =
-            remember(tiles, rows, *delegateGridViewModel.pageKeys) {
-                delegateGridViewModel.splitIntoPages(tiles, rows)
+            remember(tiles, rows, wheel, *delegateGridViewModel.pageKeys) {
+                if (wheel.enabled) tiles.chunked(rows * wheel.columns)
+                else delegateGridViewModel.splitIntoPages(tiles, rows)
             }
 
         val pagerState = rememberPagerState(0) { pages.size }
+
+        LaunchedEffect(pages.size) {
+            if (pages.isNotEmpty() && pagerState.currentPage >= pages.size) {
+                pagerState.scrollToPage(pages.lastIndex)
+            }
+        }
 
         LaunchedEffect(listening, pagerState) {
             snapshotFlow { listening() }
@@ -177,6 +196,17 @@ private fun FooterBar(
             editButtonViewModelFactory.create()
         }
 
+    val wheel = LocalWheelLayout.current
+    if (wheel.enabled) {
+        WheelPageControls(
+            wheel.columns,
+            pagerState,
+            editButtonViewModel,
+            buildNumberViewModelFactory,
+        )
+        return
+    }
+
     // Use requiredHeight so it won't be squished if the view doesn't quite fit. As this is
     // expected to be inside a scrollable container, this should not be an issue.
     // Also, we construct the layout this way to do the following:
@@ -206,5 +236,64 @@ private fun FooterBar(
             Spacer(modifier = Modifier.weight(1f))
             EditModeButton(viewModel = editButtonViewModel, isVisible = isVisible())
         }
+    }
+}
+
+@Composable
+private fun WheelPageControls(
+    columns: Int,
+    pagerState: PagerState,
+    editButtonViewModel: EditModeButtonViewModel,
+    buildNumberViewModelFactory: BuildNumberViewModel.Factory,
+) {
+    val scope = rememberCoroutineScope()
+    val page: @Composable () -> Unit = {
+        FilledTonalButton(
+            onClick = {
+                if (pagerState.pageCount > 0)
+                    scope.launch {
+                        pagerState.animateScrollToPage(
+                            (pagerState.currentPage + 1) % pagerState.pageCount
+                        )
+                    }
+            },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).sysuiResTag("qs_page_button"),
+        ) {
+            Text(
+                stringResource(
+                    R.string.wheel_qs_page,
+                    if (pagerState.pageCount == 0) 0 else pagerState.currentPage + 1,
+                    pagerState.pageCount,
+                )
+            )
+        }
+    }
+    val edit: @Composable () -> Unit = {
+        if (editButtonViewModel.isEditButtonVisible) {
+            FilledTonalButton(
+                onClick = editButtonViewModel::onButtonClick,
+                modifier =
+                    Modifier.fillMaxWidth().heightIn(min = 48.dp).sysuiResTag("qs_edit_mode_button"),
+            ) {
+                androidx.compose.material3.Icon(
+                    imageVector = com.android.systemui.common.ui.icons.Edit,
+                    contentDescription = null,
+                )
+                Spacer(Modifier.size(8.dp))
+                Text(stringResource(R.string.wheel_qs_edit))
+            }
+        }
+    }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = spacedBy(8.dp)) {
+        if (columns == 1) {
+            page()
+            edit()
+        } else {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = spacedBy(8.dp)) {
+                androidx.compose.foundation.layout.Box(Modifier.weight(1f)) { page() }
+                androidx.compose.foundation.layout.Box(Modifier.weight(1f)) { edit() }
+            }
+        }
+        BuildNumber(viewModelFactory = buildNumberViewModelFactory)
     }
 }
