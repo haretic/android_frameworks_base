@@ -6531,8 +6531,13 @@ public final class ViewRootImpl implements ViewParent,
             return false;
         }
         final View focused = mView.findFocus();
-        if (focused == null || focused == mView || !focused.isShown() || isWheelScroller(focused)
-                || isFadedOut(focused)) {
+        if (focused == null || focused == mView || !focused.isShown() || isFadedOut(focused)) {
+            return false;
+        }
+        if (isComposeHost(focused)) {
+            return getComposeWheelFocusRect(focused, bounds);
+        }
+        if (isWheelScroller(focused)) {
             return false;
         }
         focused.getBoundsOnScreen(bounds, true);
@@ -6681,6 +6686,37 @@ public final class ViewRootImpl implements ViewParent,
             view = view.getParent() instanceof View parent ? parent : null;
         }
         return false;
+    }
+
+    /** A Jetpack Compose host: one view, its own focus inside, as Settings' Spa pages. */
+    private static boolean isComposeHost(View view) {
+        return view.getClass().getName().endsWith("AndroidComposeView");
+    }
+
+    /**
+     * The ring round what has the focus inside a Compose host, which tells its focused element's
+     * bounds through getFocusedRect; none while the host as a whole has it.
+     */
+    private boolean getComposeWheelFocusRect(View host, Rect bounds) {
+        host.getFocusedRect(bounds);
+        if (bounds.isEmpty() || bounds.width() >= host.getWidth()
+                && bounds.height() >= host.getHeight()) {
+            return false;
+        }
+        final int[] location = mAttachInfo.mTmpLocation;
+        host.getLocationInWindow(location);
+        bounds.offset(location[0] - host.getScrollX(), location[1] - host.getScrollY() + mScrollY);
+        // Half or more out of the list, as while it scrolls the row in: no sliver of a ring
+        final int height = bounds.height();
+        if (!bounds.intersect(0, 0, mWidth, mHeight) || bounds.height() * 2 < height
+                || bounds.width() >= mWidth && bounds.height() >= mHeight) {
+            return false;
+        }
+        mWheelFocusCardRadius = -1;
+        final int inset = (int) Math.ceil(
+                WHEEL_FOCUS_WIDTH_DP * mContext.getResources().getDisplayMetrics().density);
+        bounds.inset(inset, inset);
+        return !bounds.isEmpty();
     }
 
     /**
