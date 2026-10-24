@@ -6581,6 +6581,14 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
+    /**
+     * Whether the wheel UI's focus marks the focus in this window, its ring or the window's own
+     * highlight (setWheelFocusRingHidden), so views draw no default focus highlight of their own.
+     */
+    boolean replacesFocusHighlight() {
+        return isWheelFocusEnabled();
+    }
+
     /** Whether {@code view} or a view in it is pressed, as a slider the wheel holds is. */
     private static boolean isWheelGrabbed(View view) {
         if (view == null || view.isPressed()) {
