@@ -7760,6 +7760,11 @@
     <!-- Whether desktop mode is supported on the current device  -->
     <bool name="config_isDesktopModeSupported">false</bool>
 
+    <!-- Whether a large screen shows the app handle at the top of a fullscreen app, for split
+         screen and bubbles (showAppHandleLargeScreens). A device whose apps are moved through
+         without touch, where the handle can't be reached, turns it off. -->
+    <bool name="config_showAppHandleOnLargeScreens">true</bool>
+
     <!-- Whether the developer option for desktop mode is supported on the current device  -->
     <bool name="config_isDesktopModeDevOptionSupported">false</bool>
 
@@ -8094,4 +8099,11 @@
     <string-array name="config_wheelAppModeDefaults" translatable="false" />
     <!-- Device opt-in: a wake/input side button while the wheel UI is enabled. -->
     <bool name="config_r1SideButtonInput">false</bool>
+    <!-- The wheel UI's dialogs: alert dialogs have their buttons as a list, one a row
+         (WheelDialogButtons). Turned on by an overlay SystemUI enables with the setting. -->
+    <bool name="config_wheelDialogs">false</bool>
+    <!-- The wheel UI's focus: a ring round the view with the focus when it isn't touched, and
+         sliders the side button grabs for the wheel to set. Turned on by an overlay SystemUI
+         enables with the setting. -->
+    <bool name="config_wheelFocus">false</bool>
 </resources>

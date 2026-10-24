@@ -48,6 +48,8 @@ import com.android.systemui.dagger.qualifiers.Application;
 import com.android.systemui.res.R;
 import com.android.systemui.util.DialogKt;
 import com.android.systemui.window.domain.interactor.WindowRootViewBlurInteractor;
+import com.android.systemui.wheel.WheelLayoutSettings;
+import com.android.systemui.wheel.WheelSystemWindows;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -315,6 +317,14 @@ public class SystemUIDialog extends AlertDialog {
         mLastConfigurationHeightDp = config.screenHeightDp;
         final Window window = getWindow();
         updateWindowSize(window);
+        // With the wheel UI the wheel walks the dialog's buttons and the side button presses
+        // them, whatever the wheel does in the app under it
+        if (WheelLayoutSettings.enabled(getContext())) {
+            final WindowManager.LayoutParams lp = window.getAttributes();
+            lp.inputFeatures |= WindowManager.LayoutParams.INPUT_FEATURE_POWER_KEY_SELECTS;
+            window.setAttributes(lp);
+            WheelSystemWindows.track(window);
+        }
 
         for (int i = 0; i < mOnCreateRunnables.size(); i++) {
             mOnCreateRunnables.get(i).run();
