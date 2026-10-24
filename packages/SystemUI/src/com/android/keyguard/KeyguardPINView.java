@@ -43,7 +43,9 @@ import androidx.constraintlayout.widget.ConstraintSet;
 import com.android.app.animation.Interpolators;
 import com.android.settingslib.animation.DisappearAnimationUtils;
 import com.android.systemui.res.R;
+import com.android.systemui.scene.ui.view.WindowRootView;
 import com.android.systemui.statusbar.policy.DevicePostureController.DevicePostureInt;
+import com.android.systemui.wheel.WheelLayoutSettings;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -62,6 +64,8 @@ public class KeyguardPINView extends KeyguardPinBasedInputView {
     // TODO (b/293252410) - usage of mContainerConstraintLayout should be removed
     //  when the flag is enabled/removed
     @Nullable private ConstraintLayout mContainerConstraintLayout;
+    @Nullable private WheelPinDrum mWheelDrum;
+    private final List<View> mWheelHiddenKeys = new ArrayList<>();
     private int mDisappearYTranslation;
     private View[][] mViews;
     private int mYTrans;
@@ -277,6 +281,113 @@ public class KeyguardPINView extends KeyguardPinBasedInputView {
                 new View[]{
                         null, mEcaView, null
                 }};
+    }
+
+    /**
+     * The wheel UI's PIN drum in place of the keys while the lock screen takes the revised layout,
+     * the wheel on it once the bouncer shows.
+     */
+    void updateWheelDrum() {
+        final boolean wheel = WheelLayoutSettings.lockscreen(mContext);
+        if (wheel && mWheelDrum == null) {
+            final ConstraintLayout container = findViewById(R.id.pin_container);
+            mWheelDrum = new WheelPinDrum(mContext);
+            mWheelDrum.setId(R.id.wheel_pin_drum);
+            mWheelDrum.setListener(new WheelPinDrum.Listener() {
+                @Override
+                public void onDigit(int digit) {
+                    performNumberClick(digit);
+                }
+
+                @Override
+                public void onOk() {
+                    findViewById(R.id.key_enter).performClick();
+                }
+
+                @Override
+                public void onDelete() {
+                    findViewById(R.id.delete_button).performClick();
+                }
+            });
+            final ConstraintLayout.LayoutParams lp = new ConstraintLayout.LayoutParams(
+                    ConstraintLayout.LayoutParams.MATCH_CONSTRAINT,
+                    ConstraintLayout.LayoutParams.MATCH_CONSTRAINT);
+            lp.topToBottom = R.id.row0;
+            // Above the Emergency button where the pad has it, else to the bottom
+            if (container.findViewById(R.id.keyguard_selector_fade_container) != null) {
+                lp.bottomToTop = R.id.keyguard_selector_fade_container;
+            } else {
+                lp.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID;
+            }
+            lp.startToStart = ConstraintLayout.LayoutParams.PARENT_ID;
+            lp.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID;
+            container.addView(mWheelDrum, lp);
+            // A motion layout lays out and shows its children from its constraint sets alone
+            if (container instanceof MotionLayout motion) {
+                for (int id : motion.getConstraintSetIds()) {
+                    final ConstraintSet set = motion.getConstraintSet(id);
+                    placeWheelDrum(set);
+                    motion.updateState(id, set);
+                }
+            }
+        }
+        if (mWheelDrum == null) {
+            return;
+        }
+        mWheelDrum.setVisibility(wheel ? View.VISIBLE : View.GONE);
+        // The keys keep their place, so the PIN above them stays where it was; those the PIN
+        // length's auto-confirm hid stay hidden after
+        for (View key : mWheelHiddenKeys) {
+            key.setVisibility(View.VISIBLE);
+        }
+        mWheelHiddenKeys.clear();
+        if (wheel) {
+            for (int row = 1; row < 5; row++) {
+                for (View key : mViews[row]) {
+                    if (key != null && key.getVisibility() == View.VISIBLE) {
+                        key.setVisibility(View.INVISIBLE);
+                        mWheelHiddenKeys.add(key);
+                    }
+                }
+            }
+        }
+        if (wheel) {
+            mWheelDrum.reset();
+            post(() -> {
+                if (getRootView() instanceof WindowRootView root) {
+                    root.focusWheelOn(mWheelDrum);
+                }
+            });
+        }
+    }
+
+    /**
+     * The drum under the PIN, over the keys, in one of the pad's constraint sets; the drum and the
+     * keys keep the visibility updateWheelDrum() gives them.
+     */
+    private void placeWheelDrum(ConstraintSet set) {
+        final int drum = R.id.wheel_pin_drum;
+        set.constrainWidth(drum, ConstraintSet.MATCH_CONSTRAINT);
+        set.constrainHeight(drum, ConstraintSet.MATCH_CONSTRAINT);
+        set.connect(drum, ConstraintSet.TOP, R.id.row0, ConstraintSet.BOTTOM);
+        // A sibling in the motion layout's pad only
+        if (findViewById(R.id.pin_container)
+                .findViewById(R.id.keyguard_selector_fade_container) != null) {
+            set.connect(drum, ConstraintSet.BOTTOM, R.id.keyguard_selector_fade_container,
+                    ConstraintSet.TOP);
+        } else {
+            set.connect(drum, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.BOTTOM);
+        }
+        set.connect(drum, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START);
+        set.connect(drum, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END);
+        set.setVisibilityMode(drum, ConstraintSet.VISIBILITY_MODE_IGNORE);
+        for (int row = 1; row < 5; row++) {
+            for (View key : mViews[row]) {
+                if (key != null) {
+                    set.setVisibilityMode(key.getId(), ConstraintSet.VISIBILITY_MODE_IGNORE);
+                }
+            }
+        }
     }
 
     protected void updatePinScrambling(boolean scramblePin) {
