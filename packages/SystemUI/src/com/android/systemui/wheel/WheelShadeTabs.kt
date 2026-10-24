@@ -3,7 +3,6 @@ package com.android.systemui.wheel
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement.spacedBy
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,8 +11,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -68,10 +65,6 @@ fun WheelShadeTabs(controls: Boolean, onSwitch: (() -> Unit)?, modifier: Modifie
             Tab(notifications, selected = !controls)
             Tab(controlsLabel, selected = controls)
         }
-        Row(Modifier.padding(top = 6.dp), horizontalArrangement = spacedBy(6.dp)) {
-            Dot(selected = !controls)
-            Dot(selected = controls)
-        }
     }
 }
 
@@ -94,12 +87,3 @@ private fun RowScope.Tab(label: String, selected: Boolean) {
     }
 }
 
-@Composable
-private fun Dot(selected: Boolean) {
-    val colors = MaterialTheme.colorScheme
-    Box(
-        Modifier.size(6.dp)
-            .clip(CircleShape)
-            .background(if (selected) colors.primary else colors.outlineVariant)
-    )
-}
