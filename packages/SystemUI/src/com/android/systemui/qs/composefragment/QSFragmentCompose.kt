@@ -128,6 +128,7 @@ import com.android.systemui.dump.DumpManager
 import com.android.systemui.initOnBackPressedDispatcherOwner
 import com.android.systemui.keyboard.shortcut.ui.composable.InteractionsConfig
 import com.android.systemui.keyboard.shortcut.ui.composable.ProvideShortcutHelperIndication
+import com.android.systemui.lifecycle.rememberViewModel
 import com.android.systemui.lifecycle.repeatWhenAttached
 import com.android.systemui.lifecycle.setSnapshotBinding
 import com.android.systemui.log.table.TableLogBuffer
@@ -153,6 +154,8 @@ import com.android.systemui.qs.panels.shared.model.QSFragmentComposeClippingTabl
 import com.android.systemui.qs.panels.ui.compose.EditMode
 import com.android.systemui.qs.panels.ui.compose.QuickQuickSettings
 import com.android.systemui.qs.panels.ui.compose.TileGrid
+import com.android.systemui.qs.panels.ui.compose.toolbar.EditModeButton
+import com.android.systemui.qs.panels.ui.viewmodel.toolbar.EditModeButtonViewModel
 import com.android.systemui.qs.shared.ui.QuickSettings.Elements
 import com.android.systemui.qs.ui.composable.QuickSettingsShade
 import com.android.systemui.qs.ui.composable.QuickSettingsShade.systemGestureExclusionInShade
@@ -169,6 +172,7 @@ import com.android.systemui.util.println
 import com.android.systemui.volume.panel.component.volume.slider.ui.viewmodel.AudioStreamSliderViewModel
 import com.android.systemui.volume.panel.component.volume.ui.composable.VolumeSlider
 import com.android.systemui.wheel.LocalWheelLayout
+import com.android.systemui.wheel.WheelShadeTabs
 import com.android.systemui.wheel.rememberWheelLayout
 import java.io.PrintWriter
 import java.util.function.Consumer
@@ -194,6 +198,7 @@ constructor(
     private val dumpManager: DumpManager,
     @Background private val backgroundDispatcher: CoroutineDispatcher,
     @ShadeDisplayAware private val configurationController: ConfigurationController,
+    private val editModeButtonViewModelFactory: EditModeButtonViewModel.Factory,
 ) : LifecycleFragment(), QS, Dumpable {
 
     private val scrollListener = MutableStateFlow<QS.ScrollListener?>(null)
@@ -789,7 +794,18 @@ constructor(
                         BrightnessSlider(viewModel, layoutState)
                     }
                 }
-                if (viewModel.isQsEnabled) {
+                if (viewModel.isQsEnabled && LocalWheelLayout.current.enabled) {
+                    // The Notifications tab: the tab header, media, then the notifications below
+                    Column(
+                        modifier = Modifier.padding(horizontal = qsHorizontalMargin()),
+                        verticalArrangement = spacedBy(8.dp),
+                    ) {
+                        Element(WheelShadeTabsKey, Modifier) {
+                            WheelShadeTabs(controls = false, onSwitch = wheelSwitchTab())
+                        }
+                        Media()
+                    }
+                } else if (viewModel.isQsEnabled) {
                     Box(
                         modifier =
                             Modifier.collapseExpandSemanticAction(
@@ -815,15 +831,26 @@ constructor(
     @Composable
     private fun ContentScope.QuickSettingsElement(modifier: Modifier = Modifier) {
         val qqsPadding = viewModel.qqsHeaderHeight
+        val wheel = LocalWheelLayout.current.enabled
+        // The header grows with the full panel; the wheel's is compact
         val qsExtraPadding =
-            if (LocalWheelLayout.current.enabled) 49.dp
-            else dimensionResource(R.dimen.qs_panel_padding_top)
+            if (wheel) WheelExpandedHeaderExtra else dimensionResource(R.dimen.qs_panel_padding_top)
         Column(
             modifier =
                 modifier.collapseExpandSemanticAction(
                     stringResource(id = R.string.accessibility_quick_settings_collapse)
                 )
         ) {
+            if (viewModel.isQsEnabled && wheel) {
+                // The Controls tab: its header stays put over the list that scrolls
+                Spacer(modifier = Modifier.height { qqsPadding + qsExtraPadding.roundToPx() })
+                Element(
+                    WheelShadeTabsKey,
+                    Modifier.padding(horizontal = qsHorizontalMargin()).padding(bottom = 8.dp),
+                ) {
+                    WheelShadeTabs(controls = true, onSwitch = wheelSwitchTab())
+                }
+            }
             if (viewModel.isQsEnabled) {
                 Element(Elements.QuickSettingsContent, modifier = Modifier.weight(1f)) {
                     // scrollState never changes
@@ -864,9 +891,12 @@ constructor(
                                 .sysuiResTag(ResIdTags.qsScroll)
                     ) {
                         val containerViewModel = viewModel.containerViewModel
-                        Spacer(
-                            modifier = Modifier.height { qqsPadding + qsExtraPadding.roundToPx() }
-                        )
+                        if (!wheel) {
+                            Spacer(
+                                modifier =
+                                    Modifier.height { qqsPadding + qsExtraPadding.roundToPx() }
+                            )
+                        }
                         val BrightnessSlider: @Composable () -> Unit = {
                             Element(Elements.BrightnessSlider, modifier = modifier) {
                                 BrightnessSlider(viewModel, layoutState)
@@ -936,19 +966,26 @@ constructor(
                                 mediaInRow = viewModel.qsMediaInRow,
                             )
                         }
-                        if (LocalWheelLayout.current.enabled) {
+                        if (wheel) {
                             QuickSettingsTheme {
                                 Element(
                                     Elements.FooterActions,
                                     Modifier.sysuiResTag(ResIdTags.qsFooterActions),
                                 ) {
-                                    FooterActions(viewModel = viewModel.footerActionsViewModel)
+                                    val editButton =
+                                        rememberViewModel("QSFragmentCompose-wheelEdit") {
+                                            editModeButtonViewModelFactory.create()
+                                        }
+                                    FooterActions(
+                                        viewModel = viewModel.footerActionsViewModel,
+                                        wheelLeadingAction = { EditModeButton(editButton) },
+                                    )
                                 }
                             }
                         }
                     }
                 }
-                if (!LocalWheelLayout.current.enabled)
+                if (!wheel)
                     QuickSettingsTheme {
                         Element(
                             Elements.FooterActions,
@@ -1062,6 +1099,12 @@ constructor(
         }
     }
 
+    /**
+     * The wheel shade's label and percentage over a slider. Neither sits under the thumb: the
+     * label goes on the fill where it fits there and past the thumb where it doesn't, the
+     * percentage at the end unless the thumb has reached it, then just short of the thumb. Each
+     * takes the colour for what it's on.
+     */
     @Composable
     private fun WheelSliderLabel(
         label: String,
@@ -1070,27 +1113,55 @@ constructor(
         endPadding: Dp = 64.dp,
     ) {
         val colors = com.android.systemui.common.shared.colors.SystemUISliderColors.Defaults
-        Row(
-            modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = endPadding)
-                .clearAndSetSemantics {},
-            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
-        ) {
-            Text(
-                label,
-                fontSize = 16.sp,
-                maxLines = 1,
-                color = if (percent > 18) colors.activeTickColor else colors.inactiveTickColor,
-            )
-            Text(
-                java.text.NumberFormat.getPercentInstance().format(percent / 100f),
-                fontSize = 14.sp,
-                maxLines = 1,
-                color =
-                    if (percent > (if (endPadding > 64.dp) 66 else 82)) colors.activeTickColor
-                    else colors.inactiveTickColor,
-            )
+        val gap = 12.dp
+        val start = 16.dp
+        var labelOnFill by remember { mutableStateOf(true) }
+        var percentOnFill by remember { mutableStateOf(false) }
+        androidx.compose.ui.layout.Layout(
+            content = {
+                Text(
+                    label,
+                    fontSize = 16.sp,
+                    maxLines = 1,
+                    color = if (labelOnFill) colors.activeTickColor else colors.inactiveTickColor,
+                )
+                Text(
+                    java.text.NumberFormat.getPercentInstance().format(percent / 100f),
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    color =
+                        if (percentOnFill) colors.activeTickColor else colors.inactiveTickColor,
+                )
+            },
+            modifier = modifier.fillMaxWidth().clearAndSetSemantics {},
+        ) { measurables, constraints ->
+            val loose = constraints.copy(minWidth = 0, minHeight = 0)
+            val labelPlaceable = measurables[0].measure(loose)
+            val percentPlaceable = measurables[1].measure(loose)
+            val width = constraints.maxWidth
+            val height = maxOf(labelPlaceable.height, percentPlaceable.height)
+            // The thumb crosses the track, which runs the slider's width
+            val thumb = (width * percent / 100f).toInt()
+            val gapPx = gap.roundToPx()
+            val startPx = start.roundToPx()
+            val labelFits = thumb - gapPx >= startPx + labelPlaceable.width
+            val labelX = if (labelFits) startPx else thumb + gapPx
+            val percentEnd = width - endPadding.roundToPx()
+            val percentReached = thumb + gapPx > percentEnd - percentPlaceable.width
+            val percentX =
+                if (percentReached) {
+                    (thumb - gapPx - percentPlaceable.width).coerceAtLeast(
+                        if (labelFits) labelX + labelPlaceable.width + gapPx else 0
+                    )
+                } else {
+                    percentEnd - percentPlaceable.width
+                }
+            labelOnFill = labelFits
+            percentOnFill = percentReached
+            layout(width, height) {
+                labelPlaceable.place(labelX, (height - labelPlaceable.height) / 2)
+                percentPlaceable.place(percentX, (height - percentPlaceable.height) / 2)
+            }
         }
     }
 
@@ -1106,6 +1177,11 @@ constructor(
                     .padding(horizontal = { horizontalPadding.roundToPx() })
                     .padding(top = { viewModel.qqsHeaderHeight }),
         )
+    }
+
+    /** Switches the wheel shade's tab: opens or closes the full panel, as the stock shade would. */
+    private fun wheelSwitchTab(): () -> Unit = {
+        viewModel.collapseExpandAccessibilityAction?.run()
     }
 
     private fun Modifier.collapseExpandSemanticAction(label: String): Modifier {
@@ -1641,6 +1717,12 @@ fun QuickSettingsLayout(
         }
     }
 }
+
+/** The wheel shade's tab header, shared by both tabs so it stays put as they switch. */
+private val WheelShadeTabsKey = ElementKey("WheelShadeTabs")
+
+/** How much taller the wheel shade's header is with the full panel open than with the quick one. */
+private val WheelExpandedHeaderExtra = 49.dp
 
 private object ResIdTags {
     const val quickSettingsPanel = "quick_settings_panel"

@@ -296,7 +296,7 @@ public class FooterView extends StackScrollerDecorView {
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         int columns =
-                WheelLayoutSettings.enabled(getContext())
+                WheelLayoutSettings.shade(getContext())
                         ? WheelLayoutSettings.columns(getContext())
                         : 0;
         if (mStockButtonConstraints != null && columns != mButtonColumns) {

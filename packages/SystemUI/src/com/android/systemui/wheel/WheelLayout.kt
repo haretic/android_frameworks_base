@@ -19,6 +19,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalContext
 import com.android.systemui.res.R
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import lineageos.providers.LineageSettings
 
 /** Local to the shade, never the tile editor. Logical grid spans remain two per labelled tile. */
@@ -36,14 +40,7 @@ fun rememberWheelLayout(full: Boolean): WheelLayout {
     val resolver = context.contentResolver
     fun read(): WheelLayout =
         WheelLayout(
-            enabled =
-                context.resources.getBoolean(R.bool.config_r1CompactQs) &&
-                    LineageSettings.Secure.getIntForUser(
-                        resolver,
-                        LineageSettings.Secure.WHEEL_UI,
-                        1,
-                        ActivityManager.getCurrentUser(),
-                    ) != 0,
+            enabled = WheelLayoutSettings.shade(context),
             columns =
                 LineageSettings.Secure.getIntForUser(
                         resolver,
@@ -64,6 +61,12 @@ fun rememberWheelLayout(full: Boolean): WheelLayout {
             }
         resolver.registerContentObserver(
             LineageSettings.Secure.getUriFor(LineageSettings.Secure.WHEEL_UI),
+            false,
+            observer,
+            UserHandle.USER_ALL,
+        )
+        resolver.registerContentObserver(
+            LineageSettings.Secure.getUriFor(LineageSettings.Secure.WHEEL_SHADE),
             false,
             observer,
             UserHandle.USER_ALL,
@@ -90,3 +93,39 @@ fun rememberWheelLayout(full: Boolean): WheelLayout {
     }
     return layout
 }
+
+/**
+ * Whether the wheel UI is on with the component's revised layout, as WheelLayoutSettings.component,
+ * following the settings and the user.
+ */
+fun wheelLayoutEnabled(context: Context, component: String? = null): Flow<Boolean> =
+    callbackFlow {
+            val update = { trySend(WheelLayoutSettings.component(context, component)) }
+            val observer =
+                object : ContentObserver(Handler(Looper.getMainLooper())) {
+                    override fun onChange(selfChange: Boolean) {
+                        update()
+                    }
+                }
+            for (setting in listOfNotNull(LineageSettings.Secure.WHEEL_UI, component)) {
+                context.contentResolver.registerContentObserver(
+                    LineageSettings.Secure.getUriFor(setting),
+                    false,
+                    observer,
+                    UserHandle.USER_ALL,
+                )
+            }
+            val userSwitch =
+                object : BroadcastReceiver() {
+                    override fun onReceive(context: Context, intent: Intent) {
+                        update()
+                    }
+                }
+            context.registerReceiver(userSwitch, IntentFilter(Intent.ACTION_USER_SWITCHED))
+            update()
+            awaitClose {
+                context.contentResolver.unregisterContentObserver(observer)
+                context.unregisterReceiver(userSwitch)
+            }
+        }
+        .distinctUntilChanged()

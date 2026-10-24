@@ -19,6 +19,7 @@ package com.android.systemui.shade;
 import static com.android.systemui.keyguard.shared.model.KeyguardState.DREAMING;
 import static com.android.systemui.keyguard.shared.model.KeyguardState.LOCKSCREEN;
 import static com.android.systemui.statusbar.StatusBarState.KEYGUARD;
+import static com.android.systemui.statusbar.StatusBarState.SHADE;
 import static com.android.systemui.util.kotlin.JavaAdapterKt.collectFlow;
 import static com.android.systemui.util.kotlin.JavaAdapterKt.combineFlows;
 
@@ -80,7 +81,9 @@ import com.android.systemui.unfold.SysUIUnfoldComponent;
 import com.android.systemui.unfold.UnfoldTransitionProgressProvider;
 import com.android.systemui.util.kotlin.JavaAdapter;
 import com.android.systemui.util.time.SystemClock;
+import com.android.systemui.wheel.WheelLayoutSettings;
 import com.android.systemui.wheel.WheelNavigator;
+import com.android.systemui.wheel.WheelShadeTabSwipe;
 import com.android.systemui.window.ui.BlurChoreographer;
 import com.android.systemui.window.ui.WindowRootViewBinder;
 import com.android.systemui.window.ui.viewmodel.WindowRootViewModel;
@@ -104,6 +107,8 @@ import javax.inject.Provider;
 @SysUISingleton
 public class NotificationShadeWindowViewController implements Dumpable {
     private static final String TAG = "NotifShadeWindowVC";
+    /** How long the lock screen takes to settle, its window to take the side button. */
+    private static final long WHEEL_LOCKSCREEN_SETTLE_MS = 300;
     private final FalsingCollector mFalsingCollector;
     private final SysuiStatusBarStateController mStatusBarStateController;
     private final NotificationShadeWindowView mView;
@@ -184,6 +189,7 @@ public class NotificationShadeWindowViewController implements Dumpable {
 
     private GestureDetector mQQSGestureHandler;
     private final QQSGestureListener mQQSGestureListener;
+    private WheelShadeTabSwipe mWheelTabSwipe;
 
     @Inject
     public NotificationShadeWindowViewController(
@@ -266,6 +272,8 @@ public class NotificationShadeWindowViewController implements Dumpable {
         collectFlow(mView, keyguardTransitionInteractor.transition(
                 Edge.create(LOCKSCREEN, DREAMING)),
                 mLockscreenToDreamingTransition);
+        collectFlow(mView, keyguardTransitionInteractor.isFinishedIn(LOCKSCREEN),
+                this::onLockscreenShown);
         Flow<Boolean> isLaunchAnimationRunning =
                 combineFlows(
                         notificationLaunchAnimationInteractor.isLaunchAnimationRunning(),
@@ -381,6 +389,24 @@ public class NotificationShadeWindowViewController implements Dumpable {
         }
     }
 
+    /** With the wheel UI the lock screen starts on its Unlock button, the side button's press. */
+    private void onLockscreenShown(boolean shown) {
+        mView.removeCallbacks(mFocusUnlock);
+        if (shown && WheelLayoutSettings.lockscreen(mView.getContext())) {
+            // Once the window takes the side button and the button is a stop
+            mView.postDelayed(mFocusUnlock, WHEEL_LOCKSCREEN_SETTLE_MS);
+        }
+    }
+
+    private final Runnable mFocusUnlock = this::focusUnlock;
+
+    private void focusUnlock() {
+        final View unlock = mView.findViewById(R.id.device_entry_icon_view);
+        if (unlock != null) {
+            mView.focusWheelOn(unlock);
+        }
+    }
+
     /** Inflates the {@link R.layout#status_bar_expanded} layout and sets it up. */
     public void setupExpandedStatusBar() {
         mStackScrollLayout = mView.findViewById(R.id.notification_stack_scroller);
@@ -390,30 +416,62 @@ public class NotificationShadeWindowViewController implements Dumpable {
                 mQQSGestureListener);
         mView.setLayoutInsetsController(mNotificationInsetsController);
         mView.setWindowRootViewKeyEventHandler(mWindowRootViewKeyEventHandler);
-        // The wheel walks the quick tiles and notifications, then past them the full panel
+        // The wheel walks the quick tiles and notifications, then past them the full panel. In the
+        // wheel UI the two are tabs instead, switched from their header or by a swipe across.
         mView.setWheelLevels(new WheelNavigator.Levels() {
             @Override
             public boolean deeper() {
-                final StatusBarManager statusBar =
-                        mView.getContext().getSystemService(StatusBarManager.class);
-                if (mQuickSettingsController.getExpanded() || statusBar == null) {
+                if (mQuickSettingsController.getExpanded()
+                        || WheelLayoutSettings.shade(mView.getContext())) {
                     return false;
                 }
-                statusBar.expandSettingsPanel();
-                return true;
+                return openFullPanel();
             }
 
             @Override
             public boolean shallower() {
-                if (!mQuickSettingsController.getExpanded()) {
+                if (!mQuickSettingsController.getExpanded()
+                        || WheelLayoutSettings.shade(mView.getContext())) {
                     return false;
                 }
-                if (mQuickSettingsController instanceof QuickSettingsControllerImpl impl) {
-                    impl.animateCloseQs(false /* animateAway */);
-                } else {
-                    mQuickSettingsController.closeQs();
-                }
+                closeFullPanel();
                 return true;
+            }
+        });
+        mWheelTabSwipe = new WheelShadeTabSwipe(mView.getContext(), new WheelShadeTabSwipe.Host() {
+            @Override
+            public boolean showsTabs() {
+                return mStatusBarStateController.getState() == SHADE
+                        && mPanelExpansionInteractor.isFullyExpanded()
+                        && !mPanelExpansionInteractor.isTracking()
+                        && !mQuickSettingsController.isCustomizing();
+            }
+
+            @Override
+            public boolean showsControls() {
+                return mQuickSettingsController.getExpanded();
+            }
+
+            @Override
+            public boolean takesSidewaysDrag(float rawX, float rawY) {
+                return !mQuickSettingsController.getExpanded()
+                                && mNotificationStackScrollLayoutController
+                                        .getChildAtRawPosition(rawX, rawY) != null
+                        || WheelNavigator.takesSidewaysDrag(mView, (int) rawX, (int) rawY);
+            }
+
+            @Override
+            public boolean isRtl() {
+                return mView.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
+            }
+
+            @Override
+            public void switchTab() {
+                if (mQuickSettingsController.getExpanded()) {
+                    closeFullPanel();
+                } else {
+                    openFullPanel();
+                }
             }
         });
         mView.setInteractionEventHandler(new NotificationShadeWindowView.InteractionEventHandler() {
@@ -476,6 +534,11 @@ public class NotificationShadeWindowViewController implements Dumpable {
                 }
 
                 mFalsingCollector.onTouchEvent(ev);
+                if (mWheelTabSwipe != null && mWheelTabSwipe.onTouchEvent(ev)) {
+                    // The swipe switched the wheel shade's tab: nothing under it takes the touch
+                    cancelCurrentTouch();
+                    return logDownOrFalseResultDispatch(ev, "wheel shade tab swipe", true);
+                }
                 mQQSGestureHandler.onTouchEvent(ev);
                 // Pass touch events to the pulsing gesture listener only if it's dozing,
                 // otherwise lockscreen DT2S and AOD DT2W will conflict.
@@ -717,6 +780,26 @@ public class NotificationShadeWindowViewController implements Dumpable {
 
     public NotificationShadeWindowView getView() {
         return mView;
+    }
+
+    /** Opens the shade's full panel, the wheel shade's Controls tab. Whether it could. */
+    private boolean openFullPanel() {
+        final StatusBarManager statusBar =
+                mView.getContext().getSystemService(StatusBarManager.class);
+        if (statusBar == null) {
+            return false;
+        }
+        statusBar.expandSettingsPanel();
+        return true;
+    }
+
+    /** Closes the full panel back to the quick one, the wheel shade's Notifications tab. */
+    private void closeFullPanel() {
+        if (mQuickSettingsController instanceof QuickSettingsControllerImpl impl) {
+            impl.animateCloseQs(false /* animateAway */);
+        } else {
+            mQuickSettingsController.closeQs();
+        }
     }
 
     public void cancelCurrentTouch() {

@@ -282,7 +282,7 @@ public class NotificationContentView extends FrameLayout implements Notification
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         if (getResources().getBoolean(R.bool.config_r1CompactQs)) {
-            boolean enabled = WheelLayoutSettings.enabled(getContext());
+            boolean enabled = WheelLayoutSettings.shade(getContext());
             int columns = WheelLayoutSettings.columns(getContext());
             if (!(mContractedWrapper instanceof NotificationCustomViewWrapper))
                 WheelNotificationLayout.apply(mContractedChild, enabled, columns);
@@ -323,12 +323,14 @@ public class NotificationContentView extends FrameLayout implements Notification
         if (mContractedChild != null) {
             int heightSpec;
             int size = mSmallHeight;
-            if (WheelLayoutSettings.enabled(getContext())) {
+            if (WheelLayoutSettings.shade(getContext())) {
                 View actions = mContractedChild.findViewById(com.android.internal.R.id.actions);
                 if (actions
                         instanceof com.android.internal.widget.NotificationActionListLayout list) {
                     size += list.getButtonListExtraHeight();
                 }
+                // The larger text, so its line isn't cut off at the bottom
+                size += WheelNotificationLayout.extraHeight(mContractedChild);
             }
             ViewGroup.LayoutParams layoutParams = mContractedChild.getLayoutParams();
             boolean useExactly = false;
