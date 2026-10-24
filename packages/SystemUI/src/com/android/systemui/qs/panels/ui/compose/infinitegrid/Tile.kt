@@ -107,6 +107,7 @@ import com.android.systemui.qs.tileimpl.QSTileImpl
 import com.android.systemui.qs.ui.composable.QuickSettingsShade
 import com.android.systemui.qs.ui.compose.borderOnFocus
 import com.android.systemui.res.R
+import com.android.systemui.wheel.LocalWheelLayout
 import kotlinx.coroutines.CoroutineScope
 import platform.test.motion.compose.values.MotionTestValueKey
 import platform.test.motion.compose.values.motionTestValues
@@ -218,6 +219,8 @@ fun ContentScope.Tile(
             modifier = modifier,
             enabled = Flags.enableQsTileTooltips(),
         ) { modifier ->
+            val wheelLayout = LocalWheelLayout.current.enabled
+            val focusColor = MaterialTheme.colorScheme.secondary
             TileExpandable(
                 expandable = expandable,
                 color = { animatedColor },
@@ -227,10 +230,10 @@ fun ContentScope.Tile(
                 modifier =
                     modifier
                         .then(surfaceRevealModifier)
-                        .borderOnFocus(
-                            color = MaterialTheme.colorScheme.secondary,
-                            tileShape.topEnd,
-                        )
+                        // The wheel's own ring shows where it is, the focus stays behind it
+                        .thenIf(!wheelLayout) {
+                            Modifier.borderOnFocus(color = focusColor, tileShape.topEnd)
+                        }
                         .sysuiResTag("tile_expandable")
                         .fillMaxWidth()
                         .bounceable(

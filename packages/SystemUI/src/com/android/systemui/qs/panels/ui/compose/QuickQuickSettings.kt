@@ -30,13 +30,11 @@ import com.android.compose.animation.scene.ContentScope
 import com.android.systemui.compose.modifiers.sysuiResTag
 import com.android.systemui.grid.ui.compose.VerticalSpannedGrid
 import com.android.systemui.qs.composefragment.ui.GridAnchor
-import com.android.systemui.qs.panels.shared.model.SizedTileImpl
 import com.android.systemui.qs.panels.ui.compose.infinitegrid.Tile
 import com.android.systemui.qs.panels.ui.viewmodel.BounceableTileViewModel
 import com.android.systemui.qs.panels.ui.viewmodel.QuickQuickSettingsViewModel
 import com.android.systemui.qs.shared.ui.QuickSettings.Elements.toElementKey
 import com.android.systemui.res.R
-import com.android.systemui.wheel.LocalWheelLayout
 
 @Composable
 fun ContentScope.QuickQuickSettings(
@@ -44,11 +42,8 @@ fun ContentScope.QuickQuickSettings(
     modifier: Modifier = Modifier,
     listening: () -> Boolean,
 ) {
-    val wheel = LocalWheelLayout.current
-    val columns = if (wheel.enabled) wheel.columns * 2 else viewModel.columns
-    val sizedTiles =
-        if (wheel.enabled) viewModel.tileViewModels.take(2).map { SizedTileImpl(it.tile, 2) }
-        else viewModel.tileViewModels
+    val columns = viewModel.columns
+    val sizedTiles = viewModel.tileViewModels
     val tiles = sizedTiles.fastMap { it.tile }
     val squishiness by viewModel.squishinessViewModel.squishiness.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -71,7 +66,7 @@ fun ContentScope.QuickQuickSettings(
             Element(it.tile.spec.toElementKey(), Modifier) {
                 Tile(
                     tile = it.tile,
-                    iconOnly = !wheel.enabled && it.isIcon,
+                    iconOnly = it.isIcon,
                     squishiness = { squishiness },
                     coroutineScope = scope,
                     bounceableInfo =

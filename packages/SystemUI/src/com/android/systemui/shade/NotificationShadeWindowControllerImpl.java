@@ -88,6 +88,8 @@ import com.android.systemui.Flags;
 
 import dagger.Lazy;
 
+import com.android.systemui.wheel.WheelLayoutSettings;
+
 import lineageos.providers.LineageSettings;
 
 import java.io.PrintWriter;
@@ -661,8 +663,11 @@ public class NotificationShadeWindowControllerImpl
         }
 
         // With the wheel UI the side button picks the focused notification or tile while the
-        // shade is pulled down over an app (WindowRootView), as in the power menu
-        if (state.shadeOrQsExpanded && !state.isKeyguardShowingAndNotOccluded()
+        // shade is pulled down over an app (WindowRootView), as in the power menu, and on the lock
+        // screen the Unlock button, a notification or the bouncer's keys
+        final boolean onKeyguard = state.isKeyguardShowingAndNotOccluded() && !state.dozing
+                && !state.keyguardGoingAway && WheelLayoutSettings.lockscreen(mContext);
+        if ((state.shadeOrQsExpanded && !state.isKeyguardShowingAndNotOccluded() || onKeyguard)
                 && mContext.getResources().getBoolean(R.bool.config_powerMenuWheelNavigation)
                 && LineageSettings.Secure.getInt(mContext.getContentResolver(),
                         LineageSettings.Secure.WHEEL_UI, 1) != 0) {
