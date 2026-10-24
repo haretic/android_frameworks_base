@@ -205,7 +205,7 @@ public class PowerMenuStatsPanel extends LinearLayout implements PowerMenuStatsS
         final String clusters = PowerMenuStatsFormat.cpuClusters(s.bigMhz, s.littleMhz,
                 s.cpuMhz);
         mCpu.show(PowerMenuStatsFormat.cpuValue(s.cpuPercent),
-                mClustersOnOneLine ? clusters.replace("\n", " · ") : clusters,
+                mClustersOnOneLine ? clusters.replace("\n", " - ") : clusters,
                 PowerMenuStatsFormat.LEVEL_NORMAL);
         // 48°C, max 61°C: the hottest sample in the graph's window (about 10 minutes)
         mTemp.show(PowerMenuStatsFormat.tempValue(s.tempC),
