@@ -70,6 +70,9 @@ public class FooterView extends StackScrollerDecorView {
     private ConstraintLayout mButtonLayout;
     private ConstraintSet mStockButtonConstraints;
     private int mButtonColumns;
+    private int mStockButtonGravity = -1;
+    private int mStockButtonPaddingStart;
+    private int mStockButtonDrawablePadding;
     private final ContentObserver mWheelLayoutObserver =
             new ContentObserver(new Handler(Looper.getMainLooper())) {
                 @Override
@@ -356,6 +359,23 @@ public class FooterView extends StackScrollerDecorView {
                             ? null
                             : getContext()
                                     .getString(R.string.notification_settings_button_description));
+            // As list rows: the label beside its icon from the start, not centred on the row
+            for (FooterViewButton button : new FooterViewButton[] {mHistoryButton, mSettingsButton}) {
+                if (mStockButtonGravity == -1) {
+                    mStockButtonGravity = button.getGravity();
+                    mStockButtonPaddingStart = button.getPaddingStart();
+                    mStockButtonDrawablePadding = button.getCompoundDrawablePadding();
+                }
+                final float density = getResources().getDisplayMetrics().density;
+                button.setGravity(columns == 1
+                        ? android.view.Gravity.START | android.view.Gravity.CENTER_VERTICAL
+                        : mStockButtonGravity);
+                button.setPaddingRelative(
+                        columns == 1 ? Math.round(16 * density) : mStockButtonPaddingStart,
+                        button.getPaddingTop(), button.getPaddingEnd(), button.getPaddingBottom());
+                button.setCompoundDrawablePadding(columns == 1
+                        ? Math.round(16 * density) : mStockButtonDrawablePadding);
+            }
             layout.applyTo(mButtonLayout);
             mButtonColumns = columns;
         }
