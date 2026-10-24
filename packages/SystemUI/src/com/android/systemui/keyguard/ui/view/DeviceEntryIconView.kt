@@ -20,8 +20,10 @@ import android.companion.virtualdevice.flags.Flags
 import android.content.Context
 import android.graphics.drawable.AnimatedStateListDrawable
 import android.graphics.drawable.AnimatedVectorDrawable
+import android.graphics.drawable.GradientDrawable
 import android.util.AttributeSet
 import android.util.StateSet
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewConfiguration
@@ -29,6 +31,8 @@ import android.view.ViewGroup
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import com.airbnb.lottie.LottieCompositionFactory
 import com.airbnb.lottie.LottieDrawable
@@ -61,6 +65,17 @@ constructor(
     val bgView: ImageView = ImageView(context, attrs).apply { id = R.id.device_entry_icon_bg }
     val aodFpDrawable: LottieDrawable = LottieDrawable()
     var accessibilityHintType: AccessibilityHintType = AccessibilityHintType.NONE
+
+    /** Whether the icon sits in the wheel UI's slot, a row with its label, see setWheelPill. */
+    var wheelLayout = false
+        private set
+
+    /** Whether that row shows as the Unlock pill. */
+    var wheelPill = false
+        private set
+
+    private var wheelRow: LinearLayout? = null
+    private var wheelLabel: TextView? = null
 
     private var animatedIconDrawable: AnimatedStateListDrawable = AnimatedStateListDrawable()
 
@@ -245,15 +260,13 @@ constructor(
         touchHandlingView.layoutParams = lp
     }
 
-    private fun addIconImageView() {
+    private fun addIconImageView(index: Int = -1) {
         iconView.scaleType = ImageView.ScaleType.CENTER_CROP
         iconView.setImageDrawable(animatedIconDrawable)
-        addView(iconView)
-        val lp = iconView.layoutParams as LayoutParams
-        lp.height = ViewGroup.LayoutParams.MATCH_PARENT
-        lp.width = ViewGroup.LayoutParams.MATCH_PARENT
+        val lp =
+            LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         lp.gravity = Gravity.CENTER
-        iconView.layoutParams = lp
+        addView(iconView, index, lp)
     }
 
     private fun addBgImageView() {
@@ -265,6 +278,80 @@ constructor(
         bgView.layoutParams = lp
         bgView.alpha = 0f
     }
+
+    /**
+     * The wheel UI's Unlock pill: the icon and an Unlock label on a pill the side button presses,
+     * in place of the bare icon. On AOD, where the pill would burn in, the icon alone keeps the
+     * wheel's slot.
+     */
+    fun setWheelPill(wheel: Boolean, pill: Boolean) {
+        wheelPill = wheel && pill
+        if (wheel != wheelLayout) {
+            wheelLayout = wheel
+            removeView(iconView)
+            if (wheel) {
+                val row = wheelRow ?: createWheelRow().also { wheelRow = it }
+                val iconSize = dp(24f)
+                row.addView(iconView, 0, LinearLayout.LayoutParams(iconSize, iconSize))
+                addView(
+                    row,
+                    indexOfChild(touchHandlingView),
+                    LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                    ),
+                )
+            } else {
+                wheelRow?.let {
+                    it.removeView(iconView)
+                    removeView(it)
+                }
+                addIconImageView(indexOfChild(touchHandlingView))
+            }
+        }
+        wheelLabel?.visibility = if (wheelPill) View.VISIBLE else View.GONE
+        background =
+            if (wheelPill) {
+                GradientDrawable().apply {
+                    cornerRadius = dp(WHEEL_PILL_RADIUS_DP).toFloat()
+                    setColor(
+                        context.getColor(
+                            com.android.internal.R.color.materialColorSurfaceContainerHigh
+                        )
+                    )
+                }
+            } else {
+                null
+            }
+    }
+
+    private fun createWheelRow(): LinearLayout =
+        LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            val label =
+                TextView(context).apply {
+                    setText(R.string.wheel_unlock)
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+                    setTextColor(
+                        context.getColor(com.android.internal.R.color.materialColorOnSurface)
+                    )
+                    importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
+                }
+            addView(
+                label,
+                LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                    )
+                    .apply { marginStart = dp(10f) },
+            )
+            wheelLabel = label
+        }
+
+    private fun dp(value: Float): Int =
+        TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, resources.displayMetrics)
+            .toInt()
 
     fun getIconState(icon: IconType, aod: Boolean): IntArray {
         val lockIconState = IntArray(2)
@@ -287,6 +374,10 @@ constructor(
         UNLOCK(R.string.accessibility_unlock_button),
         FINGERPRINT(R.string.accessibility_fingerprint_label),
         NONE(-1),
+    }
+
+    private companion object {
+        const val WHEEL_PILL_RADIUS_DP = 24f
     }
 
     enum class AccessibilityHintType {

@@ -181,7 +181,7 @@ public abstract class KeyguardPinBasedInputView extends KeyguardAbsKeyInputView 
         return number;
     }
 
-    private void performNumberClick(int number) {
+    void performNumberClick(int number) {
         if (number >= 0 && number <= 9) {
             mButtons[getNumberIndex(number)].performClick();
         }

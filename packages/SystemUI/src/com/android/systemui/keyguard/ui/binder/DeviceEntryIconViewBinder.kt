@@ -38,11 +38,13 @@ import com.android.systemui.keyguard.ui.view.DeviceEntryIconView
 import com.android.systemui.keyguard.ui.viewmodel.DeviceEntryBackgroundViewModel
 import com.android.systemui.keyguard.ui.viewmodel.DeviceEntryForegroundViewModel
 import com.android.systemui.keyguard.ui.viewmodel.DeviceEntryIconViewModel
+import com.android.systemui.keyguard.ui.viewmodel.toAccessibilityHintType
 import com.android.systemui.lifecycle.repeatWhenAttached
 import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.VibratorHelper
 import com.android.systemui.util.kotlin.DisposableHandles
+import com.android.systemui.wheel.wheelLayoutEnabled
 import com.android.systemui.window.domain.interactor.WindowRootViewBlurInteractor
 import com.google.android.msdl.data.model.MSDLToken
 import com.google.android.msdl.domain.MSDLPlayer
@@ -50,6 +52,10 @@ import kotlin.math.min
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DisposableHandle
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import lineageos.providers.LineageSettings
 
 object DeviceEntryIconViewBinder {
     private const val TAG = "DeviceEntryIconViewBinder"
@@ -191,39 +197,48 @@ object DeviceEntryIconViewBinder {
                         }
                     }
                     launch("$TAG#viewModel.accessibilityDelegateHint") {
-                        viewModel.accessibilityDelegateHint.collect { hint ->
-                            view.accessibilityHintType = hint
-                            if (hint != DeviceEntryIconView.AccessibilityHintType.NONE) {
-                                view.setOnClickListener {
-                                    if (Flags.msdlFeedback()) {
-                                        val token =
-                                            if (
-                                                hint ==
-                                                    DeviceEntryIconView.AccessibilityHintType.ENTER
-                                            ) {
-                                                MSDLToken.UNLOCK
-                                            } else {
-                                                MSDLToken.LONG_PRESS
-                                            }
-                                        msdlPlayer.playToken(token)
-                                    } else {
-                                        vibratorHelper.performHapticFeedback(
-                                            view,
-                                            HapticFeedbackConstants.CONFIRM,
-                                        )
-                                    }
-                                    applicationScope.launch {
-                                        view.clearFocus()
-                                        view.clearAccessibilityFocus()
-                                        viewModel.onUserInteraction()
-                                    }
+                        // The wheel UI's Unlock pill takes the side button's press as a click
+                        wheelLockscreen(view)
+                            .flatMapLatest { wheel ->
+                                if (wheel) {
+                                    viewModel.iconType.map { it.toAccessibilityHintType() }
+                                } else {
+                                    viewModel.accessibilityDelegateHint
                                 }
-                            } else {
-                                view.setOnClickListener(null)
-                                view.isClickable = false
-                                view.focusable = View.NOT_FOCUSABLE
                             }
-                        }
+                            .collect { hint ->
+                                view.accessibilityHintType = hint
+                                if (hint != DeviceEntryIconView.AccessibilityHintType.NONE) {
+                                    view.setOnClickListener {
+                                        if (Flags.msdlFeedback()) {
+                                            val token =
+                                                if (
+                                                    hint ==
+                                                        DeviceEntryIconView.AccessibilityHintType.ENTER
+                                                ) {
+                                                    MSDLToken.UNLOCK
+                                                } else {
+                                                    MSDLToken.LONG_PRESS
+                                                }
+                                            msdlPlayer.playToken(token)
+                                        } else {
+                                            vibratorHelper.performHapticFeedback(
+                                                view,
+                                                HapticFeedbackConstants.CONFIRM,
+                                            )
+                                        }
+                                        applicationScope.launch {
+                                            view.clearFocus()
+                                            view.clearAccessibilityFocus()
+                                            viewModel.onUserInteraction()
+                                        }
+                                    }
+                                } else {
+                                    view.setOnClickListener(null)
+                                    view.isClickable = false
+                                    view.focusable = View.NOT_FOCUSABLE
+                                }
+                            }
                     }
 
                     if (Flags.msdlFeedback()) {
@@ -245,31 +260,44 @@ object DeviceEntryIconViewBinder {
                     Log.d(TAG, "Initializing device entry fgIconView")
                     fgIconView.setImageState(StateSet.NOTHING, /* merge */ false)
                     launch("$TAG#fpIconView.viewModel") {
-                        fgViewModel.viewModel.collect { viewModel ->
-                            Log.d(TAG, "Updating device entry icon image state $viewModel")
-                            if (viewModel.type.contentDescriptionResId != -1) {
-                                fgIconView.contentDescription =
-                                    fgIconView.resources.getString(
-                                        viewModel.type.contentDescriptionResId
+                        combine(fgViewModel.viewModel, wheelLockscreen(view), ::Pair)
+                            .collect { (viewModel, wheel) ->
+                                Log.d(TAG, "Updating device entry icon image state $viewModel")
+                                view.setWheelPill(
+                                    wheel,
+                                    pill =
+                                        !viewModel.useAodVariant &&
+                                            viewModel.type != DeviceEntryIconView.IconType.NONE,
+                                )
+                                if (viewModel.type.contentDescriptionResId != -1) {
+                                    fgIconView.contentDescription =
+                                        fgIconView.resources.getString(
+                                            viewModel.type.contentDescriptionResId
+                                        )
+                                }
+                                val pillColor =
+                                    if (view.wheelPill) {
+                                        view.context.getColor(
+                                            com.android.internal.R.color.materialColorOnSurface
+                                        )
+                                    } else {
+                                        null
+                                    }
+                                fgIconView.imageTintList =
+                                    ColorStateList.valueOf(
+                                        pillColor ?: overrideColor?.toArgb() ?: viewModel.tint
                                     )
+                                val padding = if (view.wheelLayout) 0 else viewModel.padding
+                                fgIconView.setPadding(padding, padding, padding, padding)
+                                // Set image state at the end after updating other view state. This
+                                // method forces the ImageView to recompute the bounds of the drawable.
+                                fgIconView.setImageState(
+                                    view.getIconState(viewModel.type, viewModel.useAodVariant),
+                                    /* merge */ false,
+                                )
+                                // Invalidate, just in case the padding changes just after icon changes
+                                fgIconView.invalidate()
                             }
-                            fgIconView.imageTintList =
-                                ColorStateList.valueOf(overrideColor?.toArgb() ?: viewModel.tint)
-                            fgIconView.setPadding(
-                                viewModel.padding,
-                                viewModel.padding,
-                                viewModel.padding,
-                                viewModel.padding,
-                            )
-                            // Set image state at the end after updating other view state. This
-                            // method forces the ImageView to recompute the bounds of the drawable.
-                            fgIconView.setImageState(
-                                view.getIconState(viewModel.type, viewModel.useAodVariant),
-                                /* merge */ false,
-                            )
-                            // Invalidate, just in case the padding changes just after icon changes
-                            fgIconView.invalidate()
-                        }
                     }
                 }
             }
@@ -319,3 +347,7 @@ object DeviceEntryIconViewBinder {
         return disposables
     }
 }
+
+/** Whether the lock screen takes the wheel UI's Unlock pill. */
+private fun wheelLockscreen(view: View) =
+    wheelLayoutEnabled(view.context, LineageSettings.Secure.WHEEL_LOCKSCREEN)
