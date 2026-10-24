@@ -16,6 +16,10 @@
 
 package com.android.settingslib.spa.widget.scaffold
 
+import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -44,10 +48,29 @@ fun RegularScaffold(
     content: @Composable () -> Unit,
 ) {
     SettingsScaffold(title, isFirstLayerPageWhenEmbedded, actions) { paddingValues ->
-        Column(Modifier.verticalScroll(rememberScrollState())) {
-            Spacer(Modifier.height(paddingValues.calculateTopPadding()))
-            content()
-            Spacer(Modifier.height(paddingValues.calculateBottomPadding()))
+        // Under the wheel UI's focus (config_wheelFocus) the scrolling column starts below the
+        // app bar: one that runs up behind it is passed over by the focus search going down from
+        // the bar, and the wheel would never reach the page
+        val resources = LocalContext.current.resources
+        val wheelFocus = remember(LocalConfiguration.current) {
+            val id = resources.getIdentifier("config_wheelFocus", "bool", "android")
+            id != 0 && resources.getBoolean(id)
+        }
+        if (wheelFocus) {
+            Column(
+                Modifier
+                    .padding(top = paddingValues.calculateTopPadding())
+                    .verticalScroll(rememberScrollState())
+            ) {
+                content()
+                Spacer(Modifier.height(paddingValues.calculateBottomPadding()))
+            }
+        } else {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Spacer(Modifier.height(paddingValues.calculateTopPadding()))
+                content()
+                Spacer(Modifier.height(paddingValues.calculateBottomPadding()))
+            }
         }
     }
 }
