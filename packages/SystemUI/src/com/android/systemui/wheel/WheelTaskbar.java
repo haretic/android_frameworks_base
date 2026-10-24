@@ -150,10 +150,15 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private static final String MODE_BRIGHTNESS = "brightness";
     private static final String MODE_MEDIA = "media";
     private static final String MODE_ZOOM = "zoom";
+    /** Touch zones: kept as "touch:X1:Y1:X2:Y2", the points the steps tap (r1-wheeld). */
+    private static final String MODE_TOUCH = "touch";
     /** Every mode, in the order the Wheel mode list shows them. */
     private static final List<String> MODES = List.of(MODE_TASKBAR, MODE_APP, MODE_SCROLL,
             MODE_TAB, MODE_ARROWS, MODE_PAGE, MODE_VOLUME, MODE_BRIGHTNESS, MODE_MEDIA,
-            MODE_ZOOM);
+            MODE_ZOOM, MODE_TOUCH);
+    /** The R1Wheel page that places an app's touch zones over it. */
+    private static final ComponentName TOUCH_ZONES = new ComponentName(
+            "cat.kenny.r1.wheel.settings", "cat.kenny.r1.wheel.settings.TouchZonesActivity");
 
     /**
      * A spin's speed is its steps over the last SPIN_WINDOW_MS. Above STRIDE_RATE steps a
@@ -430,6 +435,9 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 readAppModes();
                 updateMode();
                 requestApps();
+                if (mModeClient != null) {
+                    mModeClient.tune(mSettings.daemonTuning(newUser));
+                }
             }
         }, mContext.getMainExecutor());
         requestApps();
@@ -466,6 +474,21 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             mShadeExpanded = expanded;
             updateMode();
         });
+        // The user's tuning of the wheel's feel, which the daemon applies
+        final android.database.ContentObserver tuning =
+                new android.database.ContentObserver(mHandler) {
+                    @Override
+                    public void onChange(boolean selfChange) {
+                        mModeClient.tune(mSettings.daemonTuning(mUserTracker.getUserId()));
+                    }
+                };
+        for (String key : new String[] {LineageSettings.Secure.WHEEL_SCROLL_DISTANCE,
+                LineageSettings.Secure.WHEEL_SPIN, LineageSettings.Secure.WHEEL_PRESS_GUARD,
+                LineageSettings.Secure.WHEEL_REVERSE}) {
+            mContext.getContentResolver().registerContentObserver(
+                    LineageSettings.Secure.getUriFor(key), false, tuning, UserHandle.USER_ALL);
+        }
+        mModeClient.tune(mSettings.daemonTuning(mUserTracker.getUserId()));
         readAppModes();
         updateMode();
     }
@@ -567,7 +590,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             final int equals = entry.indexOf('=');
             if (equals > 0) {
                 final String mode = entry.substring(equals + 1);
-                if (MODES.contains(mode)) {
+                if (MODES.contains(mode) && !mode.equals(MODE_TOUCH)
+                        || mode.matches("touch(:\\d{1,4}){4}")) {
                     mAppModes.put(entry.substring(0, equals), mode);
                 }
             }
@@ -931,6 +955,10 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             }
         });
         mWindowManager.addView(root, lp);
+        // Its own highlight marks the focus, the framework's ring would be a second one
+        if (root.getViewRootImpl() != null) {
+            root.getViewRootImpl().setWheelFocusRingHidden(true);
+        }
         staggerIn();
         // The wheel starts where it was left, the light shows at once
         focusRemembered();
@@ -2309,7 +2337,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         int focusIndex = 0;
         for (int i = 0; i < MODES.size(); i++) {
             final String mode = MODES.get(i);
-            final boolean isCurrent = mode.equals(current);
+            final boolean isCurrent = mode.equals(modeKind(current));
             if (isCurrent) {
                 focusIndex = i;
             }
@@ -2317,6 +2345,16 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                     isCurrent ? mContext.getString(R.string.wheel_taskbar_mode_current) : null;
             addRow(mContext.getDrawable(modeIconRes(mode)), modeName(mode), summary, true)
                     .setOnClickListener(v -> {
+                        if (mode.equals(MODE_TOUCH)) {
+                            // Placed over the app, which keeps its mode until they're saved
+                            hide();
+                            startActivity(new Intent().setComponent(TOUCH_ZONES)
+                                    .putExtra("package", app)
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                                            | Intent.FLAG_ACTIVITY_MULTIPLE_TASK
+                                            | Intent.FLAG_ACTIVITY_NO_ANIMATION));
+                            return;
+                        }
                         setAppMode(app, mode);
                         if (mModeIcon != null) {
                             mModeIcon.setImageResource(modeIconRes(mode));
@@ -2516,8 +2554,13 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         return mBarService;
     }
 
+    /** What kind of mode it is: touch zones are touch, whatever their points. */
+    private static String modeKind(String mode) {
+        return mode.startsWith(MODE_TOUCH + ":") ? MODE_TOUCH : mode;
+    }
+
     private String modeName(String mode) {
-        switch (mode) {
+        switch (modeKind(mode)) {
             case MODE_APP:
                 return mContext.getString(R.string.wheel_taskbar_mode_app,
                         WheelTaskbarApps.appLabel(userContext().getPackageManager(),
@@ -2538,6 +2581,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 return mContext.getString(R.string.wheel_taskbar_mode_media);
             case MODE_ZOOM:
                 return mContext.getString(R.string.wheel_taskbar_mode_zoom);
+            case MODE_TOUCH:
+                return mContext.getString(R.string.wheel_taskbar_mode_touch);
             default:
                 return mContext.getString(R.string.wheel_taskbar_mode_taskbar);
         }
@@ -2548,7 +2593,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     }
 
     private static int modeIconRes(String mode) {
-        switch (mode) {
+        switch (modeKind(mode)) {
             case MODE_APP:
                 return R.drawable.ic_wheel_taskbar_mode_app;
             case MODE_SCROLL:
@@ -2567,6 +2612,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 return R.drawable.ic_wheel_taskbar_mode_media;
             case MODE_ZOOM:
                 return R.drawable.ic_wheel_taskbar_mode_zoom;
+            case MODE_TOUCH:
+                return R.drawable.ic_wheel_taskbar_mode_touch;
             default:
                 return R.drawable.ic_wheel_taskbar_mode;
         }
