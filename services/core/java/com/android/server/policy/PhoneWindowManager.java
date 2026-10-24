@@ -1715,7 +1715,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private void powerLongPress(long eventTime) {
         if (isWheelSideButtonInput()) {
             mPowerKeyHandled = true;
-            performWheelSideButtonAction(true);
+            if (wheelFocusedWindowSelects()) {
+                // A hold on the shade's or taskbar's focused item: its long press
+                injectWheelSideButtonHold(eventTime);
+            } else {
+                performWheelSideButtonAction(true);
+            }
             return;
         }
         final int behavior = mResolvedLongPressOnPowerBehavior;
@@ -3009,8 +3014,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
         private void onLongPress(@NonNull SingleKeyGestureEvent event) {
             if (mSingleKeyGestureDetector.beganFromNonInteractive()
-                    && !mSupportLongPressPowerWhenNonInteractive
-                    && !isWheelSideButtonInput()) {
+                    && (!mSupportLongPressPowerWhenNonInteractive || isWheelSideButtonInput())) {
                 Slog.v(TAG, "Not support long press power when device is not interactive.");
                 return;
             }
@@ -4652,6 +4656,29 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     private void injectWheelSideButtonKey(int keyCode) {
         injectWheelSideButtonKey(keyCode, SystemClock.uptimeMillis());
+    }
+
+    /**
+     * A long press of the select key for the focused system window, as the side button held: down,
+     * the repeat a held key sends, then up, which the window takes as the end of the hold.
+     */
+    private void injectWheelSideButtonHold(long downTime) {
+        final long now = SystemClock.uptimeMillis();
+        final KeyEvent down = new KeyEvent(downTime, downTime, KeyEvent.ACTION_DOWN,
+                KeyEvent.KEYCODE_DPAD_CENTER, 0, 0, KeyCharacterMap.VIRTUAL_KEYBOARD, 0,
+                KeyEvent.FLAG_FROM_SYSTEM, InputDevice.SOURCE_KEYBOARD);
+        final KeyEvent[] hold = {
+                down,
+                KeyEvent.changeTimeRepeat(down, now, 1,
+                        KeyEvent.FLAG_FROM_SYSTEM | KeyEvent.FLAG_LONG_PRESS),
+                // Flagged too, so a window that only reads releases doesn't take it as a press
+                KeyEvent.changeAction(KeyEvent.changeTimeRepeat(down, now, 0,
+                        KeyEvent.FLAG_FROM_SYSTEM | KeyEvent.FLAG_LONG_PRESS), KeyEvent.ACTION_UP),
+        };
+        for (KeyEvent key : hold) {
+            key.setDisplayId(DEFAULT_DISPLAY);
+            mInputManager.injectInputEvent(key, InputManager.INJECT_INPUT_EVENT_MODE_ASYNC);
+        }
     }
 
     private void injectWheelSideButtonKey(int keyCode, long downTime) {
