@@ -296,4 +296,7 @@
 
   <!-- View tag associating a view with its id for widget metrics. -->
   <item type="id" name="remoteViewsMetricsId" />
+
+  <!-- Tag on an alert dialog's button bar once WheelDialogButtons listed its buttons. -->
+  <item type="id" name="wheel_dialog_buttons" />
 </resources>

@@ -1068,8 +1068,88 @@ public abstract class AbsSeekBar extends ProgressBar {
     void onKeyChange() {
     }
 
+    /** How long a slider the side button grabbed waits for the wheel before letting go. */
+    private static final long WHEEL_GRAB_TIMEOUT_MS = 4000;
+    /** Steps of the wheel from one end of a grabbed slider to the other. */
+    private static final int WHEEL_GRAB_STEPS = 50;
+    /** The same while the wheel spins. */
+    private static final int WHEEL_GRAB_FAST_STEPS = 10;
+    private static final long WHEEL_GRAB_FAST_STEP_MS = 60;
+
+    private boolean mWheelGrabbed;
+    private long mWheelLastStep;
+    private final Runnable mWheelLetGo = () -> setWheelGrabbed(false);
+
+    /**
+     * The wheel UI's sliders (config_wheelFocus): the side button's press (Enter) grabs the slider,
+     * the wheel's steps (up and down) then set it, and a press or a pause lets it go.
+     */
+    private boolean onWheelKeyDown(int keyCode, KeyEvent event) {
+        if (!getContext().getResources().getBoolean(R.bool.config_wheelFocus)) {
+            return false;
+        }
+        if (KeyEvent.isConfirmKey(keyCode)) {
+            if (event.getRepeatCount() == 0) {
+                setWheelGrabbed(!mWheelGrabbed);
+            }
+            return true;
+        }
+        if (!mWheelGrabbed
+                || keyCode != KeyEvent.KEYCODE_DPAD_DOWN && keyCode != KeyEvent.KEYCODE_DPAD_UP) {
+            return false;
+        }
+        removeCallbacks(mWheelLetGo);
+        postDelayed(mWheelLetGo, WHEEL_GRAB_TIMEOUT_MS);
+        final long now = event.getEventTime();
+        final boolean fast = now - mWheelLastStep < WHEEL_GRAB_FAST_STEP_MS;
+        mWheelLastStep = now;
+        final int span = getMax() - getMin();
+        final int step = Math.max(mKeyProgressIncrement,
+                Math.round(span / (float) (fast ? WHEEL_GRAB_FAST_STEPS : WHEEL_GRAB_STEPS)));
+        final int direction = keyCode == KeyEvent.KEYCODE_DPAD_DOWN ? 1 : -1;
+        if (setProgressInternal(getProgress() + direction * step, true, true)) {
+            onKeyChange();
+        }
+        return true;
+    }
+
+    private void setWheelGrabbed(boolean grabbed) {
+        removeCallbacks(mWheelLetGo);
+        if (grabbed == mWheelGrabbed) {
+            return;
+        }
+        mWheelGrabbed = grabbed;
+        // The thumb shows its pressed halo while the wheel has the slider
+        setPressed(grabbed);
+        if (grabbed) {
+            postDelayed(mWheelLetGo, WHEEL_GRAB_TIMEOUT_MS);
+            Toast.makeText(getContext(), R.string.wheel_slider_grabbed, Toast.LENGTH_SHORT).show();
+            onStartTrackingTouch();
+        } else {
+            onStopTrackingTouch();
+        }
+    }
+
+    @Override
+    protected void onFocusChanged(boolean gainFocus, int direction,
+            @Nullable Rect previouslyFocusedRect) {
+        super.onFocusChanged(gainFocus, direction, previouslyFocusedRect);
+        if (!gainFocus) {
+            setWheelGrabbed(false);
+        }
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        setWheelGrabbed(false);
+        super.onDetachedFromWindow();
+    }
+
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if (isEnabled() && onWheelKeyDown(keyCode, event)) {
+            return true;
+        }
         if (isEnabled()) {
             int increment = mKeyProgressIncrement;
             switch (keyCode) {
