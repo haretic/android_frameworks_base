@@ -146,7 +146,11 @@ fun ContentScope.FooterActionsWithAnimatedVisibility(
 
 /** The Quick Settings footer actions row. */
 @Composable
-fun FooterActions(viewModel: FooterActionsViewModel, modifier: Modifier = Modifier) {
+fun FooterActions(
+    viewModel: FooterActionsViewModel,
+    modifier: Modifier = Modifier,
+    wheelLeadingAction: (@Composable () -> Unit)? = null,
+) {
     val context = LocalContext.current
 
     // Collect alphas as soon as we are composed, even when not visible.
@@ -211,6 +215,7 @@ fun FooterActions(viewModel: FooterActionsViewModel, modifier: Modifier = Modifi
             userSwitcher = userSwitcher,
             settings = settings,
             power = viewModel.power,
+            leadingAction = wheelLeadingAction,
             modifier =
                 modifier
                     .fillMaxWidth()
@@ -297,6 +302,7 @@ private fun WheelFooterActions(
     userSwitcher: FooterActionsButtonViewModel?,
     settings: FooterActionsButtonViewModel?,
     power: FooterActionsButtonViewModel?,
+    leadingAction: (@Composable () -> Unit)?,
     modifier: Modifier,
 ) {
     Column(modifier, verticalArrangement = spacedBy(8.dp)) {
@@ -306,10 +312,13 @@ private fun WheelFooterActions(
         }
         security?.let { AnimatedFooterTextButton(it, true, Modifier.fillMaxWidth()) }
         foregroundServices?.let { AnimatedFooterTextButton(it, true, Modifier.fillMaxWidth()) }
+        // Small buttons in a row at the end, each its own wheel stop: edit, user, settings, power
         Row(
             Modifier.fillMaxWidth(),
-            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End,
+            horizontalArrangement = spacedBy(8.dp, Alignment.End),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
+            leadingAction?.invoke()
             IconButton({ userSwitcher }, true, Modifier.sysuiResTag("multi_user_switch"))
             IconButton({ settings }, true, Modifier.sysuiResTag("settings_button_container"))
             IconButton({ power }, true, Modifier.sysuiResTag("pm_lite"))

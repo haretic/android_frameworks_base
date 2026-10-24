@@ -85,6 +85,7 @@ import com.android.systemui.statusbar.policy.NextAlarmController
 import com.android.systemui.statusbar.policy.VariableDateView
 import com.android.systemui.statusbar.policy.VariableDateViewController
 import com.android.systemui.util.ViewController
+import com.android.systemui.wheel.WheelLayoutSettings
 import dagger.Lazy
 import java.io.PrintWriter
 import javax.inject.Inject
@@ -561,7 +562,8 @@ constructor(
 
     private fun updateScrollY() {
         if (!largeScreenActive) {
-            header.scrollY = qsScrollY
+            // The wheel shade's header stays over its tabs, which stay put as the list scrolls
+            header.scrollY = if (WheelLayoutSettings.shade(context)) 0 else qsScrollY
         }
     }
 

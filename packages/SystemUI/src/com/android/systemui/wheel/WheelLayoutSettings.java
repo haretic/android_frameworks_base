@@ -22,6 +22,31 @@ public final class WheelLayoutSettings {
                         != 0;
     }
 
+    /** Whether the shade takes the wheel UI's revised layout, its tabs and list tiles. */
+    public static boolean shade(Context context) {
+        return component(context, LineageSettings.Secure.WHEEL_SHADE);
+    }
+
+    /** Whether the lock screen takes the wheel UI's revised layout, its Unlock button and PIN. */
+    public static boolean lockscreen(Context context) {
+        return component(context, LineageSettings.Secure.WHEEL_LOCKSCREEN);
+    }
+
+    /**
+     * Whether the wheel UI is on with the component's revised layout, the component's setting
+     * being one of LineageSettings.Secure.WHEEL_SHADE and the like; null for the wheel UI alone.
+     */
+    public static boolean component(Context context, String setting) {
+        return enabled(context)
+                && (setting == null
+                        || LineageSettings.Secure.getIntForUser(
+                                        context.getContentResolver(),
+                                        setting,
+                                        1,
+                                        ActivityManager.getCurrentUser())
+                                != 0);
+    }
+
     public static int columns(Context context) {
         return Math.max(
                 1,

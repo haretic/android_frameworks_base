@@ -162,6 +162,21 @@ public final class WheelNavigator {
         boolean shallower();
     }
 
+    /**
+     * A stop that takes the wheel itself while it has it, as the bouncer's PIN drum: the wheel turns
+     * it, the side button presses and holds it.
+     */
+    public interface Dial {
+        /** One step of the wheel, down the list for 1, up for -1. */
+        void onWheelStep(int direction);
+
+        /** A press of the side button. */
+        void onWheelPress();
+
+        /** A hold of the side button. */
+        void onWheelHold();
+    }
+
     public void setLevels(Levels levels) {
         mLevels = levels;
     }
@@ -182,10 +197,7 @@ public final class WheelNavigator {
                 }
                 return true;
             case KeyEvent.KEYCODE_DPAD_CENTER:
-                if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) {
-                    press();
-                }
-                return true;
+                // The side button as the policy hands it on, its hold as a long press
             case KeyEvent.KEYCODE_POWER:
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
                     if (event.getRepeatCount() == 0) {
@@ -212,6 +224,21 @@ public final class WheelNavigator {
         hideRing();
     }
 
+    /**
+     * Puts the wheel on the view, as on the lock screen's Unlock button once the screen is on;
+     * whether it is a stop now.
+     */
+    public boolean focus(View view) {
+        for (Stop stop : stops()) {
+            if (stop.host == view && stop.virtualId == AccessibilityNodeProvider.HOST_VIEW_ID) {
+                reset();
+                moveTo(stop);
+                return true;
+            }
+        }
+        return false;
+    }
+
     // ---- Moving ----
 
     private void step(int direction, long time) {
@@ -219,6 +246,12 @@ public final class WheelNavigator {
         mLastStepTime = time;
         if (mGrabbed && mStop != null) {
             adjust(direction, fast);
+            return;
+        }
+        final Dial dial = dial();
+        if (dial != null) {
+            dial.onWheelStep(direction);
+            WheelFeedback.get(mRoot.getContext()).step(direction < 0);
             return;
         }
         if (mPendingStep != null) {
@@ -275,8 +308,7 @@ public final class WheelNavigator {
             mRoot.postDelayed(this::firstStop, LEVEL_SETTLE_MS);
             return;
         } else if (index + direction < 0
-                && !(mLevels == null
-                        && WheelLayoutSettings.enabled(mRoot.getContext())
+                && !(WheelLayoutSettings.enabled(mRoot.getContext())
                         && lineageos.providers.LineageSettings.Secure.getIntForUser(
                                         mRoot.getContext().getContentResolver(),
                                         lineageos.providers.LineageSettings.Secure
@@ -376,6 +408,12 @@ public final class WheelNavigator {
     }
 
     private void press() {
+        final Dial dial = dial();
+        if (dial != null) {
+            WheelFeedback.get(mRoot.getContext()).select();
+            dial.onWheelPress();
+            return;
+        }
         final AccessibilityNodeInfo node = mStop == null ? null : node(mStop);
         if (node == null) {
             step(1, SystemClock.uptimeMillis());
@@ -398,6 +436,31 @@ public final class WheelNavigator {
         final Stop toggle = checkableIn(mStop);
         feedback.select();
         performAction(toggle != null ? toggle : mStop, AccessibilityNodeInfo.ACTION_CLICK, null);
+        if (isShadeTabs(node)) {
+            // The other tab: its first stop past the header, once it's laid out
+            reset();
+            mRoot.postDelayed(this::firstPastTabs, LEVEL_SETTLE_MS);
+        }
+    }
+
+    private static boolean isShadeTabs(AccessibilityNodeInfo node) {
+        final String id = node.getViewIdResourceName();
+        return id != null && id.endsWith("/" + WheelShadeTabsKt.WHEEL_SHADE_TABS_TAG);
+    }
+
+    private void firstPastTabs() {
+        if (mStop != null) {
+            return;
+        }
+        final List<Stop> stops = stops();
+        for (int i = 0; i < stops.size(); i++) {
+            final AccessibilityNodeInfo node = node(stops.get(i));
+            if (node != null && isShadeTabs(node)) {
+                moveTo(stops.get(i + 1 < stops.size() ? i + 1 : i));
+                return;
+            }
+        }
+        firstStop();
     }
 
     private void hold() {
@@ -405,7 +468,22 @@ public final class WheelNavigator {
             return;
         }
         WheelFeedback.get(mRoot.getContext()).select();
+        final Dial dial = dial();
+        if (dial != null) {
+            dial.onWheelHold();
+            return;
+        }
         performAction(mStop, AccessibilityNodeInfo.ACTION_LONG_CLICK, null);
+    }
+
+    /** The stop's dial, while it is one that is still showing. */
+    private Dial dial() {
+        return mStop != null
+                        && mStop.virtualId == AccessibilityNodeProvider.HOST_VIEW_ID
+                        && mStop.host instanceof Dial dial
+                        && mStop.host.isShown()
+                ? dial
+                : null;
     }
 
     private void adjust(int direction, boolean fast) {
@@ -438,6 +516,77 @@ public final class WheelNavigator {
             mGrabbed = false;
             mRing.setGrabbed(false);
         }
+    }
+
+    // ---- Sideways drags ----
+
+    /**
+     * Whether a control at the screen point takes a sideways drag of its own: a slider, or what
+     * scrolls sideways, as the media carousel. A swipe across the shade leaves those theirs.
+     */
+    public static boolean takesSidewaysDrag(View root, int x, int y) {
+        return sideways(root, x, y);
+    }
+
+    private static boolean sideways(View view, int x, int y) {
+        if (!view.isShown() || view.getAlpha() == 0f) {
+            return false;
+        }
+        final AccessibilityNodeProvider provider = view.getAccessibilityNodeProvider();
+        if (provider != null) {
+            return sidewaysVirtual(view, provider, AccessibilityNodeProvider.HOST_VIEW_ID, x, y);
+        }
+        final AccessibilityNodeInfo node = view.createAccessibilityNodeInfo();
+        if (!bounds(node).contains(x, y)) {
+            return false;
+        }
+        if (takesSideways(node)) {
+            return true;
+        }
+        if (view instanceof ViewGroup group) {
+            for (int i = 0; i < group.getChildCount(); i++) {
+                if (sideways(group.getChildAt(i), x, y)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean sidewaysVirtual(
+            View host, AccessibilityNodeProvider provider, int id, int x, int y) {
+        final AccessibilityNodeInfo node = provider.createAccessibilityNodeInfo(id);
+        if (node == null || !node.isVisibleToUser() || !bounds(node).contains(x, y)) {
+            return false;
+        }
+        if (takesSideways(node)) {
+            return true;
+        }
+        for (int i = 0; i < node.getChildCount(); i++) {
+            final long childId = node.getChildId(i);
+            final int virtualId = virtualIdOf(childId);
+            if (virtualId == AccessibilityNodeProvider.HOST_VIEW_ID) {
+                // A view inside Compose (AndroidView), as the media carousel
+                final View child =
+                        host.findViewByAccessibilityIdTraversal(
+                                AccessibilityNodeInfo.getAccessibilityViewId(childId));
+                if (child != null && child != host && sideways(child, x, y)) {
+                    return true;
+                }
+            } else if (sidewaysVirtual(host, provider, virtualId, x, y)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean takesSideways(AccessibilityNodeInfo node) {
+        final List<AccessibilityAction> actions = node.getActionList();
+        return node.isEnabled() && isSlider(node)
+                || actions.contains(AccessibilityAction.ACTION_SCROLL_LEFT)
+                || actions.contains(AccessibilityAction.ACTION_SCROLL_RIGHT)
+                || actions.contains(AccessibilityAction.ACTION_PAGE_LEFT)
+                || actions.contains(AccessibilityAction.ACTION_PAGE_RIGHT);
     }
 
     // ---- The stops ----
@@ -476,7 +625,7 @@ public final class WheelNavigator {
             return;
         }
         if (view instanceof ExpandableNotificationRow notification
-                && WheelLayoutSettings.enabled(mRoot.getContext())) {
+                && WheelLayoutSettings.shade(mRoot.getContext())) {
             collectNotification(notification, stops);
             return;
         }
