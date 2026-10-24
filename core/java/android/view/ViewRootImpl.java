@@ -6509,7 +6509,10 @@ public final class ViewRootImpl implements ViewParent,
         final float out = width / 2;
         final RectF ring = new RectF(mWheelFocusRect);
         ring.inset(-out, -out);
-        final float radius = Math.min(WHEEL_FOCUS_RADIUS_DP * density, ring.height() / 2);
+        // The card's own corners where it has them, the ring's stroke being inside its edge
+        final float radius = Math.min(mWheelFocusCardRadius >= 0
+                        ? Math.max(0, mWheelFocusCardRadius - out)
+                        : WHEEL_FOCUS_RADIUS_DP * density, ring.height() / 2);
         canvas.drawRoundRect(ring, radius, radius, mWheelFocusPaint);
     }
 
@@ -6528,10 +6531,14 @@ public final class ViewRootImpl implements ViewParent,
             return false;
         }
         final View focused = mView.findFocus();
-        if (focused == null || focused == mView || !focused.isShown()) {
+        if (focused == null || focused == mView || !focused.isShown() || isWheelScroller(focused)) {
             return false;
         }
         focused.getBoundsOnScreen(bounds, true);
+        // Half or more out of the list, as while it scrolls the view in: no sliver of a ring
+        if (bounds.height() * 2 < Math.min(focused.getHeight(), mHeight)) {
+            return false;
+        }
         bounds.offset(0, mScrollY);
         bounds.offset(-mAttachInfo.mWindowLeft, -mAttachInfo.mWindowTop);
         // A row drawn as an inset card, as Settings' are: the ring goes round the card
@@ -6587,18 +6594,101 @@ public final class ViewRootImpl implements ViewParent,
      * The part of {@code view} its background draws, in the view's coordinates, where that is a
      * layer inset from the view's edges; false where the background fills the view.
      */
-    private static boolean getWheelFocusContent(View view, Rect content) {
-        if (!(view.getBackground() instanceof android.graphics.drawable.LayerDrawable layers)) {
+    private boolean getWheelFocusContent(View view, Rect content) {
+        mWheelFocusCardRadius = -1;
+        final Drawable background = view.getBackground();
+        if (background == null) {
             return false;
         }
         content.setEmpty();
-        for (int i = 0; i < layers.getNumberOfLayers(); i++) {
-            if (layers.getId(i) != android.R.id.mask && layers.getDrawable(i) != null) {
-                content.union(layers.getDrawable(i).getBounds());
-            }
-        }
+        wheelFocusCard(background, content);
         return !content.isEmpty()
                 && (content.width() < view.getWidth() || content.height() < view.getHeight());
+    }
+
+    /**
+     * The card a background draws: what its layers cover, through insets and state lists (a
+     * ripple's mask left out), and the card's corner radius where it's one for all corners.
+     */
+    private void wheelFocusCard(Drawable drawable, Rect content) {
+        if (drawable instanceof android.graphics.drawable.LayerDrawable layers) {
+            for (int i = 0; i < layers.getNumberOfLayers(); i++) {
+                final Drawable layer = layers.getDrawable(i);
+                if (layers.getId(i) != android.R.id.mask && layer != null) {
+                    wheelFocusCard(layer, content);
+                }
+            }
+        } else if (drawable instanceof android.graphics.drawable.DrawableWrapper wrapper
+                && wrapper.getDrawable() != null) {
+            wheelFocusCard(wrapper.getDrawable(), content);
+        } else if (drawable instanceof android.graphics.drawable.DrawableContainer
+                && drawable.getCurrent() != drawable && drawable.getCurrent() != null) {
+            wheelFocusCard(drawable.getCurrent(), content);
+        } else {
+            content.union(drawable.getBounds());
+            if (drawable instanceof android.graphics.drawable.GradientDrawable shape
+                    && shape.getCornerRadii() == null && mWheelFocusCardRadius < 0) {
+                mWheelFocusCardRadius = shape.getCornerRadius();
+            }
+        }
+    }
+
+    /**
+     * Moves the focus from a list that has it, as one whose rows on screen were none of them
+     * focusable, to its first row in reach in the direction the wheel turned.
+     */
+    private static boolean focusIntoWheelList(View focused, int direction) {
+        if (!isWheelScroller(focused)) {
+            return false;
+        }
+        final ViewGroup group = (ViewGroup) focused;
+        final ArrayList<View> candidates = new ArrayList<>();
+        group.addFocusables(candidates, direction, View.FOCUSABLES_ALL);
+        final Rect visible = new Rect();
+        View best = null;
+        int bestTop = 0;
+        for (View candidate : candidates) {
+            if (candidate == group || !candidate.getGlobalVisibleRect(visible)) {
+                continue;
+            }
+            if (best == null || (direction == View.FOCUS_DOWN
+                    ? visible.top < bestTop : visible.top > bestTop)) {
+                best = candidate;
+                bestTop = visible.top;
+            }
+        }
+        return best != null && best.requestFocus(direction);
+    }
+
+    /**
+     * Scrolls the scrolling view the focus is in, or that has it, a quarter of its height on,
+     * where the wheel found no view to move the focus to: text and lists whose rows don't take
+     * the focus are read through so.
+     */
+    private static boolean scrollForWheel(View focused, int direction) {
+        final int sign = direction == View.FOCUS_DOWN ? 1 : -1;
+        for (View view = focused; view != null; ) {
+            if (view.canScrollVertically(sign)) {
+                final int by = sign * Math.max(1, view.getHeight() / 4);
+                if (view instanceof android.widget.AbsListView list) {
+                    list.scrollListBy(by);
+                } else {
+                    view.scrollBy(0, by);
+                }
+                return true;
+            }
+            view = view.getParent() instanceof View parent ? parent : null;
+        }
+        return false;
+    }
+
+    /** A scrolling list or page with the focus itself: a ring round it would frame nothing. */
+    private static boolean isWheelScroller(View view) {
+        return view instanceof ViewGroup group && group.getChildCount() > 0
+                && (view.canScrollVertically(1) || view.canScrollVertically(-1)
+                        || view instanceof android.widget.AbsListView
+                        || view instanceof android.widget.ScrollView
+                        || view.getClass().getName().endsWith("RecyclerView"));
     }
 
     private boolean isWheelFocusEnabled() {
@@ -8773,6 +8863,14 @@ public final class ViewRootImpl implements ViewParent,
 
                     // Give the focused view a last chance to handle the dpad key.
                     if (mView.dispatchUnhandledMove(focused, direction)) {
+                        return true;
+                    }
+                    // The wheel, with nowhere to move the focus: into the list that has it, else
+                    // the list scrolled on, for what's further to come into reach
+                    if (isWheelFocusEnabled() && !mAttachInfo.mInTouchMode
+                            && (direction == View.FOCUS_DOWN || direction == View.FOCUS_UP)
+                            && (focusIntoWheelList(focused, direction)
+                                    || scrollForWheel(focused, direction))) {
                         return true;
                     }
                 } else {
@@ -12084,6 +12182,8 @@ public final class ViewRootImpl implements ViewParent,
 
     private static final float WHEEL_FOCUS_WIDTH_DP = 3;
     private static final float WHEEL_FOCUS_RADIUS_DP = 18;
+    /** The focused view's card's corner radius, -1 for none found. */
+    private float mWheelFocusCardRadius = -1;
     private final Rect mWheelFocusRect = new Rect();
     private final Rect mWheelFocusContent = new Rect();
     private boolean mWheelFocusRingHidden;
