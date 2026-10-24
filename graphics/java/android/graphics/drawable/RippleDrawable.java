@@ -338,9 +338,22 @@ public class RippleDrawable extends LayerDrawable {
             }
         }
         setRippleActive(enabled && pressed);
-        setBackgroundActive(hovered, focused, pressed, windowFocused);
+        setBackgroundActive(hovered, focused && !sFocusHighlightHidden, pressed, windowFocused);
 
         return changed;
+    }
+
+    /** Whether focus leaves the background unlit, the process drawing its own focus ring. */
+    private static boolean sFocusHighlightHidden;
+
+    /**
+     * Leaves focused ripples unlit in this process, as while the wheel UI draws its focus ring
+     * (ViewRootImpl, config_wheelFocus).
+     *
+     * @hide
+     */
+    public static void setFocusHighlightHidden(boolean hidden) {
+        sFocusHighlightHidden = hidden;
     }
 
     private void setRippleActive(boolean active) {

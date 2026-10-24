@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-FileCopyrightText: 2026 The LineageOS Project -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <!-- Shown as the side button grabs a slider in the wheel UI: the wheel then sets it -->
+    <string name="settingslib_slider_wheel_grabbed">Turn to set - press to let go</string>
+</resources>

@@ -33,6 +33,7 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -92,6 +93,9 @@ public class SliderPreference extends Preference {
             if (event.getAction() != KeyEvent.ACTION_DOWN) {
                 return false;
             }
+            if (isWheelFocus(v) && onWheelKey(keyCode, event)) {
+                return true;
+            }
 
             if (!mAdjustable && (keyCode == KeyEvent.KEYCODE_DPAD_LEFT
                     || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)) {
@@ -112,6 +116,73 @@ public class SliderPreference extends Preference {
             return mSlider.onKeyDown(keyCode, event);
         }
     };
+    /** Lets go of a slider the side button grabbed, after a pause in the wheel's turning. */
+    private static final long WHEEL_GRAB_TIMEOUT_MS = 4000;
+    /** Steps closer than this are a spin, which moves the slider a tenth of its range a step. */
+    private static final long WHEEL_GRAB_FAST_STEP_MS = 60;
+    private boolean mWheelGrabbed;
+    private long mWheelLastStep;
+    private final Runnable mWheelLetGo = () -> setWheelGrabbed(false);
+
+    /**
+     * Whether the wheel UI's focus (config_wheelFocus) is on: the side button grabs the slider and
+     * the wheel, turning up and down, sets it.
+     */
+    private static boolean isWheelFocus(View view) {
+        // The view's own resources: they have the framework's overlays, Resources.getSystem()
+        // doesn't, and config_wheelFocus is one
+        final Resources res = view.getResources();
+        final int id = res.getIdentifier("config_wheelFocus", "bool", "android");
+        return id != 0 && res.getBoolean(id) && !view.isInTouchMode();
+    }
+
+    private boolean onWheelKey(int keyCode, KeyEvent event) {
+        if (mSlider == null || !mSlider.isEnabled()) {
+            return false;
+        }
+        if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+            if (event.getRepeatCount() == 0) {
+                setWheelGrabbed(!mWheelGrabbed);
+            }
+            return true;
+        }
+        if (!mWheelGrabbed || (keyCode != KeyEvent.KEYCODE_DPAD_UP
+                && keyCode != KeyEvent.KEYCODE_DPAD_DOWN)) {
+            return false;
+        }
+        mSlider.removeCallbacks(mWheelLetGo);
+        mSlider.postDelayed(mWheelLetGo, WHEEL_GRAB_TIMEOUT_MS);
+        final long now = event.getEventTime();
+        final boolean fast = now - mWheelLastStep < WHEEL_GRAB_FAST_STEP_MS;
+        mWheelLastStep = now;
+        // Down, the wheel's clockwise turn, raises the value
+        final float span = mSlider.getValueTo() - mSlider.getValueFrom();
+        final float step = mSlider.getStepSize() > 0 ? mSlider.getStepSize() : span / 50;
+        final float by = fast ? Math.max(step, Math.round(span / 10 / step) * step) : step;
+        final float value = Math.max(mSlider.getValueFrom(), Math.min(mSlider.getValueTo(),
+                mSlider.getValue() + (keyCode == KeyEvent.KEYCODE_DPAD_DOWN ? by : -by)));
+        if (value != mSlider.getValue()) {
+            mSlider.setValue(value);
+            syncValueInternal(mSlider);
+        }
+        return true;
+    }
+
+    private void setWheelGrabbed(boolean grabbed) {
+        if (mSlider == null || grabbed == mWheelGrabbed) {
+            return;
+        }
+        mSlider.removeCallbacks(mWheelLetGo);
+        mWheelGrabbed = grabbed;
+        // The thumb's pressed halo, and the wheel's ring thicker round the row
+        mSlider.setPressed(grabbed);
+        if (grabbed) {
+            mSlider.postDelayed(mWheelLetGo, WHEEL_GRAB_TIMEOUT_MS);
+            Toast.makeText(getContext(), R.string.settingslib_slider_wheel_grabbed,
+                    Toast.LENGTH_SHORT).show();
+        }
+    }
+
     /**
      * Listener reacting to the {@link Slider} touch event by the user
      */
