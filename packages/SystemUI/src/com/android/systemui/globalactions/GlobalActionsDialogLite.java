@@ -3122,6 +3122,11 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
                     com.android.systemui.res.R.string.accessibility_quick_settings_power_menu));
             initializeLayout(dialog, true /* firstTime */);
             mWheelNavigation = PowerMenuWheelNavigation.attach(dialog);
+            if (mWheelNavigation != null) {
+                // The wheel's menu is panels with gaps between: the app behind stays well back
+                window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+                window.setDimAmount(0.85f);
+            }
             mInitialWindowDimAmount = window.getAttributes().dimAmount;
         }
 
