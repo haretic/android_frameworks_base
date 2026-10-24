@@ -4619,12 +4619,16 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     @VisibleForTesting
     int wheelSideButtonAction(boolean hold) {
+        // By default the button is never dead: a hold goes back, a press the app takes no use
+        // of opens the taskbar
         return LineageSettings.Secure.getIntForUser(
                 mContext.getContentResolver(),
                 hold
                         ? LineageSettings.Secure.WHEEL_SIDE_BUTTON_HOLD
                         : LineageSettings.Secure.WHEEL_SIDE_BUTTON_PRESS,
-                LineageSettings.Secure.WHEEL_SIDE_BUTTON_ACTION_NOTHING,
+                hold
+                        ? LineageSettings.Secure.WHEEL_SIDE_BUTTON_ACTION_BACK
+                        : LineageSettings.Secure.WHEEL_SIDE_BUTTON_ACTION_TASKBAR,
                 UserHandle.USER_CURRENT);
     }
 
