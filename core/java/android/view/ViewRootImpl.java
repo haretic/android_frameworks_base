@@ -5281,6 +5281,10 @@ public final class ViewRootImpl implements ViewParent,
             }
         }
         mFirstInputStage.onWindowFocusChanged(hasWindowFocus);
+        // The wheel's ring comes and goes with the window's focus
+        if (isWheelFocusEnabled()) {
+            invalidate();
+        }
 
         // NOTE: there's no view visibility (appeared / disapparead) events when the windows focus
         // is lost, so we don't need to to force a flush - there might be other events such as
@@ -6245,7 +6249,7 @@ public final class ViewRootImpl implements ViewParent,
             dirty.offset(surfaceInsets.left, surfaceInsets.top);
         }
 
-        boolean accessibilityFocusDirty = isAccessibilityFocusDirty();
+        boolean accessibilityFocusDirty = isAccessibilityFocusDirty() || isWheelFocusDirty();
 
         // Force recalculation of transparent regions
         if (accessibilityFocusDirty) {
@@ -6479,6 +6483,133 @@ public final class ViewRootImpl implements ViewParent,
         } else if (mAttachInfo.mAccessibilityFocusDrawable != null) {
             mAttachInfo.mAccessibilityFocusDrawable.setBounds(0, 0, 0, 0);
         }
+        drawWheelFocusRingIfNeeded(canvas);
+    }
+
+    /**
+     * The wheel UI's focus ring (config_wheelFocus): round the view with the focus while the
+     * window isn't touched, as the wheel moves it, drawn here so it shows on any view alike.
+     */
+    private void drawWheelFocusRingIfNeeded(Canvas canvas) {
+        if (!getWheelFocusRect(mWheelFocusRect)) {
+            mWheelFocusRect.setEmpty();
+            return;
+        }
+        final float density = mContext.getResources().getDisplayMetrics().density;
+        if (mWheelFocusPaint == null) {
+            mWheelFocusPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            mWheelFocusPaint.setStyle(Paint.Style.STROKE);
+        }
+        mWheelFocusPaint.setColor(mContext.getColor(android.R.color.system_accent1_100));
+        // Twice as thick while the view holds the wheel, as a slider the side button grabbed
+        final float width = WHEEL_FOCUS_WIDTH_DP * density
+                * (isWheelGrabbed(mView.findFocus()) ? 2 : 1);
+        mWheelFocusPaint.setStrokeWidth(width);
+        // Inside the view's edge, so a view at the window's edge keeps all of its ring
+        final float out = width / 2;
+        final RectF ring = new RectF(mWheelFocusRect);
+        ring.inset(-out, -out);
+        final float radius = Math.min(WHEEL_FOCUS_RADIUS_DP * density, ring.height() / 2);
+        canvas.drawRoundRect(ring, radius, radius, mWheelFocusPaint);
+    }
+
+    private boolean isWheelFocusDirty() {
+        final Rect bounds = mAttachInfo.mTmpInvalRect;
+        if (!getWheelFocusRect(bounds)) {
+            bounds.setEmpty();
+        }
+        return !bounds.equals(mWheelFocusRect);
+    }
+
+    private boolean getWheelFocusRect(Rect bounds) {
+        // Only the window the wheel is on, not a window under a dialog or the keyboard's
+        if (mView == null || mAttachInfo.mInTouchMode || !mAttachInfo.mHasWindowFocus
+                || mWheelFocusRingHidden || !isWheelFocusEnabled()) {
+            return false;
+        }
+        final View focused = mView.findFocus();
+        if (focused == null || focused == mView || !focused.isShown()) {
+            return false;
+        }
+        focused.getBoundsOnScreen(bounds, true);
+        bounds.offset(0, mScrollY);
+        bounds.offset(-mAttachInfo.mWindowLeft, -mAttachInfo.mWindowTop);
+        // A row drawn as an inset card, as Settings' are: the ring goes round the card
+        final Rect content = mWheelFocusContent;
+        if (getWheelFocusContent(focused, content)) {
+            final int[] location = mAttachInfo.mTmpLocation;
+            focused.getLocationInWindow(location);
+            content.offset(location[0], location[1] + mScrollY);
+            if (!bounds.intersect(content)) {
+                return false;
+            }
+        }
+        // A ring round the whole window, as for a list that is the window, frames nothing
+        if (!bounds.intersect(0, 0, mWidth, mHeight)
+                || bounds.width() >= mWidth && bounds.height() >= mHeight) {
+            return false;
+        }
+        final int inset = (int) Math.ceil(
+                WHEEL_FOCUS_WIDTH_DP * mContext.getResources().getDisplayMetrics().density);
+        bounds.inset(inset, inset);
+        return !bounds.isEmpty();
+    }
+
+    /**
+     * Leaves the wheel's focus ring out of this window, as for SystemUI's shade, whose wheel
+     * navigator draws its own round its stops.
+     *
+     * @hide
+     */
+    public void setWheelFocusRingHidden(boolean hidden) {
+        if (mWheelFocusRingHidden != hidden) {
+            mWheelFocusRingHidden = hidden;
+            invalidate();
+        }
+    }
+
+    /** Whether {@code view} or a view in it is pressed, as a slider the wheel holds is. */
+    private static boolean isWheelGrabbed(View view) {
+        if (view == null || view.isPressed()) {
+            return view != null;
+        }
+        if (view instanceof ViewGroup group) {
+            for (int i = 0; i < group.getChildCount(); i++) {
+                if (isWheelGrabbed(group.getChildAt(i))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * The part of {@code view} its background draws, in the view's coordinates, where that is a
+     * layer inset from the view's edges; false where the background fills the view.
+     */
+    private static boolean getWheelFocusContent(View view, Rect content) {
+        if (!(view.getBackground() instanceof android.graphics.drawable.LayerDrawable layers)) {
+            return false;
+        }
+        content.setEmpty();
+        for (int i = 0; i < layers.getNumberOfLayers(); i++) {
+            if (layers.getId(i) != android.R.id.mask && layers.getDrawable(i) != null) {
+                content.union(layers.getDrawable(i).getBounds());
+            }
+        }
+        return !content.isEmpty()
+                && (content.width() < view.getWidth() || content.height() < view.getHeight());
+    }
+
+    private boolean isWheelFocusEnabled() {
+        final int seq = mContext.getResources().getConfiguration().seq;
+        if (seq != mWheelFocusConfigSeq) {
+            mWheelFocusConfigSeq = seq;
+            mWheelFocusEnabled = mContext.getResources().getBoolean(R.bool.config_wheelFocus);
+            // The ring shows the focus, a focused ripple's fill would show it twice
+            android.graphics.drawable.RippleDrawable.setFocusHighlightHidden(mWheelFocusEnabled);
+        }
+        return mWheelFocusEnabled;
     }
 
     private int getRoundDisplayRadius() {
@@ -11950,6 +12081,15 @@ public final class ViewRootImpl implements ViewParent,
                 sourceNodeId);
         return AccessibilityNodeIdManager.getInstance().findView(accessibilityViewId);
     }
+
+    private static final float WHEEL_FOCUS_WIDTH_DP = 3;
+    private static final float WHEEL_FOCUS_RADIUS_DP = 18;
+    private final Rect mWheelFocusRect = new Rect();
+    private final Rect mWheelFocusContent = new Rect();
+    private boolean mWheelFocusRingHidden;
+    private Paint mWheelFocusPaint;
+    private boolean mWheelFocusEnabled;
+    private int mWheelFocusConfigSeq = -1;
 
     private boolean isAccessibilityFocusDirty() {
         final Drawable drawable = mAttachInfo.mAccessibilityFocusDrawable;

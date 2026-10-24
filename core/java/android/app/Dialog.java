@@ -349,6 +349,8 @@ public class Dialog implements DialogInterface, Window.Callback,
             restoreSoftInputMode = true;
         }
 
+        // The wheel UI's alert dialogs have their buttons as a list
+        com.android.internal.widget.WheelDialogButtons.apply(mDecor);
         mWindowManager.addView(mDecor, l);
         if (restoreSoftInputMode) {
             l.softInputMode &=

@@ -6276,6 +6276,7 @@
 
   <!-- Whether desktop mode is supported on the current device  -->
   <java-symbol type="bool" name="config_isDesktopModeSupported" />
+  <java-symbol type="bool" name="config_showAppHandleOnLargeScreens" />
 
   <!-- Whether the developer option for desktop mode is supported on the current device  -->
   <java-symbol type="bool" name="config_isDesktopModeDevOptionSupported" />
@@ -6633,4 +6634,8 @@
   <java-symbol type="string" name="config_wheelDaemonInputDevice" />
   <java-symbol type="string" name="config_wheelDaemonSocket" />
   <java-symbol type="array" name="config_wheelAppModeDefaults" />
+  <java-symbol type="bool" name="config_wheelDialogs" />
+  <java-symbol type="bool" name="config_wheelFocus" />
+  <java-symbol type="id" name="wheel_dialog_buttons" />
+  <java-symbol type="string" name="wheel_slider_grabbed" />
 </resources>

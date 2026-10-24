@@ -7320,4 +7320,6 @@
     <string name="do_not_disturb_sync_notification_title">Do not disturb</string>
     <!-- Notification content for Do not disturb sync [CHAR LIMIT=NONE] -->
     <string name="do_not_disturb_sync_notification_content">Synced from your nearby device</string>
+    <!-- The wheel UI: shown as the side button grabs a slider for the wheel to set. -->
+    <string name="wheel_slider_grabbed">Turn to set - press to let go</string>
 </resources>
