@@ -22,6 +22,7 @@ import android.graphics.Point
 import android.graphics.Rect
 import android.util.DisplayMetrics
 import android.util.RotationUtils
+import android.util.TypedValue
 import android.view.Surface
 import android.view.WindowManager
 import androidx.annotation.VisibleForTesting
@@ -33,6 +34,7 @@ import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.flags.FeatureFlags
 import com.android.systemui.flags.Flags
+import com.android.systemui.keyguard.domain.interactor.KeyguardBlueprintInteractor
 import com.android.systemui.keyguard.shared.model.KeyguardSection
 import com.android.systemui.keyguard.ui.binder.DeviceEntryIconViewBinder
 import com.android.systemui.keyguard.ui.view.DeviceEntryIconView
@@ -49,13 +51,19 @@ import com.android.systemui.res.R
 import com.android.systemui.shade.NotificationPanelView
 import com.android.systemui.shade.ShadeDisplayAware
 import com.android.systemui.statusbar.VibratorHelper
+import com.android.systemui.wheel.WheelLayoutSettings
+import com.android.systemui.wheel.wheelLayoutEnabled
 import com.android.systemui.window.domain.interactor.WindowRootViewBlurInteractor
 import com.google.android.msdl.domain.MSDLPlayer
 import dagger.Lazy
 import javax.inject.Inject
+import lineageos.providers.LineageSettings
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DisposableHandle
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
 
 /** Includes the device entry icon. */
 class DefaultDeviceEntrySection
@@ -75,12 +83,14 @@ constructor(
     private val falsingManager: Lazy<FalsingManager>,
     private val vibratorHelper: Lazy<VibratorHelper>,
     private val msdlPlayer: Lazy<MSDLPlayer>,
+    private val keyguardBlueprintInteractor: Lazy<KeyguardBlueprintInteractor>,
     @LongPressTouchLog private val logBuffer: LogBuffer,
     @KeyguardBlueprintLog blueprintLogBuffer: LogBuffer,
 ) : KeyguardSection() {
     private val blueprintLogger = Logger(blueprintLogBuffer, TAG)
     private val deviceEntryIconViewId = R.id.device_entry_icon_view
     private var disposableHandle: DisposableHandle? = null
+    private var wheelLayoutJob: Job? = null
 
     override fun addViews(constraintLayout: ConstraintLayout) {
         val view =
@@ -111,6 +121,14 @@ constructor(
                     msdlPlayer.get(),
                 )
         }
+        // The wheel UI's Unlock pill takes another shape than the icon, see applyConstraints
+        wheelLayoutJob?.cancel()
+        wheelLayoutJob =
+            applicationScope.launch(mainDispatcher) {
+                wheelLayoutEnabled(context, LineageSettings.Secure.WHEEL_LOCKSCREEN)
+                    .drop(1)
+                    .collect { keyguardBlueprintInteractor.get().refreshBlueprint() }
+            }
     }
 
     override fun applyConstraints(constraintSet: ConstraintSet) {
@@ -156,6 +174,27 @@ constructor(
 
                 centerIcon(center, udfpsLocation.radius, constraintSet)
             }
+        } else if (WheelLayoutSettings.lockscreen(context)) {
+            // The wheel UI's Unlock pill, the side button's first stop on the lock screen
+            val dp = { value: Float ->
+                TypedValue.applyDimension(
+                    TypedValue.COMPLEX_UNIT_DIP,
+                    value,
+                    context.resources.displayMetrics,
+                )
+            }
+            val width = dp(WHEEL_PILL_WIDTH_DP).toInt()
+            val height = dp(WHEEL_PILL_HEIGHT_DP).toInt()
+            val centerY = heightPixels - (mBottomPaddingPx + iconRadiusPx) * scaleFactor
+            placeIcon(
+                Rect(
+                    (widthPixels / 2 - width / 2).toInt(),
+                    (centerY - height / 2).toInt(),
+                    (widthPixels / 2 + width / 2).toInt(),
+                    (centerY + height / 2).toInt(),
+                ),
+                constraintSet,
+            )
         } else {
             centerIcon(
                 Point(
@@ -171,6 +210,8 @@ constructor(
     override fun removeViews(constraintLayout: ConstraintLayout) {
         constraintLayout.removeView(deviceEntryIconViewId)
         disposableHandle?.dispose()
+        wheelLayoutJob?.cancel()
+        wheelLayoutJob = null
     }
 
     @VisibleForTesting
@@ -184,7 +225,10 @@ constructor(
                     center.y + radius.toInt(),
                 )
             }
+        placeIcon(sensorRect, constraintSet)
+    }
 
+    private fun placeIcon(sensorRect: Rect, constraintSet: ConstraintSet) {
         val iconId = deviceEntryIconViewId
 
         constraintSet.apply {
@@ -209,5 +253,7 @@ constructor(
 
     companion object {
         private const val TAG = "DefaultDeviceEntrySection"
+        private const val WHEEL_PILL_WIDTH_DP = 132f
+        private const val WHEEL_PILL_HEIGHT_DP = 48f
     }
 }

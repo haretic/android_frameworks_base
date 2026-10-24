@@ -93,6 +93,12 @@ public class KeyguardPinViewController
     }
 
     @Override
+    public void onResume(int reason) {
+        super.onResume(reason);
+        mView.updateWheelDrum();
+    }
+
+    @Override
     protected void onViewAttached() {
         super.onViewAttached();
 
