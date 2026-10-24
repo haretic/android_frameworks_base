@@ -117,8 +117,8 @@ import javax.inject.Inject;
  * the bar with a hint, and a running app's last screen. The side button presses
  * (INPUT_FEATURE_POWER_KEY_SELECTS); holding it on an app, in the bar or in the list of all
  * apps, opens its options: close it (or stop it, in the background), close all apps, pin or
- * unpin it, its app info. Holding it anywhere else sleeps. The bar closes on back, on a touch
- * outside, or when left alone for a moment.
+ * unpin it, its app info. Holding it anywhere else goes back. The bar closes on back, on a
+ * second double press, on a touch outside, or when left alone for a moment.
  *
  * <p>With a wheel daemon (config_wheelDaemonSocket) the wheel is in one of its modes, set
  * here for the app in front (Wheel mode, LineageSettings.Secure.WHEEL_APP_MODES, defaults in
@@ -467,6 +467,10 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         mKeyguardStateController.addCallback(new KeyguardStateController.Callback() {
             @Override
             public void onKeyguardShowingChanged() {
+                // Never over the lock screen: it would open apps past it
+                if (mKeyguardStateController.isShowing() && mRoot != null) {
+                    hide();
+                }
                 updateMode();
             }
         });
@@ -538,11 +542,15 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 return;
         }
         if (mRoot != null) {
-            // Steps that came before the bar had the focus
-            if (step != 0) {
-                keepOpen();
-                move(step, key.getEventTime());
+            if (step == 0) {
+                // A second double press shuts it, as it opened it
+                mFeedback.back();
+                hide();
+                return;
             }
+            // Steps that came before the bar had the focus
+            keepOpen();
+            move(step, key.getEventTime());
             return;
         }
         if (mKeyguardStateController.isShowing() || !isEnabled() || mShadeExpanded
@@ -917,6 +925,10 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         lp.gravity = Gravity.TOP | (mSettings.left ? Gravity.START : Gravity.END);
         lp.setTitle("WheelTaskbar");
         lp.setFitInsetsTypes(0);
+        // Below the status bar: the clock, battery and the rest stay in sight over the bar.
+        // Padded, as a window over the status bar gets no inset from it
+        root.setPadding(0, com.android.internal.policy.SystemBarUtils.getStatusBarHeight(mContext),
+                0, 0);
         lp.layoutInDisplayCutoutMode =
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
         // Read when the window gets the focus: the side button presses instead of sleeping
@@ -954,11 +966,19 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 addTouchable(region, mPanel);
             }
         });
+        // Its own highlight marks the focus, the framework's ring would be a second one. Set
+        // as the root attaches: until its first traversal it has no ViewRootImpl to ask
+        root.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            @Override
+            public void onViewAttachedToWindow(View v) {
+                v.getViewRootImpl().setWheelFocusRingHidden(true);
+            }
+
+            @Override
+            public void onViewDetachedFromWindow(View v) {
+            }
+        });
         mWindowManager.addView(root, lp);
-        // Its own highlight marks the focus, the framework's ring would be a second one
-        if (root.getViewRootImpl() != null) {
-            root.getViewRootImpl().setWheelFocusRingHidden(true);
-        }
         staggerIn();
         // The wheel starts where it was left, the light shows at once
         focusRemembered();
@@ -1992,8 +2012,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     }
 
     /**
-     * Opens the options of the focused app for legacy select events. The r1 side-button hold itself
-     * is resolved by PhoneWindowManager and never turns the screen off.
+     * A hold: on an app its options, as on home; anywhere else back, as everywhere else, out of
+     * a list or the bar.
      */
     private void onLongPress() {
         final View focused = mRoot.findFocus();
@@ -2008,6 +2028,12 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             mFeedback.select();
             openMenu(MENU_APP, app);
             return;
+        }
+        mFeedback.back();
+        if (!mMenus.isEmpty()) {
+            closeMenu();
+        } else {
+            hide();
         }
     }
 
