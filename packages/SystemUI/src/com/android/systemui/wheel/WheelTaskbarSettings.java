@@ -56,6 +56,20 @@ final class WheelTaskbarSettings {
         mContext = context;
     }
 
+    /** The user's wheel tuning for the wheel daemon, as its "tune" lines (WheelModeClient). */
+    String daemonTuning(int userId) {
+        final ContentResolver resolver = mContext.getContentResolver();
+        return "tune distance "
+                + getInt(resolver, LineageSettings.Secure.WHEEL_SCROLL_DISTANCE, 100, userId)
+                + "\ntune spin "
+                + getInt(resolver, LineageSettings.Secure.WHEEL_SPIN, 1, userId)
+                + "\ntune guard "
+                + getInt(resolver, LineageSettings.Secure.WHEEL_PRESS_GUARD, 150, userId)
+                + "\ntune reverse "
+                + getInt(resolver, LineageSettings.Secure.WHEEL_REVERSE, 0, userId)
+                + "\n";
+    }
+
     void read(int userId) {
         final ContentResolver resolver = mContext.getContentResolver();
         buttons = parseButtons(LineageSettings.Secure.getStringForUser(resolver,

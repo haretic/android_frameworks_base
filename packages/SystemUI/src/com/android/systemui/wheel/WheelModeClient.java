@@ -37,6 +37,8 @@ final class WheelModeClient {
     private LocalSocket mSocket;
     /** Set on mBackground, read by the reader. */
     private volatile String mMode;
+    /** The user's tuning as the daemon's "tune" lines; only touched on mBackground. */
+    private String mTuning = "";
 
     WheelModeClient(String socketName, Executor background, Executor main,
             Consumer<Boolean> onStep) {
@@ -59,6 +61,29 @@ final class WheelModeClient {
         });
     }
 
+    /**
+     * Sends the user's tuning (WheelTaskbarSettings.daemonTuning) now and to each daemon the
+     * client connects to later.
+     */
+    void tune(String tuning) {
+        mBackground.execute(() -> {
+            if (tuning.equals(mTuning)) {
+                return;
+            }
+            mTuning = tuning;
+            if (mSocket != null && write(tuning)) {
+                return;
+            }
+            // Not connected yet, or the daemon restarted: connecting sends the tuning first
+            final String mode = mMode;
+            close(mSocket);
+            if (send(mode) && mode != null) {
+                mMode = mode;
+            }
+        });
+    }
+
+    /** Sends the mode, or none for just the tuning, connecting first if need be. */
     private boolean send(String mode) {
         try {
             if (mSocket == null) {
@@ -67,13 +92,27 @@ final class WheelModeClient {
                         LocalSocketAddress.Namespace.RESERVED));
                 mSocket = socket;
                 listen(socket);
+                // A new daemon starts from its defaults
+                mSocket.getOutputStream().write(mTuning.getBytes(StandardCharsets.UTF_8));
             }
-            mSocket.getOutputStream().write(
-                    ("mode " + mode + "\n").getBytes(StandardCharsets.UTF_8));
+            if (mode != null) {
+                mSocket.getOutputStream().write(
+                        ("mode " + mode + "\n").getBytes(StandardCharsets.UTF_8));
+            }
             return true;
         } catch (IOException e) {
             Log.w(TAG, "Can't reach " + mSocketName + ": " + e.getMessage());
             close(mSocket);
+            return false;
+        }
+    }
+
+    private boolean write(String lines) {
+        try {
+            mSocket.getOutputStream().write(lines.getBytes(StandardCharsets.UTF_8));
+            return true;
+        } catch (IOException e) {
+            Log.w(TAG, "Can't reach " + mSocketName + ": " + e.getMessage());
             return false;
         }
     }
