@@ -6531,7 +6531,8 @@ public final class ViewRootImpl implements ViewParent,
             return false;
         }
         final View focused = mView.findFocus();
-        if (focused == null || focused == mView || !focused.isShown() || isWheelScroller(focused)) {
+        if (focused == null || focused == mView || !focused.isShown() || isWheelScroller(focused)
+                || isFadedOut(focused)) {
             return false;
         }
         focused.getBoundsOnScreen(bounds, true);
@@ -6678,6 +6679,21 @@ public final class ViewRootImpl implements ViewParent,
                 return true;
             }
             view = view.getParent() instanceof View parent ? parent : null;
+        }
+        return false;
+    }
+
+    /**
+     * Whether the view is faded out, by itself or a parent, as a launcher's home is under its
+     * app list: the focus may stay there, the ring isn't drawn round what can't be seen.
+     */
+    private static boolean isFadedOut(View view) {
+        float alpha = 1;
+        for (View v = view; v != null; v = v.getParent() instanceof View p ? p : null) {
+            alpha *= v.getAlpha() * v.getTransitionAlpha();
+            if (alpha < 0.1f) {
+                return true;
+            }
         }
         return false;
     }
