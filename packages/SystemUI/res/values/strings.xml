@@ -5104,6 +5104,8 @@
     <string name="wheel_taskbar_mode_media">Tracks</string>
     <!-- Wheel taskbar, Wheel mode: the wheel zooms in and out [CHAR LIMIT=32] -->
     <string name="wheel_taskbar_mode_zoom">Zoom</string>
+    <!-- Wheel taskbar, Wheel mode: the wheel taps the screen at two places set over the app [CHAR LIMIT=32] -->
+    <string name="wheel_taskbar_mode_touch">Touch zones</string>
     <!-- Wheel taskbar, Wheel mode: summary of the current mode [CHAR LIMIT=32] -->
     <string name="wheel_taskbar_mode_current">Now</string>
     <!-- Wheel taskbar, Wheel mode: summary of the app modes, back to the taskbar [CHAR LIMIT=48] -->
@@ -5137,7 +5139,7 @@
     <!-- Wheel taskbar: hint under the name of an app running with only a background service [CHAR LIMIT=24] -->
     <string name="wheel_taskbar_state_background">In the background</string>
     <!-- Wheel taskbar: an app's state and then what holding the side button does, under its name [CHAR LIMIT=64] -->
-    <string name="wheel_taskbar_hint_state"><xliff:g id="state" example="Running">%1$s</xliff:g> · <xliff:g id="hint" example="Hold for options">%2$s</xliff:g></string>
+    <string name="wheel_taskbar_hint_state"><xliff:g id="state" example="Running">%1$s</xliff:g> - <xliff:g id="hint" example="Hold for options">%2$s</xliff:g></string>
     <!-- Wheel taskbar: hint under an app's name, the side button held opens its options [CHAR LIMIT=32] -->
     <string name="wheel_taskbar_hint_hold">Hold for options</string>
     <!-- Wheel taskbar: hint under the notifications button, how many there are [CHAR LIMIT=32] -->

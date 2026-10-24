@@ -33,7 +33,7 @@ constructor(
 ) : DefaultTilesRepository {
     private val defaultTiles: List<TileSpec>
         get() =
-            (if (WheelLayoutSettings.enabled(context)) {
+            (if (WheelLayoutSettings.shade(context)) {
                     listOf(
                         if (QsSplitInternetTile.isEnabled) "wifi" else "internet",
                         "bt",

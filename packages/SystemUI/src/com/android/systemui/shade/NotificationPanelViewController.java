@@ -203,6 +203,7 @@ import com.android.systemui.statusbar.policy.SplitShadeStateController;
 import com.android.systemui.unfold.SysUIUnfoldComponent;
 import com.android.systemui.util.Utils;
 import com.android.systemui.util.time.SystemClock;
+import com.android.systemui.wheel.WheelLayoutSettings;
 import com.android.systemui.window.domain.interactor.WindowRootViewBlurInteractor;
 import com.android.wm.shell.animation.FlingAnimationUtils;
 
@@ -3774,6 +3775,11 @@ public final class NotificationPanelViewController implements
             // to locked will trigger this event and we're not actually in the process of opening
             // the shade, lockscreen is just always expanded
             if (mSplitShadeEnabled && !isKeyguardShowing()) {
+                mQsController.setExpandImmediate(true);
+            } else if (!isKeyguardShowing()
+                    && WheelLayoutSettings.shade(mView.getContext())
+                    && !mActiveNotificationsInteractor.getAreAnyNotificationsPresentValue()) {
+                // The wheel shade opens on its Controls tab when there's nothing to notify
                 mQsController.setExpandImmediate(true);
             }
             if (mOpenCloseListener != null) {

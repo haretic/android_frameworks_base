@@ -19,6 +19,7 @@ package com.android.systemui.scene.ui.view
 import android.annotation.SuppressLint
 import android.app.StatusBarManager
 import android.content.Context
+import android.os.PowerManager
 import android.util.AttributeSet
 import android.util.Pair
 import android.view.DisplayCutout
@@ -54,6 +55,9 @@ open class WindowRootView(context: Context, attrs: AttributeSet?) : FrameLayout(
                     wheelNavigator = it
                 }
 
+    /** Puts the wheel on the view, see WheelNavigator.focus. */
+    fun focusWheelOn(view: View): Boolean = wheelSelects() && wheelNavigator().focus(view)
+
     /** The shade's levels for the wheel, see WheelNavigator.Levels. */
     var wheelLevels: WheelNavigator.Levels? = null
         set(value) {
@@ -71,6 +75,9 @@ open class WindowRootView(context: Context, attrs: AttributeSet?) : FrameLayout(
 
         if (isRoot()) {
             ComposeInitializer.onAttachedToWindow(this)
+            // The wheel navigator draws the ring round its stops, the framework's would go round
+            // the window's leftover focus
+            viewRootImpl?.setWheelFocusRingHidden(true)
         }
     }
 
@@ -169,7 +176,18 @@ open class WindowRootView(context: Context, attrs: AttributeSet?) : FrameLayout(
         // shade's tiles, sliders and notifications and the side button presses them. The side
         // button only comes here with it.
         if (isRoot() && (event.keyCode == KeyEvent.KEYCODE_POWER || wheelSelects())) {
-            if (wheelNavigator().dispatchKey(event) || event.keyCode == KeyEvent.KEYCODE_POWER) {
+            if (wheelNavigator().dispatchKey(event)) {
+                // The lock screen's window takes no user activity from input, so the wheel keeps
+                // the screen on itself there
+                if (wheelInputFeatures() and
+                        WindowManager.LayoutParams.INPUT_FEATURE_DISABLE_USER_ACTIVITY != 0) {
+                    context
+                        .getSystemService(PowerManager::class.java)
+                        ?.userActivity(event.eventTime, PowerManager.USER_ACTIVITY_EVENT_BUTTON, 0)
+                }
+                return true
+            }
+            if (event.keyCode == KeyEvent.KEYCODE_POWER) {
                 return true
             }
         }
@@ -193,8 +211,10 @@ open class WindowRootView(context: Context, attrs: AttributeSet?) : FrameLayout(
     }
 
     private fun wheelSelects() =
-        ((layoutParams as? WindowManager.LayoutParams)?.inputFeatures ?: 0) and
-            WindowManager.LayoutParams.INPUT_FEATURE_POWER_KEY_SELECTS != 0
+        wheelInputFeatures() and WindowManager.LayoutParams.INPUT_FEATURE_POWER_KEY_SELECTS != 0
+
+    private fun wheelInputFeatures() =
+        (layoutParams as? WindowManager.LayoutParams)?.inputFeatures ?: 0
 
     override fun dispatchKeyEventPreIme(event: KeyEvent): Boolean {
         return windowRootViewKeyEventHandler.dispatchKeyEventPreIme(event) ?: false
