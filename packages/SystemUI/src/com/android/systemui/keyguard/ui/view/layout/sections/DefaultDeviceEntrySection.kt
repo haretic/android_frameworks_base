@@ -253,7 +253,7 @@ constructor(
 
     companion object {
         private const val TAG = "DefaultDeviceEntrySection"
-        private const val WHEEL_PILL_WIDTH_DP = 132f
+        private const val WHEEL_PILL_WIDTH_DP = 196f
         private const val WHEEL_PILL_HEIGHT_DP = 48f
     }
 }

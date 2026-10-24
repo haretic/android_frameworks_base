@@ -16,7 +16,7 @@
     <!-- The tab header's action: switch to the tab it names -->
     <string name="wheel_shade_tab_switch">Switch to <xliff:g id="tab" example="Controls">%1$s</xliff:g></string>
     <!-- The lock screen's Unlock button in the wheel UI, the side button's first stop there -->
-    <string name="wheel_unlock">Unlock</string>
+    <string name="wheel_unlock">Press to unlock</string>
     <!-- The bouncer's PIN drum in the wheel UI: its words, and the hints below it -->
     <string name="wheel_pin_ok">OK</string>
     <string name="wheel_pin_delete">Delete</string>
