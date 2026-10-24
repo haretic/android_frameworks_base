@@ -26664,8 +26664,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 || !background.hasFocusStateSpecified())
                 && (foreground == null || !foreground.isStateful()
                 || !foreground.hasFocusStateSpecified());
+        // Under the wheel UI's focus ring (or a window's own, in its place) no second marker
+        final boolean wheelRing = mAttachInfo != null && mAttachInfo.mViewRootImpl != null
+                && mAttachInfo.mViewRootImpl.replacesFocusHighlight();
         return !isInTouchMode() && getDefaultFocusHighlightEnabled() && lackFocusState
-                && isAttachedToWindow() && sUseDefaultFocusHighlight;
+                && isAttachedToWindow() && sUseDefaultFocusHighlight && !wheelRing;
     }
 
     /**
