@@ -1247,7 +1247,7 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
                         targets.add(action.getLabelForAccessibility(context));
                     }
                 }
-                summary.setText(TextUtils.join(" · ", targets));
+                summary.setText(TextUtils.join(" - ", targets));
                 summary.setVisibility(targets.isEmpty() ? View.GONE : View.VISIBLE);
             }
             return view;
