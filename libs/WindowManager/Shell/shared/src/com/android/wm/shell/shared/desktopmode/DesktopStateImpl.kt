@@ -33,6 +33,7 @@ import com.android.wm.shell.shared.bubbles.BubbleFlagHelper
 @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
 class DesktopStateImpl(context: Context) : DesktopState {
 
+    private val appResources = context.resources
     private val windowManager = context.getSystemService(WindowManager::class.java)
     private val displayManager = context.getSystemService(DisplayManager::class.java)
 
@@ -121,9 +122,12 @@ class DesktopStateImpl(context: Context) : DesktopState {
                 display.minSizeDimensionDp >= WindowManager.LARGE_SCREEN_SMALLEST_SCREEN_WIDTH_DP
             } ?: false
 
-    override val overridesShowAppHandle: Boolean =
-        (Flags.showAppHandleLargeScreens() || BubbleFlagHelper.enableBubbleToFullscreen()) &&
-            deviceHasLargeScreen
+    // Read each time, as the device's overlays can turn it off and on again
+    override val overridesShowAppHandle: Boolean
+        get() =
+            (Flags.showAppHandleLargeScreens() || BubbleFlagHelper.enableBubbleToFullscreen()) &&
+                deviceHasLargeScreen &&
+                appResources.getBoolean(R.bool.config_showAppHandleOnLargeScreens)
 
     private val hasFreeformFeature =
         context.getPackageManager().hasSystemFeature(FEATURE_FREEFORM_WINDOW_MANAGEMENT)
