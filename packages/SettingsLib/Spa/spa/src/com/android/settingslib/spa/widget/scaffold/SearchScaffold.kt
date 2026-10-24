@@ -19,6 +19,9 @@ package com.android.settingslib.spa.widget.scaffold
 import androidx.activity.compose.BackHandler
 import androidx.appcompat.R
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.RowScope
@@ -100,11 +103,18 @@ fun SearchScaffold(
         containerColor = MaterialTheme.colorScheme.settingsBackground,
         contentWindowInsets = WindowInsets.safeDrawing,
     ) { paddingValues ->
+        // Under the wheel UI's focus (config_wheelFocus) the content is a group the wheel steps
+        // into, row by row; focusable as one, the wheel would stop on the whole list
+        val resources = LocalContext.current.resources
+        val wheelFocus = remember(LocalConfiguration.current) {
+            val id = resources.getIdentifier("config_wheelFocus", "bool", "android")
+            id != 0 && resources.getBoolean(id)
+        }
         Box(
             Modifier
                 .padding(paddingValues.horizontalValues())
                 .padding(top = paddingValues.calculateTopPadding())
-                .focusable()
+                .then(if (wheelFocus) Modifier.focusGroup() else Modifier.focusable())
                 .fillMaxSize()
         ) {
             content(paddingValues.calculateBottomPadding()) {
