@@ -45,6 +45,7 @@ import com.android.systemui.media.dialog.MediaOutputAdapterBase.ConnectionState.
 import com.android.systemui.media.dialog.MediaOutputAdapterBase.ConnectionState.CONNECTING
 import com.android.systemui.media.dialog.MediaOutputAdapterBase.ConnectionState.DISCONNECTED
 import com.android.systemui.res.R
+import com.android.systemui.wheel.WheelSliderGrab
 import com.google.android.material.slider.Slider
 
 /** A RecyclerView adapter for the legacy UI media output dialog device list. */
@@ -432,22 +433,43 @@ class MediaOutputAdapter(controller: MediaSwitchingController) :
                 muteDrawable = muteDrawable,
             )
 
+            val onUserValue = { value: Float ->
+                val seekBarVolume = value.toInt()
+                updateSliderIconsVisibility(
+                    deviceDrawable = deviceDrawable,
+                    muteDrawable = muteDrawable,
+                    sliderVolume = seekBarVolume,
+                )
+                if (seekBarVolume != currentVolume) {
+                    setLatestVolumeRequest(seekBarVolume)
+                    volumeChangeCallback(seekBarVolume)
+                }
+            }
             mSlider.clearOnChangeListeners() // Prevent adding multiple listeners
             mSlider.addOnChangeListener { _: Slider, value: Float, fromUser: Boolean ->
                 mSlider.stateDescription = getSliderStateDescription()
                 if (fromUser) {
-                    val seekBarVolume = value.toInt()
-                    updateSliderIconsVisibility(
-                        deviceDrawable = deviceDrawable,
-                        muteDrawable = muteDrawable,
-                        sliderVolume = seekBarVolume,
-                    )
-                    if (seekBarVolume != currentVolume) {
-                        setLatestVolumeRequest(seekBarVolume)
-                        volumeChangeCallback(seekBarVolume)
-                    }
+                    onUserValue(value)
                 }
             }
+            // The side button grabs it and the wheel sets it, as the framework's sliders
+            WheelSliderGrab.attach(
+                mSlider,
+                object : WheelSliderGrab.Callback {
+                    override fun onStart() {
+                        setIsDragging(true)
+                    }
+
+                    override fun onValue(value: Float) {
+                        onUserValue(value)
+                    }
+
+                    override fun onStop() {
+                        setIsDragging(false)
+                        settleCallback()
+                    }
+                },
+            )
 
             mSlider.clearOnSliderTouchListeners() // Prevent adding multiple listeners
             mSlider.addOnSliderTouchListener(
