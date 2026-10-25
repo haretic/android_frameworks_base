@@ -1721,8 +1721,11 @@ fun QuickSettingsLayout(
 /** The wheel shade's tab header, shared by both tabs so it stays put as they switch. */
 private val WheelShadeTabsKey = ElementKey("WheelShadeTabs")
 
-/** How much taller the wheel shade's header is with the full panel open than with the quick one. */
-private val WheelExpandedHeaderExtra = 49.dp
+/**
+ * How much taller the wheel shade's header is with the full panel open than with the quick one,
+ * with the 8dp the tabs keep from what is above them
+ */
+private val WheelExpandedHeaderExtra = 56.dp
 
 private object ResIdTags {
     const val quickSettingsPanel = "quick_settings_panel"
