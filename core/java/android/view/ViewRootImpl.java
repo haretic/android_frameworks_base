@@ -5260,6 +5260,12 @@ public final class ViewRootImpl implements ViewParent,
 
         if (mAdded) {
             dispatchFocusEvent(hasWindowFocus, false /* fakeFocus */);
+            if (hasWindowFocus && isWheelFocusEnabled() && !mAttachInfo.mInTouchMode) {
+                // Under the wheel the focus comes to a field as the page opens: the keyboard
+                // comes as the field is pressed, not as the page is reached
+                mWindowAttributes.softInputMode &=
+                        ~WindowManager.LayoutParams.SOFT_INPUT_IS_FORWARD_NAVIGATION;
+            }
             // Note: must be done after the focus change callbacks,
             // so all of the view state is set up correctly.
             mImeFocusController.onPostWindowFocus(
