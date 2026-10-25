@@ -83,16 +83,26 @@ public class PowerMenuStatsPanel extends LinearLayout implements PowerMenuStatsS
             return;
         }
         final Resources res = context.getResources();
+        final boolean strip = res.getBoolean(R.bool.global_actions_stats_strip);
         final View panel = LayoutInflater.from(context).inflate(
-                GlobalActionsLayoutLite.isListStyle(context)
+                GlobalActionsLayoutLite.isListStyle(context) && !strip
                         ? R.layout.global_actions_stats_grid : R.layout.global_actions_stats,
                 container, false);
         final ConstraintLayout.LayoutParams lp =
                 new ConstraintLayout.LayoutParams(0, ConstraintLayout.LayoutParams.WRAP_CONTENT);
-        if (res.getBoolean(R.bool.global_actions_stats_strip)) {
+        if (strip) {
             lp.topToTop = ConstraintLayout.LayoutParams.PARENT_ID;
             lp.startToStart = ConstraintLayout.LayoutParams.PARENT_ID;
             lp.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID;
+            if (GlobalActionsLayoutLite.isListStyle(context)) {
+                // The list, as tall as the screen, starts under the strip
+                final ConstraintLayout.LayoutParams menuLp =
+                        (ConstraintLayout.LayoutParams) menu.getLayoutParams();
+                menuLp.topToTop = ConstraintLayout.LayoutParams.UNSET;
+                menuLp.topToBottom = panel.getId();
+                menuLp.topMargin = res.getDimensionPixelSize(R.dimen.global_actions_list_margin);
+                menu.setLayoutParams(menuLp);
+            }
         } else {
             // A packed chain keeps the pair centred; the margin keeps the card out from under
             // the status bar when the pair is taller than the screen
