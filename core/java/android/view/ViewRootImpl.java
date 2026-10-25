@@ -6549,14 +6549,19 @@ public final class ViewRootImpl implements ViewParent,
                 || mWheelFocusRingHidden || !isWheelFocusEnabled()) {
             return false;
         }
-        final View focused = mView.findFocus();
+        View focused = mView.findFocus();
         if (focused == null || focused == mView || !focused.isShown() || isFadedOut(focused)) {
             return false;
         }
         if (isComposeHost(focused)) {
             return getComposeWheelFocusRect(focused, bounds);
         }
-        if (isWheelScroller(focused)) {
+        // A list that keeps the focus itself, as a dialog's choices: the wheel moves its
+        // selection, which its selector would show were a focused ripple's fill not hidden
+        if (focused instanceof android.widget.AbsListView list
+                && list.getSelectedView() != null) {
+            focused = list.getSelectedView();
+        } else if (isWheelScroller(focused)) {
             return false;
         }
         focused.getBoundsOnScreen(bounds, true);
