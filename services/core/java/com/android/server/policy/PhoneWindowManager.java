@@ -137,6 +137,7 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.ProgressDialog;
 import android.app.SearchManager;
+import android.app.StatusBarManager;
 import android.app.UiModeManager;
 import android.bluetooth.BluetoothProfile;
 import android.content.ActivityNotFoundException;
@@ -550,6 +551,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private boolean mPowerKeyToFocusedWindow;
     /** Touch mode set for a taskbar-mode app, with no touch since. */
     private volatile boolean mWheelTouchModeForced;
+    /** The down time of the side button press that last woke the device. */
+    private long mWheelWakePressDownTime = -1;
     volatile boolean mBackKeyHandled;
     volatile boolean mEndCallKeyHandled;
     volatile boolean mPowerButtonLaunchGestureTriggered;
@@ -1230,6 +1233,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mResolvedLongPressOnPowerBehavior = LONG_PRESS_POWER_NOTHING;
             if ((!interactive || mDefaultDisplay.getState() != Display.STATE_ON)
                     && event.getRepeatCount() == 0) {
+                // A double press starting here opens the camera, see powerPress
+                mWheelWakePressDownTime = event.getDownTime();
                 wakeUpFromWakeKey(event);
             }
             return;
@@ -1314,6 +1319,20 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     @VisibleForTesting
     void powerPress(long eventTime, int count, int displayId) {
         if (isWheelSideButtonInput()) {
+            // A double press that woke the device opens the camera, as the stock power double
+            // press, over the lock screen. The detector tells how each press began, not the
+            // sequence, and the second may find the screen on: the first is known by its time,
+            // a double press's interval before the second's (the time given here)
+            if (count == 2 && mWheelWakePressDownTime >= 0
+                    && eventTime - mWheelWakePressDownTime
+                            <= SingleKeyGestureDetector.MULTI_PRESS_TIMEOUT) {
+                mWheelWakePressDownTime = -1;
+                if (wheelCameraFromScreenOff()) {
+                    getStatusBarManagerInternal().onCameraLaunchGestureDetected(
+                            StatusBarManager.CAMERA_LAUNCH_SOURCE_POWER_DOUBLE_TAP);
+                }
+                return;
+            }
             if (!mDefaultDisplayPolicy.isAwake()
                     || mSingleKeyGestureDetector.beganFromNonInteractive()
                     || !mSingleKeyGestureDetector.beganFromDefaultDisplayOn()) {
@@ -4670,6 +4689,20 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                         ? LineageSettings.Secure.WHEEL_SIDE_BUTTON_ACTION_BACK
                         : LineageSettings.Secure.WHEEL_SIDE_BUTTON_ACTION_TASKBAR,
                 UserHandle.USER_CURRENT);
+    }
+
+    /**
+     * Whether the side button's double press from the screen off opens the camera: Settings'
+     * camera double press, its stock setting, on unless turned off, and a user set up.
+     */
+    private boolean wheelCameraFromScreenOff() {
+        final ContentResolver resolver = mContext.getContentResolver();
+        return Settings.Secure.getIntForUser(resolver,
+                        Settings.Secure.CAMERA_DOUBLE_TAP_POWER_GESTURE_DISABLED, 0,
+                        UserHandle.USER_CURRENT) == 0
+                && Settings.Secure.getIntForUser(resolver, Settings.Secure.USER_SETUP_COMPLETE, 0,
+                        UserHandle.USER_CURRENT) != 0
+                && getStatusBarManagerInternal() != null;
     }
 
     private void performWheelSideButtonAction(boolean hold) {
