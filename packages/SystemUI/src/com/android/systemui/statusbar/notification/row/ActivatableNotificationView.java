@@ -155,8 +155,10 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
     protected void updateColors() {
         if (notificationRowTransparency()) {
             mNormalColor = SurfaceEffectColors.surfaceEffect1(getContext());
+            // Without blur the row stands on the shade's own colour: a step up from it, so it
+            // still reads as a card where the black theme makes the container black too
             mOpaqueColor = mContext.getColor(
-                    com.android.internal.R.color.materialColorSurfaceContainer);
+                    com.android.internal.R.color.materialColorSurfaceContainerHigh);
         } else {
             mNormalColor = mContext.getColor(
                     com.android.internal.R.color.materialColorSurfaceContainerHigh);
