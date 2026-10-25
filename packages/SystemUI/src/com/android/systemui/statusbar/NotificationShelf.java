@@ -92,6 +92,8 @@ public class NotificationShelf extends ActivatableNotificationView {
     private int mStatusBarHeight;
     private boolean mEnableNotificationClipping;
     private AmbientState mAmbientState;
+    /** Whether the tint was last set on the lock screen, where the wheel UI's differs. */
+    private boolean mTintOnKeyguard;
     private int mPaddingBetweenElements;
     private int mNotGoneIndex;
     private boolean mHasItemsInStableShelf;
@@ -214,6 +216,10 @@ public class NotificationShelf extends ActivatableNotificationView {
      */
     public void updateState(StackScrollAlgorithm.StackScrollAlgorithmState algorithmState,
                             AmbientState ambientState) {
+        if (ambientState.isOnKeyguard() != mTintOnKeyguard) {
+            mTintOnKeyguard = ambientState.isOnKeyguard();
+            updateBackgroundTint();
+        }
         ExpandableView lastView = ambientState.getLastVisibleBackgroundChild();
         ShelfState viewState = (ShelfState) getViewState();
         if (mShowNotificationShelf && lastView != null) {
@@ -449,6 +455,17 @@ public class NotificationShelf extends ActivatableNotificationView {
             mAlignedToEnd = alignedToEnd;
             requestLayout();
         }
+    }
+
+    @Override
+    protected void setBackgroundTintColor(int color) {
+        // On the wheel UI's lock screen the icons sit on the Unlock pill's colour: the
+        // notifications' black would be a hole in the wallpaper
+        if (mTintOnKeyguard && com.android.systemui.wheel.WheelLayoutSettings.lockscreen(mContext)) {
+            color = mContext.getColor(
+                    com.android.internal.R.color.materialColorSurfaceContainerHigh);
+        }
+        super.setBackgroundTintColor(color);
     }
 
     @Override
