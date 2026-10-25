@@ -197,6 +197,7 @@ import android.view.ViewParent;
 import android.view.ViewRootImpl;
 import android.view.ViewStructure;
 import android.view.ViewTreeObserver;
+import android.view.WindowInsets;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -9649,6 +9650,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if (isWheelPressForKeyboard(keyCode, event)) {
+            return true;
+        }
         final int which = doKeyDown(keyCode, event, null);
         if (which == KEY_EVENT_NOT_HANDLED) {
             return super.onKeyDown(keyCode, event);
@@ -9996,10 +10000,36 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         }
     }
 
+    /**
+     * The wheel UI's fields (config_wheelFocus): the side button's press (Enter) on a field with
+     * the keyboard down brings the keyboard, as a tap on it does; with the keyboard up it is the
+     * field's Enter as ever.
+     */
+    private boolean isWheelPressForKeyboard(int keyCode, KeyEvent event) {
+        if (keyCode != KeyEvent.KEYCODE_ENTER || !event.hasNoModifiers()
+                || !(mText instanceof Editable) || !onCheckIsTextEditor()
+                || !getShowSoftInputOnFocus()
+                || !getContext().getResources().getBoolean(
+                        com.android.internal.R.bool.config_wheelFocus)) {
+            return false;
+        }
+        final WindowInsets insets = getRootWindowInsets();
+        return insets != null && !insets.isVisible(WindowInsets.Type.ime());
+    }
+
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         if (!isEnabled()) {
             return super.onKeyUp(keyCode, event);
+        }
+
+        if (isWheelPressForKeyboard(keyCode, event)) {
+            final InputMethodManager imm = getInputMethodManager();
+            viewClicked(imm);
+            if (imm != null) {
+                imm.showSoftInput(this, 0);
+            }
+            return true;
         }
 
         if (!KeyEvent.isModifierKey(keyCode)) {
