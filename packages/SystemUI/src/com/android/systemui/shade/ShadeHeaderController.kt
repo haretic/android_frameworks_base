@@ -664,6 +664,9 @@ constructor(
     }
 
     private fun updateQQSPaddings() {
+        // The header's own padding: the clock's for the status bar, reapplied as its size
+        // reloads, would sit the big clock out of line with the date below it
+        clock.setShouldApplyPadding(false)
         val clockPaddingStart =
             resources.getDimensionPixelSize(R.dimen.status_bar_left_clock_starting_padding)
         val clockPaddingEnd =
