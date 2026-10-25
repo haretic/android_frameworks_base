@@ -883,6 +883,12 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 ViewGroup.LayoutParams.MATCH_PARENT));
         buildLabel(side);
         buildPanel(side);
+        // Below the status bar: the clock, battery and the rest stay in sight. Padded, as a
+        // window over the status bar gets no inset from it. Where the app moves aside, the
+        // status bar goes with it and the bar stands up to the top of the screen
+        final int statusBar = com.android.internal.policy.SystemBarUtils.getStatusBarHeight(
+                mContext);
+        side.setPadding(0, statusBar, 0, 0);
 
         // The bar, its focus light under the buttons and a hairline towards the app
         final FrameLayout frame = new FrameLayout(mContext);
@@ -897,7 +903,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         mBar.setOrientation(LinearLayout.VERTICAL);
         mBar.setGravity(Gravity.CENTER_HORIZONTAL);
         mBar.setPadding(0, mContext.getResources().getDimensionPixelSize(
-                R.dimen.wheel_taskbar_top), 0, dp(12));
+                R.dimen.wheel_taskbar_top) + (mSettings.push ? statusBar : 0), 0, dp(12));
         frame.addView(mBar, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
         final View hairline = new View(mContext);
@@ -925,10 +931,10 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         lp.gravity = Gravity.TOP | (mSettings.left ? Gravity.START : Gravity.END);
         lp.setTitle("WheelTaskbar");
         lp.setFitInsetsTypes(0);
-        // Below the status bar: the clock, battery and the rest stay in sight over the bar.
-        // Padded, as a window over the status bar gets no inset from it
-        root.setPadding(0, com.android.internal.policy.SystemBarUtils.getStatusBarHeight(mContext),
-                0, 0);
+        if (!mSettings.push) {
+            row.setPadding(0, statusBar, 0, 0);
+            side.setPadding(0, 0, 0, 0);
+        }
         lp.layoutInDisplayCutoutMode =
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
         // Read when the window gets the focus: the side button presses instead of sleeping
@@ -1767,10 +1773,13 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         mLabelFor.getLocationInWindow(at);
         final View parent = (View) mLabel.getParent();
         parent.getLocationInWindow(side);
-        final float centre = at[1] - side[1] + mLabelFor.getHeight() * mLabelFor.getScaleY() / 2f;
+        // From the top of the parent's content, which is where the label lays out
+        final float centre = at[1] - side[1] - parent.getPaddingTop()
+                + mLabelFor.getHeight() * mLabelFor.getScaleY() / 2f;
         final float margin = dp(8);
-        final float y = Math.max(margin, Math.min(parent.getHeight() - mLabel.getHeight()
-                - margin, centre - mLabel.getHeight() / 2f));
+        final float y = Math.max(margin, Math.min(parent.getHeight() - parent.getPaddingTop()
+                - parent.getPaddingBottom() - mLabel.getHeight() - margin,
+                centre - mLabel.getHeight() / 2f));
         if (mLabelAppearing) {
             mLabelAppearing = false;
             mLabelY.cancel();
