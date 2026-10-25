@@ -1019,8 +1019,11 @@ public class NotificationStackScrollLayout
                 return;
             }
 
+            // The wheel's shade has its controls as lists the width of the shade, no tiles to
+            // line the cards up with
             if (orientation == Configuration.ORIENTATION_PORTRAIT
-                    || mShouldUseSplitNotificationShade) {
+                    || mShouldUseSplitNotificationShade
+                    || com.android.systemui.wheel.WheelLayoutSettings.shade(mContext)) {
                 return;
             }
 
