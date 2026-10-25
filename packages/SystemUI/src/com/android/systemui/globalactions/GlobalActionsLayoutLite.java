@@ -17,7 +17,6 @@
 package com.android.systemui.globalactions;
 
 import android.content.Context;
-import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.util.AttributeSet;
 import android.view.View;
@@ -63,8 +62,8 @@ public class GlobalActionsLayoutLite extends GlobalActionsLayout {
     /** Whether the menu is the list style here, see config_powerMenuList. */
     public static boolean isListStyle(Context context) {
         final Resources res = context.getResources();
-        return res.getBoolean(R.bool.config_powerMenuList)
-                && res.getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE;
+        // Turned too: the list scrolls where its rows don't fit, the wheel's steps with it
+        return res.getBoolean(R.bool.config_powerMenuList);
     }
 
     @Override
