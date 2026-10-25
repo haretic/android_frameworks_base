@@ -6614,11 +6614,15 @@ public final class ViewRootImpl implements ViewParent,
             return true;
         }
         final View focused = mView.findFocus();
-        if (focused instanceof android.widget.ImageButton
-                && focused.getParent() instanceof View toolbar
-                && toolbar.getClass().getSimpleName().endsWith("Toolbar")) {
-            final View below = focused.focusSearch(View.FOCUS_DOWN);
-            return below != null && below != focused && !isInside(below, toolbar)
+        if (isToolbarNavigation(focused)) {
+            final View toolbar = (View) focused.getParent();
+            // Down past the toolbar's other buttons, as a page's refresh, onto the page
+            View below = focused;
+            for (int i = 0; i < 8 && below != null && isInside(below, toolbar); i++) {
+                final View next = below.focusSearch(View.FOCUS_DOWN);
+                below = next == below ? null : next;
+            }
+            return below != null && !isInside(below, toolbar)
                     && below.requestFocus(View.FOCUS_DOWN);
         }
         // Not on a toolbar's back arrow: nothing to skip
@@ -6627,12 +6631,12 @@ public final class ViewRootImpl implements ViewParent,
 
     /**
      * Takes the window's first focus past its toolbar's back arrow: now, or while the page's rows
-     * are still to come, after each layout of the window's first second.
+     * are still to come, after each layout till the wheel turns or WHEEL_FIRST_STOP_MS pass.
      */
     private void wheelFirstStop() {
         mWheelFirstStopPending = !skipWheelNavigationUp();
         if (mWheelFirstStopPending) {
-            mWheelFirstStopUntil = SystemClock.uptimeMillis() + 1000;
+            mWheelFirstStopUntil = SystemClock.uptimeMillis() + WHEEL_FIRST_STOP_MS;
         }
     }
 
@@ -6642,6 +6646,37 @@ public final class ViewRootImpl implements ViewParent,
      */
     private boolean mWheelFirstStopPending;
     private long mWheelFirstStopUntil;
+
+    /** Whether {@code view} is a toolbar's button, as its back arrow. */
+    private static boolean isToolbarNavigation(View view) {
+        return view instanceof android.widget.ImageButton
+                && view.getParent() instanceof View toolbar
+                && toolbar.getClass().getSimpleName().endsWith("Toolbar");
+    }
+
+    private static boolean isFocusMovingKey(int keyCode) {
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_UP:
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_TAB:
+            case KeyEvent.KEYCODE_NAVIGATE_NEXT:
+            case KeyEvent.KEYCODE_NAVIGATE_PREVIOUS:
+            case KeyEvent.KEYCODE_PAGE_UP:
+            case KeyEvent.KEYCODE_PAGE_DOWN:
+            case KeyEvent.KEYCODE_MOVE_HOME:
+            case KeyEvent.KEYCODE_MOVE_END:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /** Whether the key being handled is one that moves the focus, see ViewPostImeInputStage. */
+    private boolean mWheelMovingFocus;
+    /** Whether a first stop is posted for the focus that fell back to a toolbar. */
+    private boolean mWheelFirstStopPosted;
 
     private static boolean isInside(View view, View parent) {
         for (View v = view; v != null;
@@ -6674,14 +6709,56 @@ public final class ViewRootImpl implements ViewParent,
      */
     private boolean getWheelFocusContent(View view, Rect content) {
         mWheelFocusCardRadius = -1;
-        final Drawable background = view.getBackground();
-        if (background == null) {
-            return false;
-        }
         content.setEmpty();
-        wheelFocusCard(background, content);
+        final Drawable background = view.getBackground();
+        if (background != null) {
+            wheelFocusCard(background, content);
+        }
+        if (content.isEmpty() || content.width() >= view.getWidth()
+                && content.height() >= view.getHeight()) {
+            // A frame round the one child that draws the card, as Settings' main switch bar
+            final View card = wheelFocusCardChild(view);
+            if (card == null) {
+                return false;
+            }
+            mWheelFocusCardRadius = -1;
+            content.setEmpty();
+            wheelFocusCard(card.getBackground(), content);
+            if (content.isEmpty()) {
+                return false;
+            }
+            content.intersect(0, 0, card.getWidth(), card.getHeight());
+            for (View v = card; v != view; v = (View) v.getParent()) {
+                content.offset(v.getLeft() - v.getScrollX(), v.getTop() - v.getScrollY());
+            }
+        }
         return !content.isEmpty()
                 && (content.width() < view.getWidth() || content.height() < view.getHeight());
+    }
+
+    /**
+     * The view down {@code view}'s line of only children that is the first with a background,
+     * as Settings' main switch bar's frame; none where a view on the way has more than one.
+     */
+    private static View wheelFocusCardChild(View view) {
+        for (View v = view; v instanceof ViewGroup group; ) {
+            View only = null;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                final View child = group.getChildAt(i);
+                if (child.getVisibility() != View.VISIBLE) {
+                    continue;
+                }
+                if (only != null) {
+                    return null;
+                }
+                only = child;
+            }
+            if (only == null || only.getBackground() != null) {
+                return only;
+            }
+            v = only;
+        }
+        return null;
     }
 
     /**
@@ -7355,6 +7432,16 @@ public final class ViewRootImpl implements ViewParent,
         }
         checkThread();
         scheduleTraversals();
+        if (!mWheelMovingFocus && !mWheelFirstStopPosted && isWheelFocusEnabled()
+                && !mAttachInfo.mInTouchMode && isToolbarNavigation(focused)) {
+            // The focus fell back to the toolbar, as a page took over the window: past it
+            // once the focus change is done
+            mWheelFirstStopPosted = true;
+            mHandler.post(() -> {
+                mWheelFirstStopPosted = false;
+                wheelFirstStop();
+            });
+        }
     }
 
     @Override
@@ -8898,8 +8985,14 @@ public final class ViewRootImpl implements ViewParent,
 
         @Override
         protected int onProcess(QueuedInputEvent q) {
-            if (q.mEvent instanceof KeyEvent) {
-                return processKeyEvent(q);
+            if (q.mEvent instanceof KeyEvent key) {
+                // Focus the keys move is the user's: no first stop past the back arrow for it
+                mWheelMovingFocus = isFocusMovingKey(key.getKeyCode());
+                try {
+                    return processKeyEvent(q);
+                } finally {
+                    mWheelMovingFocus = false;
+                }
             } else {
                 final int source = q.mEvent.getSource();
                 if ((source & InputDevice.SOURCE_CLASS_POINTER) != 0) {
@@ -12320,6 +12413,11 @@ public final class ViewRootImpl implements ViewParent,
 
     private static final float WHEEL_FOCUS_WIDTH_DP = 3;
     private static final float WHEEL_FOCUS_RADIUS_DP = 18;
+    /**
+     * How long the first focus waits for the page's rows to come past the back arrow, as
+     * Internet's, which come with its first scan.
+     */
+    private static final long WHEEL_FIRST_STOP_MS = 5000;
     /** The focused view's card's corner radius, -1 for none found. */
     private float mWheelFocusCardRadius = -1;
     private final Rect mWheelFocusRect = new Rect();
