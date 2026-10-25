@@ -1101,9 +1101,9 @@ constructor(
 
     /**
      * The wheel shade's label and percentage over a slider. Neither sits under the thumb: the
-     * label goes on the fill where it fits there and past the thumb where it doesn't, the
-     * percentage at the end unless the thumb has reached it, then just short of the thumb. Each
-     * takes the colour for what it's on.
+     * label goes at the start of the fill where it fits there, the percentage at the end of the
+     * fill, against the thumb, where it fits after the label; what doesn't fit goes past the
+     * thumb, as every slider does alike. Each takes the colour for what it's on.
      */
     @Composable
     private fun WheelSliderLabel(
@@ -1146,18 +1146,20 @@ constructor(
             val startPx = start.roundToPx()
             val labelFits = thumb - gapPx >= startPx + labelPlaceable.width
             val labelX = if (labelFits) startPx else thumb + gapPx
-            val percentEnd = width - endPadding.roundToPx()
-            val percentReached = thumb + gapPx > percentEnd - percentPlaceable.width
+            val labelEnd = labelX + labelPlaceable.width + gapPx
+            val percentFits =
+                labelFits && thumb - gapPx - percentPlaceable.width >= labelEnd
+            // Past the thumb it keeps clear of the button at the slider's end
             val percentX =
-                if (percentReached) {
-                    (thumb - gapPx - percentPlaceable.width).coerceAtLeast(
-                        if (labelFits) labelX + labelPlaceable.width + gapPx else 0
-                    )
+                if (percentFits) {
+                    thumb - gapPx - percentPlaceable.width
                 } else {
-                    percentEnd - percentPlaceable.width
+                    maxOf(if (labelFits) thumb + gapPx else labelEnd, 0).coerceAtMost(
+                        width - endPadding.roundToPx() - percentPlaceable.width
+                    )
                 }
             labelOnFill = labelFits
-            percentOnFill = percentReached
+            percentOnFill = percentFits
             layout(width, height) {
                 labelPlaceable.place(labelX, (height - labelPlaceable.height) / 2)
                 percentPlaceable.place(percentX, (height - percentPlaceable.height) / 2)
