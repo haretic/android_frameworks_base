@@ -313,4 +313,7 @@
 
     <!-- Identifier for the phishing animated smart action. -->
     <item type="id" name="is_phishing_animated_action" />
+
+    <!-- The wheel's grab of a Material slider, see WheelSliderGrab. -->
+    <item type="id" name="wheel_slider_grab" />
 </resources>
