@@ -4641,6 +4641,9 @@ public final class ViewRootImpl implements ViewParent,
                 mWheelFirstStopPending = SystemClock.uptimeMillis() < mWheelFirstStopUntil
                         && !skipWheelNavigationUp();
             }
+            if (isWheelFocusEnabled() && !mAttachInfo.mInTouchMode) {
+                wheelFocusIntoScrollView();
+            }
 
             // By this point all views have been sized and positioned
             // We can compute the transparent area
@@ -6646,6 +6649,28 @@ public final class ViewRootImpl implements ViewParent,
      */
     private boolean mWheelFirstStopPending;
     private long mWheelFirstStopUntil;
+
+    /**
+     * A scroll view that took the focus itself while it had nothing focusable in it (its row came
+     * in later) hands it on to its first view once there is one: the wheel's ring on the scroll
+     * view looks as if on that view, and the first step would only move the focus in.
+     */
+    private void wheelFocusIntoScrollView() {
+        final View focused = mView != null ? mView.findFocus() : null;
+        if (!(focused instanceof ViewGroup group)
+                || group.getDescendantFocusability() != ViewGroup.FOCUS_AFTER_DESCENDANTS
+                || !(group instanceof android.widget.ScrollView
+                        || group instanceof android.widget.HorizontalScrollView
+                        || group.getClass().getSimpleName().endsWith("NestedScrollView"))) {
+            return;
+        }
+        final ArrayList<View> focusables = new ArrayList<>();
+        // Lists the scroll view itself only when nothing in it is focusable
+        group.addFocusables(focusables, View.FOCUS_FORWARD);
+        if (!focusables.isEmpty() && !focusables.contains(group)) {
+            group.requestFocus(View.FOCUS_DOWN);
+        }
+    }
 
     /** Whether {@code view} is a toolbar's button, as its back arrow. */
     private static boolean isToolbarNavigation(View view) {
