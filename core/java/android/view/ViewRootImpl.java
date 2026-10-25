@@ -4636,6 +4636,11 @@ public final class ViewRootImpl implements ViewParent,
                 || mAttachInfo.mRecomputeGlobalAttributes;
         if (didLayout) {
             performLayout(lp, mWidth, mHeight);
+            if (mWheelFirstStopPending) {
+                // The page's rows the first focus was to go to may be laid out now
+                mWheelFirstStopPending = SystemClock.uptimeMillis() < mWheelFirstStopUntil
+                        && !skipWheelNavigationUp();
+            }
 
             // By this point all views have been sized and positioned
             // We can compute the transparent area
@@ -4785,6 +4790,7 @@ public final class ViewRootImpl implements ViewParent,
                 if (mView != null) {
                     if (!mView.hasFocus()) {
                         mView.restoreDefaultFocus();
+                        wheelFirstStop();
                         if (DEBUG_INPUT_RESIZE) {
                             Log.v(mTag, "First: requested focused view=" + mView.findFocus());
                         }
@@ -6510,9 +6516,13 @@ public final class ViewRootImpl implements ViewParent,
         final RectF ring = new RectF(mWheelFocusRect);
         ring.inset(-out, -out);
         // The card's own corners where it has them, the ring's stroke being inside its edge
+        // A square, an icon button, is round in its ring as on its touch ripple
+        final boolean square = Math.abs(mWheelFocusRect.width() - mWheelFocusRect.height())
+                <= density;
         final float radius = Math.min(mWheelFocusCardRadius >= 0
                         ? Math.max(0, mWheelFocusCardRadius - out)
-                        : WHEEL_FOCUS_RADIUS_DP * density, ring.height() / 2);
+                        : square ? ring.height() / 2 : WHEEL_FOCUS_RADIUS_DP * density,
+                ring.height() / 2);
         canvas.drawRoundRect(ring, radius, radius, mWheelFocusPaint);
     }
 
@@ -6587,6 +6597,54 @@ public final class ViewRootImpl implements ViewParent,
      */
     boolean replacesFocusHighlight() {
         return isWheelFocusEnabled();
+    }
+
+    /**
+     * The wheel's first stop is the page, not its toolbar's back arrow: the side button's hold
+     * goes back already, and the first turn would only have to step off it.
+     */
+    private boolean skipWheelNavigationUp() {
+        if (!isWheelFocusEnabled() || mAttachInfo.mInTouchMode || mView == null) {
+            return true;
+        }
+        final View focused = mView.findFocus();
+        if (focused instanceof android.widget.ImageButton
+                && focused.getParent() instanceof View toolbar
+                && toolbar.getClass().getSimpleName().endsWith("Toolbar")) {
+            final View below = focused.focusSearch(View.FOCUS_DOWN);
+            return below != null && below != focused && !isInside(below, toolbar)
+                    && below.requestFocus(View.FOCUS_DOWN);
+        }
+        // Not on a toolbar's back arrow: nothing to skip
+        return true;
+    }
+
+    /**
+     * Takes the window's first focus past its toolbar's back arrow: now, or while the page's rows
+     * are still to come, after each layout of the window's first second.
+     */
+    private void wheelFirstStop() {
+        mWheelFirstStopPending = !skipWheelNavigationUp();
+        if (mWheelFirstStopPending) {
+            mWheelFirstStopUntil = SystemClock.uptimeMillis() + 1000;
+        }
+    }
+
+    /**
+     * Whether the window's first focus went to a toolbar's back arrow before the page had a row
+     * to take it, and until when the layouts try again, see wheelFirstStop.
+     */
+    private boolean mWheelFirstStopPending;
+    private long mWheelFirstStopUntil;
+
+    private static boolean isInside(View view, View parent) {
+        for (View v = view; v != null;
+                v = v.getParent() instanceof View p ? p : null) {
+            if (v == parent) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Whether {@code view} or a view in it is pressed, as a slider the wheel holds is. */
@@ -7314,6 +7372,7 @@ public final class ViewRootImpl implements ViewParent,
             if (!mView.hasFocus()) {
                 if (sAlwaysAssignFocus || !mAttachInfo.mInTouchMode) {
                     v.requestFocus();
+                    wheelFirstStop();
                 }
             } else {
                 // the one case where will transfer focus away from the current one
@@ -8148,15 +8207,24 @@ public final class ViewRootImpl implements ViewParent,
             if (DEFER_RESUME_FOCUS_IN_NON_FOCUSED_WINDOW.isTrue()) {
                 // If the window has focus, then we should restore the default view focus.
                 if (mAttachInfo.mHasWindowFocus) {
-                    return mView.restoreDefaultFocus();
+                    return restoreDefaultFocusPastNavigationUp();
                 }
             } else {
                 // find the best view to give focus to in this brave new non-touch-mode
                 // world
-                return mView.restoreDefaultFocus();
+                return restoreDefaultFocusPastNavigationUp();
             }
         }
         return false;
+    }
+
+    /** The default focus as the wheel leaves touch mode: on the page, past its back arrow. */
+    private boolean restoreDefaultFocusPastNavigationUp() {
+        final boolean restored = mView.restoreDefaultFocus();
+        if (restored) {
+            wheelFirstStop();
+        }
+        return restored;
     }
 
     /**
@@ -8851,6 +8919,8 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         private boolean performFocusNavigation(KeyEvent event) {
+            // Moved by the wheel: the first stop is the user's from here on
+            mWheelFirstStopPending = false;
             @FocusDirection int direction = 0;
             switch (event.getKeyCode()) {
                 case KeyEvent.KEYCODE_DPAD_LEFT:
@@ -8935,6 +9005,8 @@ public final class ViewRootImpl implements ViewParent,
                     }
                 } else {
                     if (mView.restoreDefaultFocus()) {
+                        // The wheel's first step lands on the page, past its back arrow
+                        skipWheelNavigationUp();
                         return true;
                     } else if (moveFocusToAdjacentWindow(direction)) {
                         return true;
