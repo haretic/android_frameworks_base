@@ -4863,6 +4863,38 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     newFocus != null ? newFocus.getOwningPackage() : null);
         }
         mDefaultDisplayFocus = newFocus;
+        if (newFocus != null && newFocus.getBaseType() >= FIRST_APPLICATION_WINDOW
+                && newFocus.getBaseType() <= LAST_APPLICATION_WINDOW) {
+            // Out of the window manager's lock
+            mHandler.post(() -> touchModeForWheelMode(newFocus));
+        }
+    }
+
+    /**
+     * An app the wheel doesn't move the focus in (its wheel mode taskbar, scroll and the like,
+     * not app, tab or arrows) shows no focus: the wheel's ring there would mark what the wheel
+     * can't move. Touch mode, as if touched, for the window that has the focus.
+     */
+    private void touchModeForWheelMode(WindowState focus) {
+        if (mDefaultDisplayFocus != focus || mContext.getResources().getString(
+                com.android.internal.R.string.config_wheelDaemonInputDevice).isEmpty()) {
+            return;
+        }
+        final ContentResolver resolver = mContext.getContentResolver();
+        if (LineageSettings.Secure.getIntForUser(resolver, LineageSettings.Secure.WHEEL_UI, 1,
+                UserHandle.USER_CURRENT) == 0) {
+            return;
+        }
+        final String mode = wheelAppMode(resolver, focus.getOwningPackage());
+        if ("app".equals(mode) || "tab".equals(mode) || "arrows".equals(mode)) {
+            return;
+        }
+        try {
+            WindowManagerGlobal.getWindowManagerService().setInTouchMode(true,
+                    Display.DEFAULT_DISPLAY);
+        } catch (RemoteException e) {
+            Slog.w(TAG, "No touch mode for " + focus, e);
+        }
     }
 
     /**
