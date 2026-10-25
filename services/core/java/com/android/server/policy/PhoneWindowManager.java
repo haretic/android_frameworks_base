@@ -217,6 +217,7 @@ import android.view.Display;
 import android.view.DisplayInfo;
 import android.view.HapticFeedbackConstants;
 import android.view.IDisplayFoldListener;
+import android.view.IWindowManager;
 import android.view.InputDevice;
 import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
@@ -546,6 +547,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private volatile WindowState mDefaultDisplayFocus;
     // The power key press in progress goes to the focused window, input reader thread only
     private boolean mPowerKeyToFocusedWindow;
+    /** Touch mode set for a taskbar-mode app, with no touch since. */
+    private volatile boolean mWheelTouchModeForced;
     volatile boolean mBackKeyHandled;
     volatile boolean mEndCallKeyHandled;
     volatile boolean mPowerButtonLaunchGestureTriggered;
@@ -4886,16 +4889,33 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             return;
         }
         final String mode = wheelAppMode(resolver, focus.getOwningPackage());
-        if ("app".equals(mode) || "tab".equals(mode) || "arrows".equals(mode)) {
-            return;
-        }
+        final boolean moves = "app".equals(mode) || "tab".equals(mode) || "arrows".equals(mode);
         try {
-            WindowManagerGlobal.getWindowManagerService().setInTouchMode(true,
-                    Display.DEFAULT_DISPLAY);
+            final IWindowManager wm = WindowManagerGlobal.getWindowManagerService();
+            if (moves) {
+                // Back from such an app with no touch since: the wheel goes on where it was,
+                // its first step not spent leaving a touch mode no one touched for
+                if (mWheelTouchModeForced) {
+                    mWheelTouchModeForced = false;
+                    wm.setInTouchMode(false, Display.DEFAULT_DISPLAY);
+                }
+            } else if (!wm.isInTouchMode(Display.DEFAULT_DISPLAY)) {
+                mWheelTouchModeForced = true;
+                wm.setInTouchMode(true, Display.DEFAULT_DISPLAY);
+            }
         } catch (RemoteException e) {
             Slog.w(TAG, "No touch mode for " + focus, e);
         }
     }
+
+    /** A touch makes the touch mode the wheel's taskbar mode set a real one. */
+    private final WindowManagerPolicyConstants.PointerEventListener mWheelTouchListener =
+            event -> {
+                if (event.getActionMasked() == MotionEvent.ACTION_DOWN
+                        && event.isFromSource(InputDevice.SOURCE_TOUCHSCREEN)) {
+                    mWheelTouchModeForced = false;
+                }
+            };
 
     /**
      * Whether a power key press goes to the focused window as a key event, see
@@ -7049,6 +7069,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         // In normal flow, systemReady is called before other system services are ready.
         // So it is better not to bind keyguard here.
         mKeyguardDelegate.onSystemReady();
+
+        if (!mContext.getResources().getString(
+                com.android.internal.R.string.config_wheelDaemonInputDevice).isEmpty()) {
+            mWindowManagerFuncs.registerPointerEventListener(mWheelTouchListener,
+                    Display.DEFAULT_DISPLAY);
+        }
 
         mVrManagerInternal = LocalServices.getService(VrManagerInternal.class);
         if (mVrManagerInternal != null) {
