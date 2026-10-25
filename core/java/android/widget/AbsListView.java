@@ -2173,6 +2173,14 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
             }
             resurrectSelection();
         }
+        // Under the wheel a list of choices a window opens on, as a dialog's, starts on the one
+        // checked, so the ring shows what is set and the wheel goes on from there
+        if (gainFocus && previouslyFocusedRect == null && !isInTouchMode()
+                && mChoiceMode == CHOICE_MODE_SINGLE && getCheckedItemPosition() >= 0
+                && getCheckedItemPosition() != mSelectedPosition
+                && getContext().getResources().getBoolean(R.bool.config_wheelFocus)) {
+            setSelection(getCheckedItemPosition());
+        }
     }
 
     @Override
