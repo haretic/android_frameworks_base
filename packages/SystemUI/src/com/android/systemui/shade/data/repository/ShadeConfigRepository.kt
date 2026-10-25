@@ -16,11 +16,13 @@
 
 package com.android.systemui.shade.data.repository
 
+import android.content.Context
 import android.content.res.Resources
 import android.provider.Settings
 import androidx.annotation.BoolRes
 import com.android.systemui.common.ui.data.repository.ConfigurationRepository
 import com.android.systemui.dagger.SysUISingleton
+import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.flags.FeatureFlagsClassic
 import com.android.systemui.flags.Flags
@@ -29,15 +31,18 @@ import com.android.systemui.scene.shared.flag.SceneContainerFlag
 import com.android.systemui.shade.ShadeDisplayAware
 import com.android.systemui.shared.settings.data.repository.SecureSettingsRepository
 import com.android.systemui.util.kotlin.emitOnStart
+import com.android.systemui.wheel.wheelLayoutEnabled
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import lineageos.providers.LineageSettings
 
 /**
  * Provides shade configuration values for the window currently hosting the shade. This is mainly a
@@ -49,6 +54,7 @@ class ShadeConfigRepository
 @Inject
 constructor(
     @Background private val backgroundDispatcher: CoroutineDispatcher,
+    @Application private val context: Context,
     @ShadeDisplayAware private val resources: Resources,
     @ShadeDisplayAware private val configurationRepository: ConfigurationRepository,
     secureSettingsRepository: SecureSettingsRepository,
@@ -103,15 +109,22 @@ constructor(
      * applicable when Dual Shade is disabled.
      */
     val legacyUseSplitShade: Flow<Boolean> =
-        configurationRepository.onConfigurationChange
-            .emitOnStart()
-            .map {
-                with(resources) {
-                    // Based on the logic in the deprecated `SplitShadeStateController`.
-                    getBoolean(R.bool.config_use_split_notification_shade) ||
-                        (featureFlags.isEnabled(Flags.LOCKSCREEN_ENABLE_LANDSCAPE) &&
-                            getBoolean(R.bool.force_config_use_split_notification_shade))
-                }
+        combine(
+                configurationRepository.onConfigurationChange
+                    .emitOnStart()
+                    .map {
+                        with(resources) {
+                            // Based on the logic in the deprecated `SplitShadeStateController`.
+                            getBoolean(R.bool.config_use_split_notification_shade) ||
+                                (featureFlags.isEnabled(Flags.LOCKSCREEN_ENABLE_LANDSCAPE) &&
+                                    getBoolean(R.bool.force_config_use_split_notification_shade))
+                        }
+                    },
+                // The wheel's shade is one column in tabs, the wheel walking one list at a
+                // time: never split, turned too
+                wheelLayoutEnabled(context, LineageSettings.Secure.WHEEL_SHADE),
+            ) { split, wheel ->
+                split && !wheel
             }
             .distinctUntilChanged()
 

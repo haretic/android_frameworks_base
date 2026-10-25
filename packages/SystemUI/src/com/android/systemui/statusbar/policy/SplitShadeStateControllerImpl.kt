@@ -15,11 +15,14 @@
  */
 package com.android.systemui.statusbar.policy
 
+import android.content.Context
 import android.content.res.Resources
 import com.android.systemui.dagger.SysUISingleton
+import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.flags.FeatureFlags
 import com.android.systemui.flags.Flags
 import com.android.systemui.res.R
+import com.android.systemui.wheel.WheelLayoutSettings
 import javax.inject.Inject
 
 /**
@@ -27,8 +30,12 @@ import javax.inject.Inject
  * screen width, and flags.
  */
 @SysUISingleton
-class SplitShadeStateControllerImpl @Inject constructor(private val featureFlags: FeatureFlags) :
-    SplitShadeStateController {
+class SplitShadeStateControllerImpl
+@Inject
+constructor(
+    private val featureFlags: FeatureFlags,
+    @Application private val context: Context,
+) : SplitShadeStateController {
 
     @Deprecated(
         message = "This is deprecated, please use ShadeInteractor#isSplitShade instead",
@@ -39,8 +46,10 @@ class SplitShadeStateControllerImpl @Inject constructor(private val featureFlags
             ),
     )
     override fun shouldUseSplitNotificationShade(resources: Resources): Boolean {
+        // The wheel's shade is one column in tabs, turned too, see ShadeConfigRepository
         return (resources.getBoolean(R.bool.config_use_split_notification_shade) ||
             (featureFlags.isEnabled(Flags.LOCKSCREEN_ENABLE_LANDSCAPE) &&
-                resources.getBoolean(R.bool.force_config_use_split_notification_shade)))
+                resources.getBoolean(R.bool.force_config_use_split_notification_shade))) &&
+            !WheelLayoutSettings.shade(context)
     }
 }
