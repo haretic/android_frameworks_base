@@ -8980,7 +8980,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
             if (mAttachInfo != null) {
                 final Rect r = mAttachInfo.mTmpInvalRect;
-                getLocalVisibleRect(r);
+                if (!getLocalVisibleRect(r)) {
+                    // None of it on screen, as a list's next row laid out past its edge: what
+                    // is left in r is no rect of this view, and a list would scroll on by it
+                    // far past the row. The whole view comes on screen.
+                    r.set(0, 0, getWidth(), getHeight());
+                }
                 requestRectangleOnScreen(r, false,
                         RECTANGLE_ON_SCREEN_REQUEST_SOURCE_INPUT_FOCUS);
             }
