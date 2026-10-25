@@ -5261,6 +5261,19 @@ public final class ViewRootImpl implements ViewParent,
             mInsetsController.onWindowFocusLost();
         }
 
+        if (mAdded && hasWindowFocus && isWheelFocusEnabled()) {
+            // The touch mode a window was added with may have changed before it could be told,
+            // as for an app the lock screen hands over to: the window manager's, its ring or not
+            try {
+                final boolean inTouchMode = WindowManagerGlobal.getWindowManagerService()
+                        .isInTouchMode(getDisplayId());
+                if (inTouchMode != mAttachInfo.mInTouchMode) {
+                    ensureTouchModeLocally(inTouchMode);
+                }
+            } catch (RemoteException e) {
+                // The window keeps the touch mode it has
+            }
+        }
         if (mAdded) {
             dispatchFocusEvent(hasWindowFocus, false /* fakeFocus */);
             if (hasWindowFocus && isWheelFocusEnabled() && !mAttachInfo.mInTouchMode) {
