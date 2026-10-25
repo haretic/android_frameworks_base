@@ -618,6 +618,8 @@ class MediaOutputAdapter(controller: MediaSwitchingController) :
             if (listener == null) {
                 mMainContent.isClickable = false // clickable is not removed automatically.
             }
+            // A row that does nothing takes no focus: a key walks on to its volume slider
+            mMainContent.isFocusable = listener != null
         }
 
         private fun updateContentStateDescription(connectionState: ConnectionState) {
