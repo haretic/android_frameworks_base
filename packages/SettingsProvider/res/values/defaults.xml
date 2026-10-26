@@ -166,6 +166,10 @@
     <!-- Default for Settings.Secure.LOCK_SCREEN_SHOW_NOTIFICATIONS, 1==on -->
     <integer name="def_lock_screen_show_notifications">1</integer>
 
+    <!-- Default for Settings.Secure.LOCK_SCREEN_NOTIFICATION_MINIMALISM, 1==on: seen
+         notifications fold into an icon on the lock screen -->
+    <integer name="def_lock_screen_notification_minimalism">1</integer>
+
     <!-- Default for Settings.Secure.LOCK_SCREEN_ALLOW_PRIVATE_NOTIFICATIONS -->
     <bool name="def_lock_screen_allow_private_notifications">true</bool>
 
