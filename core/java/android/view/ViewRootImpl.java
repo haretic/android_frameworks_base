@@ -6744,6 +6744,31 @@ public final class ViewRootImpl implements ViewParent,
     private boolean mWheelFirstStopPosted;
 
     /**
+     * The item {@code view} is in of the nearest list round it, where that list lays its items
+     * out in rows, as a grid of photos does: another item beside it on screen. Null otherwise.
+     */
+    private static View wheelGridItem(View view) {
+        for (View item = view; item.getParent() instanceof ViewGroup list;
+                item = list) {
+            if (!(isRecyclerView(list) || list instanceof android.widget.AbsListView)) {
+                continue;
+            }
+            for (int i = 0; i < list.getChildCount(); i++) {
+                final View other = list.getChildAt(i);
+                if (other != item && other.getVisibility() == View.VISIBLE
+                        && other.hasFocusable()
+                        && other.getTop() < item.getBottom() && other.getBottom() > item.getTop()
+                        && other.getLocalVisibleRect(new Rect())) {
+                    return item;
+                }
+            }
+            // Only the nearest list: past it, a pager's pages lie side by side
+            return null;
+        }
+        return null;
+    }
+
+    /**
      * The outermost keyboard navigation cluster round {@code view} that blocks focus for a
      * touchscreen, which FocusFinder keeps the arrows in, or null.
      */
@@ -9157,6 +9182,24 @@ public final class ViewRootImpl implements ViewParent,
                         playSoundEffect(SoundEffectConstants.getConstantForFocusDirection(
                                 direction, event.getRepeatCount() > 0));
                         return true;
+                    }
+                    // The wheel in a grid, as a gallery's photos: along each row as text reads,
+                    // the list bringing the next row in, not down a column past the photos beside
+                    if (isWheelFocusEnabled() && !mAttachInfo.mInTouchMode
+                            && (direction == View.FOCUS_DOWN || direction == View.FOCUS_UP)) {
+                        final View item = wheelGridItem(focused);
+                        if (item != null) {
+                            final ViewGroup grid = (ViewGroup) item.getParent();
+                            final View next = grid.focusSearch(focused,
+                                    direction == View.FOCUS_DOWN
+                                            ? View.FOCUS_FORWARD : View.FOCUS_BACKWARD);
+                            if (next != null && next != focused && isInside(next, grid)
+                                    && next.requestFocus(direction)) {
+                                playSoundEffect(SoundEffectConstants.getConstantForFocusDirection(
+                                        direction, event.getRepeatCount() > 0));
+                                return true;
+                            }
+                        }
                     }
                     View v = focused.focusSearch(direction);
                     if ((v == null || v == focused) && isWheelFocusEnabled()
