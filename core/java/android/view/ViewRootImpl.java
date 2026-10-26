@@ -7154,12 +7154,15 @@ public final class ViewRootImpl implements ViewParent,
         return over != null && over != list && !isInside(over, list) ? over : null;
     }
 
-    /** Whether anything in {@code group}, not the group itself, takes the focus. */
+    /**
+     * Whether anything in {@code group}, not the group itself nor an empty list in it, as a
+     * pager's empty page, takes the focus.
+     */
     private static boolean hasFocusableInside(ViewGroup group) {
         final ArrayList<View> focusables = new ArrayList<>();
         group.addFocusables(focusables, View.FOCUS_FORWARD, View.FOCUSABLES_ALL);
         for (View view : focusables) {
-            if (view != group) {
+            if (view != group && !isDeadWheelList(view)) {
                 return true;
             }
         }
@@ -9416,8 +9419,12 @@ public final class ViewRootImpl implements ViewParent,
                         // and into one, as an app's action bar with its menu, from the page:
                         // with nothing else that way, onto its button nearest the step
                         final View into = wheelStepIntoBlockingCluster(focused, direction);
-                        if (into != null) {
-                            v = into;
+                        final ViewGroup cluster = into != null ? focusBlockingCluster(into) : null;
+                        if (cluster != null && cluster.requestFocusPastTouchscreenBlock(into,
+                                direction)) {
+                            playSoundEffect(SoundEffectConstants.getConstantForFocusDirection(
+                                    direction, event.getRepeatCount() > 0));
+                            return true;
                         }
                     }
                     if (v != null && v != focused && isWheelFocusEnabled()
