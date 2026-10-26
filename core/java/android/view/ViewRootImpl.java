@@ -6772,13 +6772,22 @@ public final class ViewRootImpl implements ViewParent,
     private boolean mWheelFirstStopPosted;
 
     /**
+     * A launcher's grid of icons, as Launcher3's home and folders lay theirs out: rows of icons
+     * to go along as in a list's grid.
+     */
+    private static boolean isLauncherCellGrid(View view) {
+        return view.getClass().getName().endsWith(".ShortcutAndWidgetContainer");
+    }
+
+    /**
      * The item {@code view} is in of the nearest list round it, where that list lays its items
      * out in rows, as a grid of photos does: another item beside it on screen. Null otherwise.
      */
     private static View wheelGridItem(View view) {
         for (View item = view; item.getParent() instanceof ViewGroup list;
                 item = list) {
-            if (!(isRecyclerView(list) || list instanceof android.widget.AbsListView)) {
+            if (!(isRecyclerView(list) || list instanceof android.widget.AbsListView
+                    || isLauncherCellGrid(list))) {
                 continue;
             }
             for (int i = 0; i < list.getChildCount(); i++) {
@@ -7032,20 +7041,36 @@ public final class ViewRootImpl implements ViewParent,
      * Scrolls the list {@code view} is in straight to it where it lies out of sight, as the next
      * rows a RecyclerView lays out past its edge for a focus search: focused there, the list's
      * next layout would recycle it before its smooth scroll brought it in, and the focus fall
-     * back to the window's first view.
+     * back to the window's first view. Before the focus moves; one partly in sight is
+     * {@link #scrollWheelFocusIntoSight}'s, after.
      */
     private static void scrollWheelTargetIntoList(View view) {
-        final boolean inSight = view.getGlobalVisibleRect(new Rect());
+        if (view.getGlobalVisibleRect(new Rect())) {
+            return;
+        }
         for (View item = view; item.getParent() instanceof ViewGroup list; item = list) {
             if (isRecyclerView(list)) {
                 final Rect rect = new Rect(0, 0, view.getWidth(), view.getHeight());
                 list.offsetDescendantRectToMyCoords(view, rect);
-                if (inSight) {
-                    scrollWheelTargetIntoSight(list, item, rect);
-                    return;
-                }
                 list.offsetRectIntoDescendantCoords(item, rect);
                 list.requestChildRectangleOnScreen(item, rect, true);
+                return;
+            }
+        }
+    }
+
+    /**
+     * Brings the whole of the view the wheel just focused into the part of its list in sight,
+     * where some of it is under the list's edge: after the focus moved, as the view's own request
+     * on gaining it is for only its part in sight, and the list's smooth scroll to that, the
+     * last asked for, would stop with the rest still hidden.
+     */
+    private static void scrollWheelFocusIntoSight(View view) {
+        for (View item = view; item.getParent() instanceof ViewGroup list; item = list) {
+            if (isRecyclerView(list)) {
+                final Rect rect = new Rect(0, 0, view.getWidth(), view.getHeight());
+                list.offsetDescendantRectToMyCoords(view, rect);
+                scrollWheelTargetIntoSight(list, item, rect);
                 return;
             }
         }
@@ -9412,6 +9437,7 @@ public final class ViewRootImpl implements ViewParent,
                             }
                             if (next != null && next != focused && isInside(next, grid)
                                     && next.requestFocus(direction)) {
+                                scrollWheelFocusIntoSight(next);
                                 playSoundEffect(SoundEffectConstants.getConstantForFocusDirection(
                                         direction, event.getRepeatCount() > 0));
                                 return true;
@@ -9426,6 +9452,17 @@ public final class ViewRootImpl implements ViewParent,
                         // first, as a button floating on it, not past it to what is beyond
                         final View over = wheelStepOverList(focused, direction);
                         if (over != null) {
+                            v = over;
+                        }
+                    }
+                    if (v != null && v != focused && isWheelFocusEnabled()
+                            && !mAttachInfo.mInTouchMode
+                            && (direction == View.FOCUS_DOWN || direction == View.FOCUS_UP)
+                            && !isInside(focused, v) && isDeadWheelList(v)) {
+                        // and one the step would land on, as a pager's empty page below a top bar:
+                        // on to what lies over it, no stop on the list with nothing in it
+                        final View over = wheelStepOverList(v, direction);
+                        if (over != null && over != focused) {
                             v = over;
                         }
                     }
@@ -9509,6 +9546,9 @@ public final class ViewRootImpl implements ViewParent,
                                     v, mTempRect);
                         }
                         if (v.requestFocus(direction, mTempRect)) {
+                            if (isWheelFocusEnabled()) {
+                                scrollWheelFocusIntoSight(v);
+                            }
                             boolean isFastScrolling = event.getRepeatCount() > 0;
                             playSoundEffect(
                                     SoundEffectConstants.getConstantForFocusDirection(direction,
