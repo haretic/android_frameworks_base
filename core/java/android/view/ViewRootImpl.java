@@ -6811,6 +6811,84 @@ public final class ViewRootImpl implements ViewParent,
         return cluster;
     }
 
+    /**
+     * The view a step from {@code focused} goes to in the nearest toolbar the wheel's way that
+     * keeps a keyboard's arrows in it on a touchscreen, its focusables out of a search from
+     * outside: the one in line with the step, or its first.
+     */
+    private View wheelStepIntoBlockingCluster(View focused, int direction) {
+        if (!(mView instanceof ViewGroup root)) {
+            return null;
+        }
+        final Rect from = new Rect();
+        focused.getBoundsOnScreen(from, true);
+        final ArrayList<ViewGroup> clusters = new ArrayList<>();
+        collectBlockingClusters(root, clusters);
+        ViewGroup nearest = null;
+        int nearestGap = Integer.MAX_VALUE;
+        final Rect bounds = new Rect();
+        for (ViewGroup cluster : clusters) {
+            if (isInside(focused, cluster)) {
+                continue;
+            }
+            cluster.getBoundsOnScreen(bounds, true);
+            final int gap = direction == View.FOCUS_DOWN
+                    ? bounds.top - from.bottom : from.top - bounds.bottom;
+            if (!bounds.isEmpty() && gap >= 0 && gap < nearestGap) {
+                nearest = cluster;
+                nearestGap = gap;
+            }
+        }
+        if (nearest == null) {
+            return null;
+        }
+        // Its own search leaves out a toolbar in it that blocks focus too, as the action bar's
+        final ArrayList<View> focusables = new ArrayList<>();
+        collectFocusablesIn(nearest, focusables);
+        focusables.remove(nearest);
+        if (focusables.isEmpty()) {
+            return null;
+        }
+        final Rect rect = new Rect();
+        focused.getFocusedRect(rect);
+        root.offsetDescendantRectToMyCoords(focused, rect);
+        final View inLine = FocusFinder.getInstance().findNextFocusInAbsoluteDirection(
+                focusables, root, focused, rect, direction);
+        return inLine != null ? inLine : focusables.get(0);
+    }
+
+    /** The views in {@code view} that take the focus, a touchscreen's blocking aside. */
+    private static void collectFocusablesIn(View view, ArrayList<View> focusables) {
+        if (!view.isShown() || !view.isEnabled() && !(view instanceof ViewGroup)) {
+            return;
+        }
+        if (view.isFocusable()) {
+            focusables.add(view);
+        }
+        if (view instanceof ViewGroup group
+                && group.getDescendantFocusability() != ViewGroup.FOCUS_BLOCK_DESCENDANTS) {
+            for (int i = 0; i < group.getChildCount(); i++) {
+                collectFocusablesIn(group.getChildAt(i), focusables);
+            }
+        }
+    }
+
+    private static void collectBlockingClusters(ViewGroup group, ArrayList<ViewGroup> clusters) {
+        if (!group.isShown() || group.getDescendantFocusability()
+                == ViewGroup.FOCUS_BLOCK_DESCENDANTS) {
+            return;
+        }
+        if (group.getTouchscreenBlocksFocus() && group.isKeyboardNavigationCluster()) {
+            clusters.add(group);
+            return;
+        }
+        for (int i = 0; i < group.getChildCount(); i++) {
+            if (group.getChildAt(i) instanceof ViewGroup child) {
+                collectBlockingClusters(child, clusters);
+            }
+        }
+    }
+
     private static boolean isInside(View view, View parent) {
         for (View v = view; v != null;
                 v = v.getParent() instanceof View p ? p : null) {
@@ -9331,6 +9409,15 @@ public final class ViewRootImpl implements ViewParent,
                         final View out = cluster != null ? cluster.focusSearch(direction) : null;
                         if (out != null && !isInside(out, cluster)) {
                             v = out;
+                        }
+                    }
+                    if ((v == null || v == focused) && isWheelFocusEnabled()
+                            && (direction == View.FOCUS_DOWN || direction == View.FOCUS_UP)) {
+                        // and into one, as an app's action bar with its menu, from the page:
+                        // with nothing else that way, onto its button nearest the step
+                        final View into = wheelStepIntoBlockingCluster(focused, direction);
+                        if (into != null) {
+                            v = into;
                         }
                     }
                     if (v != null && v != focused && isWheelFocusEnabled()
