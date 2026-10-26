@@ -7223,13 +7223,20 @@ public final class ViewRootImpl implements ViewParent,
 
     /**
      * Whether anything in {@code group}, not the group itself nor an empty list in it, as a
-     * pager's empty page, takes the focus.
+     * pager's empty page, takes the focus. Not what lies wholly beside the group, as the pages
+     * either side of a pager's: the wheel's steps up and down never reach those.
      */
     private static boolean hasFocusableInside(ViewGroup group) {
         final ArrayList<View> focusables = new ArrayList<>();
         group.addFocusables(focusables, View.FOCUS_FORWARD, View.FOCUSABLES_ALL);
+        final Rect bounds = new Rect();
         for (View view : focusables) {
-            if (view != group && !isDeadWheelList(view)) {
+            if (view == group || isDeadWheelList(view)) {
+                continue;
+            }
+            view.getDrawingRect(bounds);
+            group.offsetDescendantRectToMyCoords(view, bounds);
+            if (bounds.right > 0 && bounds.left < group.getWidth()) {
                 return true;
             }
         }
