@@ -6655,7 +6655,7 @@ public final class ViewRootImpl implements ViewParent,
             return below != null && !isInside(below, toolbar)
                     && below.requestFocus(View.FOCUS_DOWN);
         }
-        if (isComposeHost(focused)) {
+        if (focused != null && isComposeHost(focused)) {
             // A Compose page, as Settings' app list: its first focus, a button in its top bar as
             // the back arrow, moved on down by the page's own focus onto the page
             final Rect bounds = new Rect();
