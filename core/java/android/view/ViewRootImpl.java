@@ -7217,7 +7217,19 @@ public final class ViewRootImpl implements ViewParent,
         } else {
             edge.top = edge.bottom - 1;
         }
-        final View over = FocusFinder.getInstance().findNextFocusFromRect(root, edge, direction);
+        // Nothing in the list, as the pages beside a pager's empty one, nearer than what is over
+        final View over;
+        if (list instanceof ViewGroup group) {
+            final int blocked = group.getDescendantFocusability();
+            group.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+            try {
+                over = FocusFinder.getInstance().findNextFocusFromRect(root, edge, direction);
+            } finally {
+                group.setDescendantFocusability(blocked);
+            }
+        } else {
+            over = FocusFinder.getInstance().findNextFocusFromRect(root, edge, direction);
+        }
         return over != null && over != list && !isInside(over, list) ? over : null;
     }
 
