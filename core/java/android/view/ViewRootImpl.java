@@ -5276,9 +5276,10 @@ public final class ViewRootImpl implements ViewParent,
         }
         if (mAdded) {
             dispatchFocusEvent(hasWindowFocus, false /* fakeFocus */);
-            if (hasWindowFocus && isWheelFocusEnabled() && !mAttachInfo.mInTouchMode) {
-                // Under the wheel the focus comes to a field as the page opens: the keyboard
-                // comes as the field is pressed, not as the page is reached
+            if (hasWindowFocus && isWheelFocusEnabled()) {
+                // Under the wheel UI the keyboard comes as a field is pressed or tapped, not as
+                // the page is reached, in touch mode or not: on this small screen it would
+                // cover half the page, and the wheel puts the focus on a field just passing it
                 mWindowAttributes.softInputMode &=
                         ~WindowManager.LayoutParams.SOFT_INPUT_IS_FORWARD_NAVIGATION;
             }
