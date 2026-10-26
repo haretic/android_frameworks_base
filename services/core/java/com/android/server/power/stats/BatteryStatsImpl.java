@@ -14534,6 +14534,10 @@ public class BatteryStatsImpl extends BatteryStats {
         mHandler.removeCallbacks(mWriteAsyncRunnable);
         writeStatsLocked();
         writeHistoryLocked();
+        // What was written is stamped in monotonic time: the clock saved past it, so that after a
+        // reboot without a clean shutdown, as a crash or a flash, the counters read back don't see
+        // time run backwards and drop what they have accumulated
+        mMonotonicClock.write();
     }
 
     @GuardedBy("this")
