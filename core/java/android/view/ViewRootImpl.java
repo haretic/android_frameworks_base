@@ -6743,6 +6743,21 @@ public final class ViewRootImpl implements ViewParent,
     /** Whether a first stop is posted for the focus that fell back to a toolbar. */
     private boolean mWheelFirstStopPosted;
 
+    /**
+     * The outermost keyboard navigation cluster round {@code view} that blocks focus for a
+     * touchscreen, which FocusFinder keeps the arrows in, or null.
+     */
+    private ViewGroup focusBlockingCluster(View view) {
+        ViewGroup cluster = null;
+        for (ViewParent p = view.getParent(); p instanceof ViewGroup group && p != mView;
+                p = p.getParent()) {
+            if (group.getTouchscreenBlocksFocus() && group.isKeyboardNavigationCluster()) {
+                cluster = group;
+            }
+        }
+        return cluster;
+    }
+
     private static boolean isInside(View view, View parent) {
         for (View v = view; v != null;
                 v = v.getParent() instanceof View p ? p : null) {
@@ -9157,6 +9172,17 @@ public final class ViewRootImpl implements ViewParent,
                                 && isAlongTheWay(focused, next, direction)) {
                             v = next;
                             direction = along;
+                        }
+                    }
+                    if ((v == null || v == focused) && isWheelFocusEnabled()
+                            && (direction == View.FOCUS_DOWN || direction == View.FOCUS_UP)) {
+                        // A toolbar that keeps a keyboard's arrows in it on a touchscreen, as a
+                        // browser's: past its row the wheel goes on out of it, where a keyboard's
+                        // cluster key would take it
+                        final ViewGroup cluster = focusBlockingCluster(focused);
+                        final View out = cluster != null ? cluster.focusSearch(direction) : null;
+                        if (out != null && !isInside(out, cluster)) {
+                            v = out;
                         }
                     }
                     if (v != null && v != focused) {
