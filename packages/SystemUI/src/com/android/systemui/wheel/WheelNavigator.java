@@ -913,7 +913,11 @@ public final class WheelNavigator {
         final int left = mRootOnScreen[0];
         final int right = left + mRoot.getWidth();
         final boolean atSide = rect.left <= left || rect.right >= right;
-        return !rect.isEmpty()
+        // A surface taking taps all over, as the lock screen's own: a ring round the whole
+        // window frames nothing, and the step past it would show nothing moving
+        final boolean wholeWindow = rect.width() * 10 >= mRoot.getWidth() * 9
+                && rect.height() * 10 >= mRoot.getHeight() * 9;
+        return !rect.isEmpty() && !wholeWindow
                 && (!atSide || rect.width() >= mRoot.getWidth() * 3 / 4)
                 && rect.centerX() >= mRootOnScreen[0]
                 && rect.centerX() < mRootOnScreen[0] + mRoot.getWidth()
