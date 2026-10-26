@@ -6690,6 +6690,19 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
+    /**
+     * Whether {@code next}, the next in the focus order, lies the wheel's way from
+     * {@code focused}: not above it going down, nor below it going up, so a step down along a
+     * row never jumps back up the page.
+     */
+    private boolean isAlongTheWay(View focused, View next, int direction) {
+        final Rect from = mTempRect;
+        final Rect to = mAttachInfo.mTmpInvalRect;
+        focused.getBoundsOnScreen(from, true);
+        next.getBoundsOnScreen(to, true);
+        return direction == View.FOCUS_DOWN ? to.top >= from.top : to.bottom <= from.bottom;
+    }
+
     /** Whether {@code view} is a toolbar's button, as its back arrow. */
     private static boolean isToolbarNavigation(View view) {
         return view instanceof android.widget.ImageButton
@@ -9102,6 +9115,21 @@ public final class ViewRootImpl implements ViewParent,
                 if (focused != null) {
                     mAttachInfo.mNextFocusLooped = false;
                     View v = focused.focusSearch(direction);
+                    if ((v == null || v == focused) && isWheelFocusEnabled()
+                            && (direction == View.FOCUS_DOWN || direction == View.FOCUS_UP)) {
+                        // The wheel's steps are up and down: with nothing that way, as along a
+                        // row of tabs at the bottom, they go on along the row as text reads,
+                        // down to the next, up to the one before, and stop at its end
+                        final boolean rtl = focused.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
+                        final int along = (direction == View.FOCUS_DOWN) != rtl
+                                ? View.FOCUS_RIGHT : View.FOCUS_LEFT;
+                        final View next = focused.focusSearch(along);
+                        if (next != null && next != focused
+                                && isAlongTheWay(focused, next, direction)) {
+                            v = next;
+                            direction = along;
+                        }
+                    }
                     if (v != null && v != focused) {
                         if (mAttachInfo.mNextFocusLooped) {
                             // The next focus is looped. Let's try to move the focus to the adjacent
