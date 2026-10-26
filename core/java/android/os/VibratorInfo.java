@@ -596,12 +596,16 @@ public class VibratorInfo implements Parcelable {
                     && (frequenciesHz.length > 0)
                     && (Float.isNaN(resonantFrequencyHz) || (resonantFrequencyHz > 0));
 
-            if (!isValid) {
+            // A vibrator without frequency control has no profile at all, as the builder's
+            // default: only one given and malformed is worth a word
+            final boolean isAbsent = frequenciesHz == null && outputAccelerationsGs == null;
+            if (!isValid && !isAbsent) {
                 Slog.e(TAG, "Invalid frequency profile received from HAL."
                         + " resonantFrequencyHz=" + resonantFrequencyHz
                         + ", frequenciesHz=" + Arrays.toString(frequenciesHz)
                         + ", outputAccelerationsGs=" + Arrays.toString(outputAccelerationsGs));
-
+            }
+            if (!isValid) {
                 mFrequenciesHz = null;
                 mOutputAccelerationsGs = null;
                 mMinFrequencyHz = Float.NaN;
