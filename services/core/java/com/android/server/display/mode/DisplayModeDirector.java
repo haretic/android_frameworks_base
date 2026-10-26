@@ -417,6 +417,21 @@ public class DisplayModeDirector {
                 appRequestSummary.maxRenderFrameRate = Math.max(baseMode.getRefreshRate(),
                         appRequestSummary.maxRenderFrameRate);
             }
+            // The base mode is picked within FLOAT_TOLERANCE of the votes, as a panel's "60 Hz"
+            // that runs at 59.998 Hz under a 60 Hz floor. SurfaceFlinger takes the ranges as
+            // they are and drops the whole policy for a base mode outside them, so the floors
+            // come down to it.
+            final float baseRate = baseMode.getRefreshRate();
+            if (baseRate < primarySummary.minPhysicalRefreshRate
+                    && baseRate >= primarySummary.minPhysicalRefreshRate
+                            - SurfaceControl.RefreshRateRange.FLOAT_TOLERANCE) {
+                primarySummary.minPhysicalRefreshRate = baseRate;
+            }
+            if (baseRate < primarySummary.minRenderFrameRate
+                    && baseRate >= primarySummary.minRenderFrameRate
+                            - SurfaceControl.RefreshRateRange.FLOAT_TOLERANCE) {
+                primarySummary.minRenderFrameRate = baseRate;
+            }
             if (Flags.enableWorkDurations() && primarySummary.workDurationsData == null) {
                 DisplayDeviceConfig config = mDisplayDeviceConfigByDisplay.get(displayId);
                 if (config != null) {
