@@ -6954,7 +6954,18 @@ public final class ViewRootImpl implements ViewParent,
                 && (view.canScrollVertically(1) || view.canScrollVertically(-1)
                         || view instanceof android.widget.AbsListView
                         || view instanceof android.widget.ScrollView
-                        || view.getClass().getName().endsWith("RecyclerView"));
+                        || isRecyclerView(view));
+    }
+
+    /** A RecyclerView, or one made of it as ViewPager2's pages are, the app's own copy or not. */
+    private static boolean isRecyclerView(View view) {
+        for (Class<?> c = view.getClass(); c != null && c != ViewGroup.class;
+                c = c.getSuperclass()) {
+            if (c.getName().endsWith("RecyclerView")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean isWheelFocusEnabled() {
@@ -9123,6 +9134,15 @@ public final class ViewRootImpl implements ViewParent,
                 }
                 if (focused != null) {
                     mAttachInfo.mNextFocusLooped = false;
+                    // The wheel on a list that took the focus itself, as a photo grid: into its
+                    // rows in reach first, not on past them to what is below the list
+                    if (isWheelFocusEnabled() && !mAttachInfo.mInTouchMode
+                            && (direction == View.FOCUS_DOWN || direction == View.FOCUS_UP)
+                            && focusIntoWheelList(focused, direction)) {
+                        playSoundEffect(SoundEffectConstants.getConstantForFocusDirection(
+                                direction, event.getRepeatCount() > 0));
+                        return true;
+                    }
                     View v = focused.focusSearch(direction);
                     if ((v == null || v == focused) && isWheelFocusEnabled()
                             && (direction == View.FOCUS_DOWN || direction == View.FOCUS_UP)) {
