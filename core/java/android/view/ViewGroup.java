@@ -1430,6 +1430,20 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
         }
     }
 
+    /**
+     * Gives {@code view}, in this cluster, the focus as a keyboard's move into the cluster would,
+     * its blocking on a touchscreen aside: the wheel UI's step into a toolbar.
+     */
+    boolean requestFocusPastTouchscreenBlock(View view, @FocusRealDirection int direction) {
+        final boolean blockedFocus = getTouchscreenBlocksFocus();
+        try {
+            setTouchscreenBlocksFocusNoRefocus(false);
+            return view.requestFocus(direction);
+        } finally {
+            setTouchscreenBlocksFocusNoRefocus(blockedFocus);
+        }
+    }
+
     private void setTouchscreenBlocksFocusNoRefocus(boolean touchscreenBlocksFocus) {
         if (touchscreenBlocksFocus) {
             mGroupFlags |= FLAG_TOUCHSCREEN_BLOCKS_FOCUS;
