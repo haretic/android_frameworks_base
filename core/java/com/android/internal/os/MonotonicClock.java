@@ -105,7 +105,7 @@ public class MonotonicClock {
      * Saves the timeshift into a file.  Call this method just before system shutdown, after
      * writing the last battery history event.
      */
-    public void write() {
+    public synchronized void write() {
         if (mFile == null) {
             return;
         }
