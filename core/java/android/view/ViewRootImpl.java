@@ -7004,7 +7004,8 @@ public final class ViewRootImpl implements ViewParent,
      * focusable, to its first row in reach in the direction the wheel turned.
      */
     private static boolean focusIntoWheelList(View focused, int direction) {
-        if (!isWheelScroller(focused)) {
+        // An empty one, as a pager's empty page, has nothing to go into: see wheelStepOverList
+        if (!isWheelScroller(focused) || isDeadWheelList(focused)) {
             return false;
         }
         final ViewGroup group = (ViewGroup) focused;
@@ -7014,7 +7015,8 @@ public final class ViewRootImpl implements ViewParent,
         View best = null;
         int bestTop = 0;
         for (View candidate : candidates) {
-            if (candidate == group || !candidate.getGlobalVisibleRect(visible)) {
+            if (candidate == group || !candidate.getGlobalVisibleRect(visible)
+                    || isDeadWheelList(candidate)) {
                 continue;
             }
             if (best == null || (direction == View.FOCUS_DOWN
