@@ -9228,6 +9228,13 @@ public final class ViewRootImpl implements ViewParent,
                             v = out;
                         }
                     }
+                    if (v != null && v != focused && isWheelFocusEnabled()
+                            && (direction == View.FOCUS_DOWN || direction == View.FOCUS_UP)
+                            && !isAlongTheWay(focused, v, direction)) {
+                        // A step never jumps back the other way, as up to a toolbar from a list
+                        // whose next rows are still to come: the list scrolls on instead
+                        v = null;
+                    }
                     if (v != null && v != focused) {
                         if (mAttachInfo.mNextFocusLooped) {
                             // The next focus is looped. Let's try to move the focus to the adjacent
