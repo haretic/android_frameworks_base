@@ -6921,6 +6921,27 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     /**
+     * Scrolls the list {@code view} is in straight to it where it lies out of sight, as the next
+     * rows a RecyclerView lays out past its edge for a focus search: focused there, the list's
+     * next layout would recycle it before its smooth scroll brought it in, and the focus fall
+     * back to the window's first view.
+     */
+    private static void scrollWheelTargetIntoList(View view) {
+        if (view.getGlobalVisibleRect(new Rect())) {
+            return;
+        }
+        for (View item = view; item.getParent() instanceof ViewGroup list; item = list) {
+            if (isRecyclerView(list)) {
+                final Rect rect = new Rect(0, 0, view.getWidth(), view.getHeight());
+                list.offsetDescendantRectToMyCoords(view, rect);
+                list.offsetRectIntoDescendantCoords(item, rect);
+                list.requestChildRectangleOnScreen(item, rect, true);
+                return;
+            }
+        }
+    }
+
+    /**
      * Scrolls the scrolling view the focus is in, or that has it, a quarter of its height on,
      * where the wheel found no view to move the focus to: text and lists whose rows don't take
      * the focus are read through so.
@@ -9193,6 +9214,9 @@ public final class ViewRootImpl implements ViewParent,
                             final View next = grid.focusSearch(focused,
                                     direction == View.FOCUS_DOWN
                                             ? View.FOCUS_FORWARD : View.FOCUS_BACKWARD);
+                            if (next != null && next != focused && isInside(next, grid)) {
+                                scrollWheelTargetIntoList(next);
+                            }
                             if (next != null && next != focused && isInside(next, grid)
                                     && next.requestFocus(direction)) {
                                 playSoundEffect(SoundEffectConstants.getConstantForFocusDirection(
@@ -9234,6 +9258,18 @@ public final class ViewRootImpl implements ViewParent,
                         // A step never jumps back the other way, as up to a toolbar from a list
                         // whose next rows are still to come: the list scrolls on instead
                         v = null;
+                    }
+                    if (v != null && v != focused && isWheelFocusEnabled()
+                            && (direction == View.FOCUS_DOWN || direction == View.FOCUS_UP)
+                            && !isInside(focused, v) && focusIntoWheelList(v, direction)) {
+                        // A list the step reached, as a gallery's pager: on into its first item
+                        // in reach, no stop on the list as a whole
+                        playSoundEffect(SoundEffectConstants.getConstantForFocusDirection(
+                                direction, event.getRepeatCount() > 0));
+                        return true;
+                    }
+                    if (v != null && v != focused && isWheelFocusEnabled()) {
+                        scrollWheelTargetIntoList(v);
                     }
                     if (v != null && v != focused) {
                         if (mAttachInfo.mNextFocusLooped) {
