@@ -6655,6 +6655,22 @@ public final class ViewRootImpl implements ViewParent,
             return below != null && !isInside(below, toolbar)
                     && below.requestFocus(View.FOCUS_DOWN);
         }
+        if (isComposeHost(focused)) {
+            // A Compose page, as Settings' app list: its first focus, a button in its top bar as
+            // the back arrow, moved on down by the page's own focus onto the page
+            final Rect bounds = new Rect();
+            focused.getFocusedRect(bounds);
+            final float density = mContext.getResources().getDisplayMetrics().density;
+            if (!bounds.isEmpty() && bounds.width() <= 72 * density
+                    && bounds.bottom <= 96 * density) {
+                final long now = SystemClock.uptimeMillis();
+                focused.dispatchKeyEvent(new KeyEvent(now, now, KeyEvent.ACTION_DOWN,
+                        KeyEvent.KEYCODE_DPAD_DOWN, 0));
+                focused.dispatchKeyEvent(new KeyEvent(now, now, KeyEvent.ACTION_UP,
+                        KeyEvent.KEYCODE_DPAD_DOWN, 0));
+            }
+            return true;
+        }
         // Not on a toolbar's back arrow: nothing to skip
         return true;
     }
