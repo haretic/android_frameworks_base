@@ -559,6 +559,10 @@ public class NotificationBackgroundView extends View implements Dumpable,
         if (overlay == null) {
             return;
         }
+        // The wheel's own ring marks the row it's on: the keyboard's outline would be a second
+        // one, round a row the wheel has already left
+        overlay.setAlpha(com.android.systemui.wheel.WheelLayoutSettings.shade(getContext())
+                ? 0 : 255);
         for (int i = 0; i < mCornerRadii.length; i++) {
             // in theory subtracting mFocusOverlayStroke/2 should be enough but notification
             // background is still peeking a bit from below - probably due to antialiasing or
