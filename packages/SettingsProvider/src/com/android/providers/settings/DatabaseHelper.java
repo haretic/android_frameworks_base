@@ -2246,6 +2246,9 @@ class DatabaseHelper extends SQLiteOpenHelper {
             loadIntegerSetting(stmt, Secure.LOCK_SCREEN_SHOW_NOTIFICATIONS,
                     R.integer.def_lock_screen_show_notifications);
 
+            loadIntegerSetting(stmt, Secure.LOCK_SCREEN_NOTIFICATION_MINIMALISM,
+                    R.integer.def_lock_screen_notification_minimalism);
+
             loadBooleanSetting(stmt, Secure.LOCK_SCREEN_ALLOW_PRIVATE_NOTIFICATIONS,
                     R.bool.def_lock_screen_allow_private_notifications);
 
