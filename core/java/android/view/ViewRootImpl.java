@@ -7034,6 +7034,48 @@ public final class ViewRootImpl implements ViewParent,
                         || isRecyclerView(view));
     }
 
+    /**
+     * Whether {@code view} is a list with nothing in it to focus nor to scroll to, as an empty
+     * one: no stop for the wheel, which goes on to what lies over it or beyond.
+     */
+    private static boolean isDeadWheelList(View view) {
+        return view instanceof ViewGroup group && (isWheelScroller(view) || isRecyclerView(view))
+                && !hasFocusableInside(group)
+                && !view.canScrollVertically(1) && !view.canScrollVertically(-1);
+    }
+
+    /**
+     * The next view from a list's edge the way the wheel turned: what lies over the list first,
+     * nearest that edge, then what is beyond it.
+     */
+    private View wheelStepOverList(View list, int direction) {
+        if (!(mView instanceof ViewGroup root)) {
+            return null;
+        }
+        final Rect edge = new Rect();
+        list.getDrawingRect(edge);
+        root.offsetDescendantRectToMyCoords(list, edge);
+        if (direction == View.FOCUS_DOWN) {
+            edge.bottom = edge.top + 1;
+        } else {
+            edge.top = edge.bottom - 1;
+        }
+        final View over = FocusFinder.getInstance().findNextFocusFromRect(root, edge, direction);
+        return over != null && over != list && !isInside(over, list) ? over : null;
+    }
+
+    /** Whether anything in {@code group}, not the group itself, takes the focus. */
+    private static boolean hasFocusableInside(ViewGroup group) {
+        final ArrayList<View> focusables = new ArrayList<>();
+        group.addFocusables(focusables, View.FOCUS_FORWARD, View.FOCUSABLES_ALL);
+        for (View view : focusables) {
+            if (view != group) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** A RecyclerView, or one made of it as ViewPager2's pages are, the app's own copy or not. */
     private static boolean isRecyclerView(View view) {
         for (Class<?> c = view.getClass(); c != null && c != ViewGroup.class;
@@ -9242,6 +9284,16 @@ public final class ViewRootImpl implements ViewParent,
                         }
                     }
                     View v = focused.focusSearch(direction);
+                    if (isWheelFocusEnabled() && !mAttachInfo.mInTouchMode
+                            && (direction == View.FOCUS_DOWN || direction == View.FOCUS_UP)
+                            && isDeadWheelList(focused)) {
+                        // An empty list with the focus: the step goes onto what lies over it
+                        // first, as a button floating on it, not past it to what is beyond
+                        final View over = wheelStepOverList(focused, direction);
+                        if (over != null) {
+                            v = over;
+                        }
+                    }
                     if ((v == null || v == focused) && isWheelFocusEnabled()
                             && (direction == View.FOCUS_DOWN || direction == View.FOCUS_UP)) {
                         // The wheel's steps are up and down: with nothing that way, as along a
@@ -9334,6 +9386,14 @@ public final class ViewRootImpl implements ViewParent,
                     if (mView.restoreDefaultFocus()) {
                         // The wheel's first step lands on the page, past its back arrow
                         skipWheelNavigationUp();
+                        // and past an empty list the window's first focus went to
+                        final View first = mView.findFocus();
+                        if (isWheelFocusEnabled() && first != null && isDeadWheelList(first)) {
+                            final View over = wheelStepOverList(first, View.FOCUS_DOWN);
+                            if (over != null) {
+                                over.requestFocus(View.FOCUS_DOWN);
+                            }
+                        }
                         return true;
                     } else if (moveFocusToAdjacentWindow(direction)) {
                         return true;
