@@ -6728,6 +6728,18 @@ public final class ViewRootImpl implements ViewParent,
         return direction == View.FOCUS_DOWN ? to.top >= from.top : to.bottom <= from.bottom;
     }
 
+    /**
+     * Whether {@code next} is on {@code focused}'s row, its middle level with it, as a small
+     * button beside a tall one: along the row either way.
+     */
+    private boolean isOnSameRow(View focused, View next) {
+        final Rect from = mTempRect;
+        final Rect to = mAttachInfo.mTmpInvalRect;
+        focused.getBoundsOnScreen(from, true);
+        next.getBoundsOnScreen(to, true);
+        return to.centerY() >= from.top && to.centerY() <= from.bottom;
+    }
+
     /** Whether {@code view} is a toolbar's button, as its back arrow. */
     private static boolean isToolbarNavigation(View view) {
         return view instanceof android.widget.ImageButton
@@ -9304,7 +9316,8 @@ public final class ViewRootImpl implements ViewParent,
                                 ? View.FOCUS_RIGHT : View.FOCUS_LEFT;
                         final View next = focused.focusSearch(along);
                         if (next != null && next != focused
-                                && isAlongTheWay(focused, next, direction)) {
+                                && (isAlongTheWay(focused, next, direction)
+                                        || isOnSameRow(focused, next))) {
                             v = next;
                             direction = along;
                         }
