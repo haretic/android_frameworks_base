@@ -7033,18 +7033,58 @@ public final class ViewRootImpl implements ViewParent,
      * back to the window's first view.
      */
     private static void scrollWheelTargetIntoList(View view) {
-        if (view.getGlobalVisibleRect(new Rect())) {
-            return;
-        }
+        final boolean inSight = view.getGlobalVisibleRect(new Rect());
         for (View item = view; item.getParent() instanceof ViewGroup list; item = list) {
             if (isRecyclerView(list)) {
                 final Rect rect = new Rect(0, 0, view.getWidth(), view.getHeight());
                 list.offsetDescendantRectToMyCoords(view, rect);
+                if (inSight) {
+                    scrollWheelTargetIntoSight(list, item, rect);
+                    return;
+                }
                 list.offsetRectIntoDescendantCoords(item, rect);
                 list.requestChildRectangleOnScreen(item, rect, true);
                 return;
             }
         }
+    }
+
+    /**
+     * Smoothly scrolls {@code list} by as much as brings {@code rect}, in its coordinates, whole
+     * into the part of the list in sight, where only some of it is: as a photo under the edge of
+     * a pager that cuts a list taller than itself short, as one under a collapsing toolbar's is.
+     * The list's own scroll to a focused row takes in its edges, not what cuts it short.
+     */
+    private static void scrollWheelTargetIntoSight(ViewGroup list, View item, Rect rect) {
+        final Rect shown = new Rect();
+        if (!list.getGlobalVisibleRect(shown)) {
+            return;
+        }
+        final int[] at = new int[2];
+        list.getLocationInWindow(at);
+        shown.offset(-at[0], -at[1]);
+        final int top = Math.max(list.getPaddingTop(), shown.top);
+        final int bottom = Math.min(list.getHeight() - list.getPaddingBottom(), shown.bottom);
+        if (bottom <= top) {
+            return;
+        }
+        int dy = 0;
+        if (rect.top < top) {
+            dy = rect.top - top;
+        } else if (rect.bottom > bottom) {
+            // Its top kept in sight where it is taller than the part shown
+            dy = Math.min(rect.bottom - bottom, rect.top - top);
+        }
+        if (dy == 0) {
+            return;
+        }
+        // The list's scroll to a rect of its row: one a pixel tall just past the list's edge, by
+        // dy, has it scroll by exactly dy
+        final int parentTop = list.getPaddingTop();
+        final int parentBottom = list.getHeight() - list.getPaddingBottom();
+        final int edge = dy > 0 ? parentBottom + dy - 1 : parentTop + dy;
+        final Rect past = new Rect(0, edge - item.getTop(), 1, edge - item.getTop() + 1);
+        list.requestChildRectangleOnScreen(item, past, false);
     }
 
     /**
