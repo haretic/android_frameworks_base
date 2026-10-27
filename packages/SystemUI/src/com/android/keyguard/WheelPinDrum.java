@@ -171,7 +171,7 @@ public final class WheelPinDrum extends View implements WheelNavigator.Dial {
     @Override
     protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
         // Five rows and the hints below them, closer together on a short screen
-        mRowHeight = Math.max(dp(28), Math.min(mMaxRowHeight, (height - dp(56)) / 5));
+        mRowHeight = Math.max(dp(28), Math.min(mMaxRowHeight, (height - dp(68)) / 5));
     }
 
     @Override
@@ -191,7 +191,8 @@ public final class WheelPinDrum extends View implements WheelNavigator.Dial {
             final float y = cy + offset * mRowHeight + Math.signum(offset) * dp(8);
             canvas.drawText(label(item), cx, y - (mText.ascent() + mText.descent()) / 2, mText);
         }
-        final float hintY = mRowHeight * 5 + dp(20);
+        // Clear of the last digit, pushed out past its row as those round the middle are
+        final float hintY = mRowHeight * 5 + dp(32);
         canvas.drawText(hint(), cx, hintY, mHint);
         canvas.drawText(
                 getContext().getString(R.string.wheel_pin_hold), cx, hintY + dp(22), mHint);
