@@ -6570,6 +6570,11 @@ public final class ViewRootImpl implements ViewParent,
         if (isComposeHost(focused)) {
             return getComposeWheelFocusRect(focused, bounds);
         }
+        // A container an app focused, as a whole window: no ring round it all, the wheel's
+        // first step goes into it
+        if (isWheelPassThroughCached(focused)) {
+            return false;
+        }
         // A list that keeps the focus itself, as a dialog's choices: the wheel moves its
         // selection, which its selector would show were a focused ripple's fill not hidden
         if (focused instanceof android.widget.AbsListView list
@@ -7196,7 +7201,11 @@ public final class ViewRootImpl implements ViewParent,
      * one: no stop for the wheel, which goes on to what lies over it or beyond.
      */
     private static boolean isDeadWheelList(View view) {
-        return view instanceof ViewGroup group && (isWheelScroller(view) || isRecyclerView(view))
+        // An AbsListView with nothing in its adapter only: one that moves its selection itself,
+        // as a dialog's choices, has rows that take no focus
+        return view instanceof ViewGroup group && (isWheelScroller(view) || isRecyclerView(view)
+                        || view instanceof android.widget.AbsListView list
+                                && list.getCount() == 0)
                 && !hasFocusableInside(group)
                 && !view.canScrollVertically(1) && !view.canScrollVertically(-1);
     }
@@ -7253,6 +7262,27 @@ public final class ViewRootImpl implements ViewParent,
             }
         }
         return false;
+    }
+
+    /**
+     * Whether {@code view} is a container the wheel passes into rather than stops on: focusable,
+     * yet nothing to press nor hold, no list nor scroller nor Compose host, with what takes the
+     * focus inside it, as a box round a button or a window's whole layout an app focused.
+     */
+    private static boolean isWheelPassThrough(View view) {
+        return view instanceof ViewGroup group && !view.isClickable() && !view.isLongClickable()
+                && !view.isContextClickable() && !isWheelScroller(view) && !isRecyclerView(view)
+                && !(view instanceof android.widget.AbsListView) && !isComposeHost(view)
+                && hasFocusableInside(group);
+    }
+
+    /** isWheelPassThrough for the ring, drawn every frame: once a focus. */
+    private boolean isWheelPassThroughCached(View focused) {
+        if (focused != mWheelPassThroughChecked) {
+            mWheelPassThroughChecked = focused;
+            mWheelPassThrough = isWheelPassThrough(focused);
+        }
+        return mWheelPassThrough;
     }
 
     /** A RecyclerView, or one made of it as ViewPager2's pages are, the app's own copy or not. */
@@ -9432,6 +9462,20 @@ public final class ViewRootImpl implements ViewParent,
                 }
                 if (focused != null) {
                     mAttachInfo.mNextFocusLooped = false;
+                    // The wheel on a container an app focused, as a file browser's whole window:
+                    // into what is in it, the container itself no stop
+                    if (isWheelFocusEnabled() && !mAttachInfo.mInTouchMode
+                            && (direction == View.FOCUS_DOWN || direction == View.FOCUS_UP)
+                            && isWheelPassThrough(focused)) {
+                        final View inner = FocusFinder.getInstance().findNextFocus(
+                                (ViewGroup) focused, null, direction);
+                        if (inner != null && inner != focused && inner.requestFocus(direction)) {
+                            scrollWheelFocusIntoSight(inner);
+                            playSoundEffect(SoundEffectConstants.getConstantForFocusDirection(
+                                    direction, event.getRepeatCount() > 0));
+                            return true;
+                        }
+                    }
                     // The wheel on a list that took the focus itself, as a photo grid: into its
                     // rows in reach first, not on past them to what is below the list
                     if (isWheelFocusEnabled() && !mAttachInfo.mInTouchMode
@@ -9540,6 +9584,17 @@ public final class ViewRootImpl implements ViewParent,
                         playSoundEffect(SoundEffectConstants.getConstantForFocusDirection(
                                 direction, event.getRepeatCount() > 0));
                         return true;
+                    }
+                    if (v != null && v != focused && isWheelFocusEnabled()
+                            && (direction == View.FOCUS_DOWN || direction == View.FOCUS_UP)
+                            && !isInside(focused, v) && isWheelPassThrough(v)) {
+                        // A container the step reached, as a dialer's box round its one button:
+                        // on to what is in it, no stop on the box
+                        final View inner = FocusFinder.getInstance().findNextFocus(
+                                (ViewGroup) v, null, direction);
+                        if (inner != null && inner != v) {
+                            v = inner;
+                        }
                     }
                     if (v != null && v != focused && isWheelFocusEnabled()) {
                         scrollWheelTargetIntoList(v);
@@ -12919,6 +12974,9 @@ public final class ViewRootImpl implements ViewParent,
     private final Rect mWheelFocusRect = new Rect();
     private final Rect mWheelFocusContent = new Rect();
     private boolean mWheelFocusRingHidden;
+    /** The focus isWheelPassThroughCached last looked at, and what it found. */
+    private View mWheelPassThroughChecked;
+    private boolean mWheelPassThrough;
     private Paint mWheelFocusPaint;
     private boolean mWheelFocusEnabled;
     private int mWheelFocusConfigSeq = -1;
