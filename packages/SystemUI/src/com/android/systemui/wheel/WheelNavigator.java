@@ -1061,6 +1061,15 @@ public final class WheelNavigator {
             return;
         }
         final Rect bounds = bounds(node);
+        // A notification's expand button reaches past the pill it shows, to the card's corner:
+        // the ring goes round the pill, inside the card
+        final View pill = mStop.host.getId() == com.android.internal.R.id.expand_button
+                ? mStop.host.findViewById(com.android.internal.R.id.expand_button_pill) : null;
+        if (pill != null && pill.isShown() && pill.getWidth() > 0) {
+            pill.getBoundsOnScreen(bounds, true);
+            final int gap = Math.round(2 * mRoot.getResources().getDisplayMetrics().density);
+            bounds.inset(-gap, -gap);
+        }
         // Match pill buttons and short rows instead of drawing oversized corners; a round dial's
         // ring is a circle round it
         mRing.round = dial() != null && dial().isRound();
@@ -1124,7 +1133,8 @@ public final class WheelNavigator {
                 canvas.drawCircle(mRect.centerX(), mRect.centerY(),
                         Math.min(mRect.width(), mRect.height()) / 2, mPaint);
             } else {
-                canvas.drawRoundRect(mRect, radius, radius, mPaint);
+                // Its corners round those of the stop, so a pill's ring is a pill too
+                canvas.drawRoundRect(mRect, radius + stroke, radius + stroke, mPaint);
             }
         }
 
