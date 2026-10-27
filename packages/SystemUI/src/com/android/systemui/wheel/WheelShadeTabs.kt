@@ -17,6 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -35,10 +36,16 @@ const val WHEEL_SHADE_TABS_TAG = "wheel_shade_tabs"
 /**
  * The wheel shade's tab header: Notifications, the shade with its quick panel, and Controls, its
  * full panel. One stop for the wheel; a press or a tap switches to the other tab, as a swipe across
- * the shade does.
+ * the shade does. No stop while [shown] is false, as under the lock screen, where the collapsed
+ * shade keeps it composed but out of sight.
  */
 @Composable
-fun WheelShadeTabs(controls: Boolean, onSwitch: (() -> Unit)?, modifier: Modifier = Modifier) {
+fun WheelShadeTabs(
+    controls: Boolean,
+    onSwitch: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+    shown: Boolean = true,
+) {
     val notifications = stringResource(R.string.wheel_shade_tab_notifications)
     val controlsLabel = stringResource(R.string.wheel_shade_tab_controls)
     val current = if (controls) controlsLabel else notifications
@@ -52,6 +59,7 @@ fun WheelShadeTabs(controls: Boolean, onSwitch: (() -> Unit)?, modifier: Modifie
                 .height(48.dp)
                 .clip(RoundedCornerShape(24.dp))
                 .background(colors.surfaceContainerHigh)
+                .focusProperties { canFocus = shown }
                 .thenIf(onSwitch != null) {
                     Modifier.clickable(onClickLabel = switchLabel) { onSwitch?.invoke() }
                 }
