@@ -8065,6 +8065,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         return (li != null && li.mOnLongClickListener != null);
     }
 
+    /** Whether an OnKeyListener is attached, for the wheel deciding where it stops. */
+    boolean hasOnKeyListener() {
+        ListenerInfo li = mListenerInfo;
+        return li != null && li.mOnKeyListener != null;
+    }
+
     /**
      * @return the registered {@link OnLongClickListener} if there is one, {@code null} otherwise.
      * @hide
