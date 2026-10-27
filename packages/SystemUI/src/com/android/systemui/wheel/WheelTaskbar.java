@@ -296,6 +296,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private int mRememberedIndex;
     /** Whether the bar has put the focus where it was left since it opened. */
     private boolean mPlaced;
+    /** The cells' size against the chosen one, smaller where the screen is too short for them. */
+    private float mCellScale = 1f;
     /** Whether the wheel has moved along the bar since it opened: only then is it noted. */
     private boolean mMoved;
 
@@ -791,11 +793,47 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     }
 
     private int cellSize() {
-        return dp(new int[] {42, 48, 58}[mSettings.size]);
+        return Math.round(dp(new int[] {42, 48, 58}[mSettings.size]) * mCellScale);
     }
 
     private int buttonSize() {
-        return dp(new int[] {34, 40, 50}[mSettings.size]);
+        return Math.round(dp(new int[] {34, 40, 50}[mSettings.size]) * mCellScale);
+    }
+
+    /**
+     * Makes the cells smaller where the screen is too short (on its side) for the buttons and an
+     * app and a half: the apps otherwise get no room, their one button faded out by the edges.
+     */
+    private void fitCells(int height) {
+        mCellScale = 1f;
+        boolean apps = false;
+        int buttons = 1;
+        for (String button : mSettings.buttons) {
+            if (WheelTaskbarSettings.BUTTON_APPS.equals(button)) {
+                apps = true;
+            } else if (!WheelTaskbarSettings.BUTTON_MODE.equals(button) || hasModeButton()) {
+                buttons++;
+            }
+        }
+        if (!apps) {
+            return;
+        }
+        final int gap = mContext.getResources().getDimensionPixelSize(
+                R.dimen.wheel_taskbar_gap) / 2;
+        // The cells' room, without their gaps and the apps' margins
+        final float room = height - buttons * gap - dp(8);
+        final float need = (buttons + 1.5f) * cellSize();
+        if (need > room) {
+            mCellScale = Math.max(0.7f, room / need);
+        }
+    }
+
+    /** Whether the bar has the button for the wheel mode of the app in front. */
+    private boolean hasModeButton() {
+        // The home screen has no mode of its own
+        return mModeClient != null && mForegroundPackage != null
+                && !mForegroundPackage.equals(WheelTaskbarApps.homePackage(
+                        userContext().getPackageManager()));
     }
 
     private int barColor() {
@@ -1052,6 +1090,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     }
 
     private void buildBar() {
+        fitCells(mWindowManager.getCurrentWindowMetrics().getBounds().height()
+                - mBar.getPaddingTop() - mBar.getPaddingBottom());
         mBar.removeAllViews();
         mAppsColumn = null;
         mAppsScroll = null;
@@ -1090,10 +1130,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                             () -> openMenu(MENU_POWER, null))).getChildAt(0);
                     break;
                 case WheelTaskbarSettings.BUTTON_MODE:
-                    // The home screen has no mode of its own
-                    if (mModeClient != null && mForegroundPackage != null
-                            && !mForegroundPackage.equals(WheelTaskbarApps.homePackage(
-                                    userContext().getPackageManager()))) {
+                    if (hasModeButton()) {
                         final FrameLayout cell = (FrameLayout) addButton(
                                 modeIcon(appMode(mForegroundPackage)),
                                 mContext.getString(R.string.wheel_taskbar_mode),
