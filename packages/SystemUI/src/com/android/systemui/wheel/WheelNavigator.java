@@ -1062,10 +1062,10 @@ public final class WheelNavigator {
         }
         final Rect bounds = bounds(node);
         // Match pill buttons and short rows instead of drawing oversized corners; a round dial's
-        // ring is a circle, the radius past half its size drawn as half
-        mRing.radius = dial() != null && dial().isRound()
-                ? Float.MAX_VALUE
-                : Math.min(mRing.defaultRadius, Math.min(bounds.width(), bounds.height()) / 2f);
+        // ring is a circle round it
+        mRing.round = dial() != null && dial().isRound();
+        mRing.radius =
+                Math.min(mRing.defaultRadius, Math.min(bounds.width(), bounds.height()) / 2f);
         mRoot.getLocationOnScreen(mRootLocation);
         bounds.offset(-mRootLocation[0], -mRootLocation[1]);
         if (!Objects.equals(bounds, mRing.getBounds())) {
@@ -1081,6 +1081,7 @@ public final class WheelNavigator {
         private final float mStroke;
         private final float defaultRadius;
         private float radius;
+        private boolean round;
         boolean attached;
         private boolean mGrabbed;
 
@@ -1119,7 +1120,12 @@ public final class WheelNavigator {
             mRect.set(getBounds());
             // Just outside the stop, so the ring doesn't cover it
             mRect.inset(-stroke, -stroke);
-            canvas.drawRoundRect(mRect, radius, radius, mPaint);
+            if (round) {
+                canvas.drawCircle(mRect.centerX(), mRect.centerY(),
+                        Math.min(mRect.width(), mRect.height()) / 2, mPaint);
+            } else {
+                canvas.drawRoundRect(mRect, radius, radius, mPaint);
+            }
         }
 
         @Override
