@@ -175,6 +175,11 @@ public final class WheelNavigator {
 
         /** A hold of the side button. */
         void onWheelHold();
+
+        /** Whether the dial is round, its ring a circle round it. */
+        default boolean isRound() {
+            return false;
+        }
     }
 
     public void setLevels(Levels levels) {
@@ -1056,9 +1061,11 @@ public final class WheelNavigator {
             return;
         }
         final Rect bounds = bounds(node);
-        // Match pill buttons and short rows instead of drawing oversized corners.
-        mRing.radius =
-                Math.min(mRing.defaultRadius, Math.min(bounds.width(), bounds.height()) / 2f);
+        // Match pill buttons and short rows instead of drawing oversized corners; a round dial's
+        // ring is a circle, the radius past half its size drawn as half
+        mRing.radius = dial() != null && dial().isRound()
+                ? Float.MAX_VALUE
+                : Math.min(mRing.defaultRadius, Math.min(bounds.width(), bounds.height()) / 2f);
         mRoot.getLocationOnScreen(mRootLocation);
         bounds.offset(-mRootLocation[0], -mRootLocation[1]);
         if (!Objects.equals(bounds, mRing.getBounds())) {

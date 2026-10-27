@@ -50,6 +50,8 @@ public final class WheelCombinationDial extends View implements WheelNavigator.D
         int enteredLength();
     }
 
+    /** The fewest digits a PIN has: fewer the lock doesn't try. */
+    private static final int MIN_DIGITS = 4;
     /** Steps for 0, and as many as the dial's notches. */
     private static final int NOTCHES = 10;
     private static final float NOTCH_DEGREES = 360f / NOTCHES;
@@ -100,6 +102,10 @@ public final class WheelCombinationDial extends View implements WheelNavigator.D
     private boolean mCircling;
     private float mDownX;
     private float mDownY;
+    /** The dial's shake, a wrong PIN's or a short one's, as a lock's handle that won't turn. */
+    private ValueAnimator mShakeAnimator;
+    /** Whether the last press was on too few digits to try, its hint shown until a turn. */
+    private boolean mTooShort;
 
     public WheelCombinationDial(Context context) {
         super(context);
@@ -142,6 +148,7 @@ public final class WheelCombinationDial extends View implements WheelNavigator.D
 
     /** Nothing turned, as for a new PIN. */
     public void reset() {
+        mTooShort = false;
         mRunDirection = 0;
         mRunSteps = 0;
         mSetFlash = 0;
@@ -164,7 +171,13 @@ public final class WheelCombinationDial extends View implements WheelNavigator.D
         takeBack();
     }
 
+    @Override
+    public boolean isRound() {
+        return true;
+    }
+
     private void turn(int direction) {
+        mTooShort = false;
         if (mRunDirection != 0 && direction != mRunDirection) {
             // Turning back sets the digit turned so far, and this step is the next one's first
             setDigit();
@@ -209,8 +222,16 @@ public final class WheelCombinationDial extends View implements WheelNavigator.D
         if (mListener == null) {
             return;
         }
-        if (mRunSteps == 0 && mListener.enteredLength() == 0) {
+        final int entered = mListener.enteredLength();
+        if (mRunSteps == 0 && entered == 0) {
             mListener.onUseDrum();
+            return;
+        }
+        if (entered + (mRunSteps > 0 ? 1 : 0) < MIN_DIGITS) {
+            // Not tried, as the lock would let it go without a word: the dial says so instead
+            mTooShort = true;
+            shake();
+            invalidate();
             return;
         }
         setDigit();
@@ -229,6 +250,24 @@ public final class WheelCombinationDial extends View implements WheelNavigator.D
         }
         updateDescription();
         invalidate();
+    }
+
+    /** A shake side to side, settling, as a lock's handle tried while still locked. */
+    public void shake() {
+        if (mShakeAnimator != null) {
+            mShakeAnimator.cancel();
+        }
+        mShakeAnimator = ValueAnimator.ofFloat(0f, 1f);
+        mShakeAnimator.setDuration(420);
+        mShakeAnimator.addUpdateListener(a -> {
+            final float t = (float) a.getAnimatedValue();
+            setTranslationX((float) (Math.sin(t * Math.PI * 6) * (1 - t) * dp(10)));
+        });
+        mShakeAnimator.start();
+        if (mVibrator != null) {
+            mVibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_DOUBLE_CLICK),
+                    mAttributes);
+        }
     }
 
     /** The dial's face round by {@code notches}, smoothly, as a heavy dial follows the hand. */
@@ -326,9 +365,9 @@ public final class WheelCombinationDial extends View implements WheelNavigator.D
     protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
         // The dial as large as fits over its two lines of hints, smaller on a short screen
         final float hints = dp(56);
-        mRadius = Math.max(dp(56), Math.min(width / 2f - dp(24), (height - hints) / 2f - dp(10)));
+        mRadius = Math.max(dp(56), Math.min(width / 2f - dp(24), (height - hints) / 2f - dp(8)));
         mCx = width / 2f;
-        mCy = dp(10) + mRadius;
+        mCy = dp(12) + mRadius;
         mHintTop = mCy + mRadius + dp(6);
         mRun.setStrokeWidth(dp(7));
         mTick.setStrokeWidth(dp(2));
@@ -380,47 +419,54 @@ public final class WheelCombinationDial extends View implements WheelNavigator.D
         mPointer.close();
         canvas.drawPath(mPointer, mIndex);
 
-        // In the middle: the digit being turned, else the digits set as a safe's pins
+        // In the middle the digit being turned; under it the digits set, as a safe's pins
         final int entered = mListener == null ? 0 : mListener.enteredLength();
         if (mRunSteps > 0) {
             mDigit.setColor(mPrimary);
             canvas.drawText(Integer.toString(mRunSteps % NOTCHES), mCx,
                     mCy - (mDigit.ascent() + mDigit.descent()) / 2, mDigit);
         } else {
-            drawPins(canvas, entered, face);
-        }
-
-        final float line = mHintTop + dp(18);
-        canvas.drawText(getContext().getString(firstHint(entered)), mCx, line, mHint);
-        canvas.drawText(getContext().getString(secondHint(entered)), mCx, line + dp(22), mHint);
-    }
-
-    /** The digits set so far as pins standing up in the dial's face, a row of up to eight. */
-    private void drawPins(Canvas canvas, int entered, float face) {
-        final int shown = Math.min(entered, 8);
-        if (shown == 0) {
             mDigit.setColor(mOnSurfaceVariant);
             final float size = mDigit.getTextSize();
             mDigit.setTextSize(sp(17));
             canvas.drawText(getContext().getString(R.string.wheel_dial_idle), mCx,
                     mCy - (mDigit.ascent() + mDigit.descent()) / 2, mDigit);
             mDigit.setTextSize(size);
+        }
+        drawPins(canvas, entered, face);
+
+        final float line = mHintTop + dp(18);
+        canvas.drawText(getContext().getString(firstHint(entered)), mCx, line, mHint);
+        canvas.drawText(getContext().getString(secondHint(entered)), mCx, line + dp(22), mHint);
+    }
+
+    /**
+     * The digits set so far as pins standing up low in the dial's face, a row of up to eight: the
+     * PIN's own dots above, which the dial takes the place of.
+     */
+    private void drawPins(Canvas canvas, int entered, float face) {
+        final int shown = Math.min(entered, 8);
+        if (shown == 0) {
             return;
         }
-        final float gap = Math.min(dp(16), face * 1.4f / 8);
-        final float width = dp(6);
-        final float height = dp(22);
+        final float gap = Math.min(dp(14), face * 1.2f / 8);
+        final float width = dp(5);
+        final float height = Math.min(dp(16), face * 0.16f);
+        final float middle = mCy + face * 0.6f;
         final float left = mCx - gap * (shown - 1) / 2;
         for (int i = 0; i < shown; i++) {
             final float x = left + gap * i;
             // The newest pin springs up as it is set
-            final float lift = i == shown - 1 ? mSetFlash * dp(6) : 0;
-            canvas.drawRoundRect(x - width / 2, mCy - height / 2 - lift, x + width / 2,
-                    mCy + height / 2 - lift, width / 2, width / 2, mPin);
+            final float lift = i == shown - 1 ? mSetFlash * dp(5) : 0;
+            canvas.drawRoundRect(x - width / 2, middle - height / 2 - lift, x + width / 2,
+                    middle + height / 2 - lift, width / 2, width / 2, mPin);
         }
     }
 
     private int firstHint(int entered) {
+        if (mTooShort) {
+            return R.string.wheel_dial_hint_short;
+        }
         if (mRunSteps > 0) {
             return R.string.wheel_dial_hint_back;
         }
