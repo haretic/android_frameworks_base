@@ -801,7 +801,11 @@ constructor(
                         verticalArrangement = spacedBy(8.dp),
                     ) {
                         Element(WheelShadeTabsKey, Modifier) {
-                            WheelShadeTabs(controls = false, onSwitch = wheelSwitchTab())
+                            WheelShadeTabs(
+                                controls = false,
+                                onSwitch = wheelSwitchTab(),
+                                shown = viewModel.isQsVisibleAndAnyShadeExpanded,
+                            )
                         }
                         Media()
                     }
@@ -848,7 +852,11 @@ constructor(
                     WheelShadeTabsKey,
                     Modifier.padding(horizontal = qsHorizontalMargin()).padding(bottom = 8.dp),
                 ) {
-                    WheelShadeTabs(controls = true, onSwitch = wheelSwitchTab())
+                    WheelShadeTabs(
+                        controls = true,
+                        onSwitch = wheelSwitchTab(),
+                        shown = viewModel.isQsVisibleAndAnyShadeExpanded,
+                    )
                 }
             }
             if (viewModel.isQsEnabled) {
