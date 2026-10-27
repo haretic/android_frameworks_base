@@ -6600,9 +6600,11 @@ public final class ViewRootImpl implements ViewParent,
                 return false;
             }
         }
-        // A ring round the whole window, as for a list that is the window, frames nothing
+        // A ring round the whole window, as for a list that is the window, frames nothing; nor
+        // one round the window's content below its bar, as a calendar's day grid or a web page,
+        // which shows its own selection
         if (!bounds.intersect(0, 0, mWidth, mHeight)
-                || bounds.width() >= mWidth && bounds.height() >= mHeight) {
+                || bounds.width() >= mWidth && bounds.height() * 3 >= mHeight * 2) {
             return false;
         }
         final int inset = (int) Math.ceil(
