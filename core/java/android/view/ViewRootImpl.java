@@ -6747,6 +6747,25 @@ public final class ViewRootImpl implements ViewParent,
         return to.centerY() >= from.top && to.centerY() <= from.bottom;
     }
 
+    /**
+     * The view at the start of {@code v}'s row the way a step {@code direction} comes into it
+     * from {@code focused}, the first as text reads for a step down, the last for one up.
+     */
+    private View wheelRowEnd(View focused, View v, int direction) {
+        final boolean rtl = v.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
+        final int back = (direction == View.FOCUS_DOWN) != rtl ? View.FOCUS_LEFT : View.FOCUS_RIGHT;
+        View end = v;
+        for (int i = 0; i < 16; i++) {
+            final View before = end.focusSearch(back);
+            if (before == null || before == end || before == focused || isInside(focused, before)
+                    || !isOnSameRow(end, before) || isOnSameRow(focused, before)) {
+                break;
+            }
+            end = before;
+        }
+        return end;
+    }
+
     /** Whether {@code view} is a toolbar's button, as its back arrow. */
     private static boolean isToolbarNavigation(View view) {
         return view instanceof android.widget.ImageButton
@@ -9576,6 +9595,15 @@ public final class ViewRootImpl implements ViewParent,
                                     direction, event.getRepeatCount() > 0));
                             return true;
                         }
+                    }
+                    if (v != null && v != focused && isWheelFocusEnabled()
+                            && !mAttachInfo.mInTouchMode
+                            && (direction == View.FOCUS_DOWN || direction == View.FOCUS_UP)
+                            && !isInside(focused, v) && !isOnSameRow(focused, v)) {
+                        // Into a row of views side by side, as AudioFX's knobs: at its start as
+                        // text reads, down onto the first, up onto the last, the steps going on
+                        // along it from there, none of the row left out before where it landed
+                        v = wheelRowEnd(focused, v, direction);
                     }
                     if (v != null && v != focused && isWheelFocusEnabled()
                             && (direction == View.FOCUS_DOWN || direction == View.FOCUS_UP)
