@@ -30,6 +30,7 @@
     <string name="wheel_dial_hint_start">Turn as many steps as the first digit</string>
     <string name="wheel_dial_hint_back">Turn back to set this digit</string>
     <string name="wheel_dial_hint_next">Turn for the next digit</string>
+    <string name="wheel_dial_hint_short">A PIN has at least 4 digits</string>
     <string name="wheel_dial_hint_press">Press to unlock - hold to undo</string>
     <string name="wheel_dial_hint_drum">Press to pick each digit instead</string>
     <string name="wheel_dial_description">Combination dial</string>

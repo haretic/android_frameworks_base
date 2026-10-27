@@ -341,8 +341,8 @@ public class KeyguardPINView extends KeyguardPinBasedInputView {
                     return mPasswordEntry.getText().length();
                 }
             });
-            addWheelPad(mWheelDrum);
-            addWheelPad(mWheelDial);
+            addWheelPad(mWheelDrum, false);
+            addWheelPad(mWheelDial, true);
         }
         if (mWheelDrum == null) {
             return;
@@ -356,6 +356,7 @@ public class KeyguardPINView extends KeyguardPinBasedInputView {
         if (!wheel) {
             mWheelDrum.setVisibility(View.GONE);
             mWheelDial.setVisibility(View.GONE);
+            findViewById(R.id.row0).setVisibility(View.VISIBLE);
             return;
         }
         for (int row = 1; row < 5; row++) {
@@ -376,6 +377,14 @@ public class KeyguardPINView extends KeyguardPinBasedInputView {
     }
 
     @Override
+    public void startErrorAnimation() {
+        super.startErrorAnimation();
+        if (mWheelDial != null && mWheelDial.isShown()) {
+            mWheelDial.shake();
+        }
+    }
+
+    @Override
     protected void resetPasswordText(boolean animate, boolean announce) {
         super.resetPasswordText(animate, announce);
         // A PIN tried or cleared: the dial's pins and its digit being turned with it
@@ -388,6 +397,10 @@ public class KeyguardPINView extends KeyguardPinBasedInputView {
     private void showWheelPad(View pad, View other) {
         other.setVisibility(View.GONE);
         pad.setVisibility(View.VISIBLE);
+        // The dial shows the digits set as its pins, in the PIN's own place: the PIN's dots stay
+        // laid out, the field taking the digits, out of sight
+        findViewById(R.id.row0).setVisibility(
+                pad == mWheelDial ? View.INVISIBLE : View.VISIBLE);
         mWheelDrum.reset();
         mWheelDial.reset();
         post(() -> {
@@ -397,13 +410,20 @@ public class KeyguardPINView extends KeyguardPinBasedInputView {
         });
     }
 
-    /** A wheel pad under the PIN, over the keys, above the Emergency button where there is one. */
-    private void addWheelPad(View pad) {
+    /**
+     * A wheel pad under the PIN, or from its top for one that shows the PIN itself ({@code
+     * overPin}), over the keys, above the Emergency button where there is one.
+     */
+    private void addWheelPad(View pad, boolean overPin) {
         final ConstraintLayout container = findViewById(R.id.pin_container);
         final ConstraintLayout.LayoutParams lp = new ConstraintLayout.LayoutParams(
                 ConstraintLayout.LayoutParams.MATCH_CONSTRAINT,
                 ConstraintLayout.LayoutParams.MATCH_CONSTRAINT);
-        lp.topToBottom = R.id.row0;
+        if (overPin) {
+            lp.topToTop = R.id.row0;
+        } else {
+            lp.topToBottom = R.id.row0;
+        }
         if (container.findViewById(R.id.keyguard_selector_fade_container) != null) {
             lp.bottomToTop = R.id.keyguard_selector_fade_container;
         } else {
@@ -417,7 +437,7 @@ public class KeyguardPINView extends KeyguardPinBasedInputView {
         if (container instanceof MotionLayout motion) {
             for (int id : motion.getConstraintSetIds()) {
                 final ConstraintSet set = motion.getConstraintSet(id);
-                placeWheelPad(set, pad.getId());
+                placeWheelPad(set, pad.getId(), overPin);
                 motion.updateState(id, set);
             }
         }
@@ -427,10 +447,12 @@ public class KeyguardPINView extends KeyguardPinBasedInputView {
      * A wheel pad under the PIN, over the keys, in one of the pad's constraint sets; the pads and
      * the keys keep the visibility updateWheelDrum() gives them.
      */
-    private void placeWheelPad(ConstraintSet set, int pad) {
+    private void placeWheelPad(ConstraintSet set, int pad, boolean overPin) {
         set.constrainWidth(pad, ConstraintSet.MATCH_CONSTRAINT);
         set.constrainHeight(pad, ConstraintSet.MATCH_CONSTRAINT);
-        set.connect(pad, ConstraintSet.TOP, R.id.row0, ConstraintSet.BOTTOM);
+        set.connect(pad, ConstraintSet.TOP, R.id.row0,
+                overPin ? ConstraintSet.TOP : ConstraintSet.BOTTOM);
+        set.setVisibilityMode(R.id.row0, ConstraintSet.VISIBILITY_MODE_IGNORE);
         // A sibling in the motion layout's pad only
         if (findViewById(R.id.pin_container)
                 .findViewById(R.id.keyguard_selector_fade_container) != null) {
