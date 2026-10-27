@@ -6748,6 +6748,18 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     /**
+     * Whether {@code next} lies beside {@code focused} the way {@code along} goes, past its
+     * middle: not a view under it reaching out beyond it, as a home tile under the tile's menu.
+     */
+    private boolean isBeside(View focused, View next, int along) {
+        final Rect from = mTempRect;
+        final Rect to = mAttachInfo.mTmpInvalRect;
+        focused.getBoundsOnScreen(from, true);
+        next.getBoundsOnScreen(to, true);
+        return along == View.FOCUS_RIGHT ? to.left >= from.centerX() : to.right <= from.centerX();
+    }
+
+    /**
      * The view at the start of {@code v}'s row the way a step {@code direction} comes into it
      * from {@code focused}, the first as text reads for a step down, the last for one up.
      */
@@ -9535,6 +9547,22 @@ public final class ViewRootImpl implements ViewParent,
                         }
                     }
                     View v = focused.focusSearch(direction);
+                    if (v != null && v != focused && isWheelFocusEnabled()
+                            && !mAttachInfo.mInTouchMode
+                            && (direction == View.FOCUS_DOWN || direction == View.FOCUS_UP)) {
+                        // The wheel goes as text reads, along a row before the next, as over a
+                        // keypad's digits or the buttons beside a search box: straight down, it
+                        // would only ever reach each row's first
+                        final boolean rtl = focused.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
+                        final int along = (direction == View.FOCUS_DOWN) != rtl
+                                ? View.FOCUS_RIGHT : View.FOCUS_LEFT;
+                        final View next = focused.focusSearch(along);
+                        if (next != null && next != focused && !isInside(focused, next)
+                                && isOnSameRow(focused, next) && isBeside(focused, next, along)) {
+                            v = next;
+                            direction = along;
+                        }
+                    }
                     if (isWheelFocusEnabled() && !mAttachInfo.mInTouchMode
                             && (direction == View.FOCUS_DOWN || direction == View.FOCUS_UP)
                             && isDeadWheelList(focused)) {
