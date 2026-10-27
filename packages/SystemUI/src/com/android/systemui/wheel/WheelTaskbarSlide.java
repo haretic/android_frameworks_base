@@ -27,6 +27,8 @@ import java.util.concurrent.Executor;
  * Slides the screen aside for the wheel taskbar the way one-handed mode moves it down: by
  * moving the OneHanded display areas, which hold the apps, the wallpaper and the status bar
  * (each in its own area) but not the navigation bar panels the taskbar is one of. Touches follow the surface.
+ * Aside, the screen is drawn smaller to fit beside the bar, all of the app in sight, not cut at
+ * the edge the bar takes.
  * The area is taken over when SystemUI starts, so the first slide doesn't wait for it, and only
  * where one-handed mode (ro.support_one_handed_mode) doesn't use it. With every area moving,
  * the space the slide opens shows only the taskbar.
@@ -39,6 +41,9 @@ final class WheelTaskbarSlide extends DisplayAreaOrganizer {
     private final Map<WindowContainerToken, SurfaceControl> mLeashes = new ArrayMap<>();
     private boolean mRegistered;
     private float mX;
+    /** The display's size, which the screen is made smaller from to fit beside the bar. */
+    private int mWidth;
+    private int mHeight;
     private ValueAnimator mAnimator;
 
     WheelTaskbarSlide(Executor executor) {
@@ -117,11 +122,32 @@ final class WheelTaskbarSlide extends DisplayAreaOrganizer {
         try (SurfaceControl.Transaction t = new SurfaceControl.Transaction()) {
             for (SurfaceControl leash : mLeashes.values()) {
                 if (leash.isValid()) {
-                    t.setPosition(leash, x, 0);
+                    place(t, leash);
                 }
             }
             t.apply();
         }
+    }
+
+    /**
+     * The screen {@code mX} aside: as wide as the room beside the bar, as much smaller in height,
+     * level in the middle, on the side away from the bar.
+     */
+    private void place(SurfaceControl.Transaction t, SurfaceControl leash) {
+        if (mWidth <= 0 || mHeight <= 0 || mX == 0) {
+            t.setMatrix(leash, 1, 0, 0, 1);
+            t.setPosition(leash, mX, 0);
+            return;
+        }
+        final float scale = Math.max(0.5f, 1 - Math.abs(mX) / mWidth);
+        t.setMatrix(leash, scale, 0, 0, scale);
+        t.setPosition(leash, mX > 0 ? mX : 0, mHeight * (1 - scale) / 2);
+    }
+
+    private void size(DisplayAreaInfo info) {
+        final android.graphics.Rect bounds = info.configuration.windowConfiguration.getBounds();
+        mWidth = bounds.width();
+        mHeight = bounds.height();
     }
 
     @Override
@@ -130,8 +156,17 @@ final class WheelTaskbarSlide extends DisplayAreaOrganizer {
             return;
         }
         mLeashes.put(info.token, leash);
+        size(info);
         try (SurfaceControl.Transaction t = new SurfaceControl.Transaction()) {
-            t.setPosition(leash, mX, 0).apply();
+            place(t, leash);
+            t.apply();
+        }
+    }
+
+    @Override
+    public void onDisplayAreaInfoChanged(DisplayAreaInfo info) {
+        if (info.displayId == Display.DEFAULT_DISPLAY) {
+            size(info);
         }
     }
 
