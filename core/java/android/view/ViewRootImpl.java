@@ -7267,10 +7267,16 @@ public final class ViewRootImpl implements ViewParent,
     /**
      * Whether {@code view} is a container the wheel passes into rather than stops on: focusable,
      * yet nothing to press nor hold, no list nor scroller nor Compose host, with what takes the
-     * focus inside it, as a box round a button or a window's whole layout an app focused.
+     * focus inside it, as a box round a button or a window's whole layout an app focused. One
+     * clickable with no listener only takes the touches that land on it, as the Dialer's empty
+     * page does so they don't fall through to the list under it: nothing to press either. One
+     * that takes keys itself, as a settings slider's row handing them to its slider, is a stop.
      */
     private static boolean isWheelPassThrough(View view) {
-        return view instanceof ViewGroup group && !view.isClickable() && !view.isLongClickable()
+        return view instanceof ViewGroup group
+                && !view.hasOnKeyListener()
+                && !(view.isClickable() && view.hasOnClickListeners())
+                && !(view.isLongClickable() && view.hasOnLongClickListeners())
                 && !view.isContextClickable() && !isWheelScroller(view) && !isRecyclerView(view)
                 && !(view instanceof android.widget.AbsListView) && !isComposeHost(view)
                 && hasFocusableInside(group);
