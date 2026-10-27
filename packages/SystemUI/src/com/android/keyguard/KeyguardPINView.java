@@ -27,6 +27,7 @@ import static com.android.systemui.statusbar.policy.DevicePostureController.DEVI
 import static com.android.systemui.statusbar.policy.DevicePostureController.DEVICE_POSTURE_UNKNOWN;
 
 import android.animation.ValueAnimator;
+import android.app.ActivityManager;
 import android.annotation.Nullable;
 import android.content.Context;
 import android.content.res.Configuration;
@@ -52,6 +53,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import lineageos.providers.LineageSettings;
+
 /**
  * Displays a PIN pad for unlocking.
  */
@@ -65,6 +68,7 @@ public class KeyguardPINView extends KeyguardPinBasedInputView {
     //  when the flag is enabled/removed
     @Nullable private ConstraintLayout mContainerConstraintLayout;
     @Nullable private WheelPinDrum mWheelDrum;
+    @Nullable private WheelCombinationDial mWheelDial;
     private final List<View> mWheelHiddenKeys = new ArrayList<>();
     private int mDisappearYTranslation;
     private View[][] mViews;
@@ -284,13 +288,13 @@ public class KeyguardPINView extends KeyguardPinBasedInputView {
     }
 
     /**
-     * The wheel UI's PIN drum in place of the keys while the lock screen takes the revised layout,
-     * the wheel on it once the bouncer shows.
+     * The wheel UI's PIN pad in place of the keys while the lock screen takes the revised layout,
+     * the wheel on it once the bouncer shows: the combination dial or the PIN drum, as
+     * WHEEL_UNLOCK has it, the dial handing over to the drum when asked.
      */
     void updateWheelDrum() {
         final boolean wheel = WheelLayoutSettings.lockscreen(mContext);
         if (wheel && mWheelDrum == null) {
-            final ConstraintLayout container = findViewById(R.id.pin_container);
             mWheelDrum = new WheelPinDrum(mContext);
             mWheelDrum.setId(R.id.wheel_pin_drum);
             mWheelDrum.setListener(new WheelPinDrum.Listener() {
@@ -309,78 +313,135 @@ public class KeyguardPINView extends KeyguardPinBasedInputView {
                     findViewById(R.id.delete_button).performClick();
                 }
             });
-            final ConstraintLayout.LayoutParams lp = new ConstraintLayout.LayoutParams(
-                    ConstraintLayout.LayoutParams.MATCH_CONSTRAINT,
-                    ConstraintLayout.LayoutParams.MATCH_CONSTRAINT);
-            lp.topToBottom = R.id.row0;
-            // Above the Emergency button where the pad has it, else to the bottom
-            if (container.findViewById(R.id.keyguard_selector_fade_container) != null) {
-                lp.bottomToTop = R.id.keyguard_selector_fade_container;
-            } else {
-                lp.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID;
-            }
-            lp.startToStart = ConstraintLayout.LayoutParams.PARENT_ID;
-            lp.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID;
-            container.addView(mWheelDrum, lp);
-            // A motion layout lays out and shows its children from its constraint sets alone
-            if (container instanceof MotionLayout motion) {
-                for (int id : motion.getConstraintSetIds()) {
-                    final ConstraintSet set = motion.getConstraintSet(id);
-                    placeWheelDrum(set);
-                    motion.updateState(id, set);
+            mWheelDial = new WheelCombinationDial(mContext);
+            mWheelDial.setId(R.id.wheel_pin_dial);
+            mWheelDial.setListener(new WheelCombinationDial.Listener() {
+                @Override
+                public void onDigit(int digit) {
+                    performNumberClick(digit);
                 }
-            }
+
+                @Override
+                public void onOk() {
+                    findViewById(R.id.key_enter).performClick();
+                }
+
+                @Override
+                public void onDelete() {
+                    findViewById(R.id.delete_button).performClick();
+                }
+
+                @Override
+                public void onUseDrum() {
+                    showWheelPad(mWheelDrum, mWheelDial);
+                }
+
+                @Override
+                public int enteredLength() {
+                    return mPasswordEntry.getText().length();
+                }
+            });
+            addWheelPad(mWheelDrum);
+            addWheelPad(mWheelDial);
         }
         if (mWheelDrum == null) {
             return;
         }
-        mWheelDrum.setVisibility(wheel ? View.VISIBLE : View.GONE);
         // The keys keep their place, so the PIN above them stays where it was; those the PIN
         // length's auto-confirm hid stay hidden after
         for (View key : mWheelHiddenKeys) {
             key.setVisibility(View.VISIBLE);
         }
         mWheelHiddenKeys.clear();
-        if (wheel) {
-            for (int row = 1; row < 5; row++) {
-                for (View key : mViews[row]) {
-                    if (key != null && key.getVisibility() == View.VISIBLE) {
-                        key.setVisibility(View.INVISIBLE);
-                        mWheelHiddenKeys.add(key);
-                    }
+        if (!wheel) {
+            mWheelDrum.setVisibility(View.GONE);
+            mWheelDial.setVisibility(View.GONE);
+            return;
+        }
+        for (int row = 1; row < 5; row++) {
+            for (View key : mViews[row]) {
+                if (key != null && key.getVisibility() == View.VISIBLE) {
+                    key.setVisibility(View.INVISIBLE);
+                    mWheelHiddenKeys.add(key);
                 }
             }
         }
-        if (wheel) {
-            mWheelDrum.reset();
-            post(() -> {
-                if (getRootView() instanceof WindowRootView root) {
-                    root.focusWheelOn(mWheelDrum);
-                }
-            });
+        final boolean dial = LineageSettings.Secure.getIntForUser(mContext.getContentResolver(),
+                LineageSettings.Secure.WHEEL_UNLOCK, 1, ActivityManager.getCurrentUser()) != 0;
+        if (dial) {
+            showWheelPad(mWheelDial, mWheelDrum);
+        } else {
+            showWheelPad(mWheelDrum, mWheelDial);
+        }
+    }
+
+    @Override
+    protected void resetPasswordText(boolean animate, boolean announce) {
+        super.resetPasswordText(animate, announce);
+        // A PIN tried or cleared: the dial's pins and its digit being turned with it
+        if (mWheelDial != null) {
+            mWheelDial.reset();
+        }
+    }
+
+    /** One of the wheel's pads showing, from its start, and the wheel on it; the other gone. */
+    private void showWheelPad(View pad, View other) {
+        other.setVisibility(View.GONE);
+        pad.setVisibility(View.VISIBLE);
+        mWheelDrum.reset();
+        mWheelDial.reset();
+        post(() -> {
+            if (pad.isShown() && getRootView() instanceof WindowRootView root) {
+                root.focusWheelOn(pad);
+            }
+        });
+    }
+
+    /** A wheel pad under the PIN, over the keys, above the Emergency button where there is one. */
+    private void addWheelPad(View pad) {
+        final ConstraintLayout container = findViewById(R.id.pin_container);
+        final ConstraintLayout.LayoutParams lp = new ConstraintLayout.LayoutParams(
+                ConstraintLayout.LayoutParams.MATCH_CONSTRAINT,
+                ConstraintLayout.LayoutParams.MATCH_CONSTRAINT);
+        lp.topToBottom = R.id.row0;
+        if (container.findViewById(R.id.keyguard_selector_fade_container) != null) {
+            lp.bottomToTop = R.id.keyguard_selector_fade_container;
+        } else {
+            lp.bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID;
+        }
+        lp.startToStart = ConstraintLayout.LayoutParams.PARENT_ID;
+        lp.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID;
+        pad.setVisibility(View.GONE);
+        container.addView(pad, lp);
+        // A motion layout lays out and shows its children from its constraint sets alone
+        if (container instanceof MotionLayout motion) {
+            for (int id : motion.getConstraintSetIds()) {
+                final ConstraintSet set = motion.getConstraintSet(id);
+                placeWheelPad(set, pad.getId());
+                motion.updateState(id, set);
+            }
         }
     }
 
     /**
-     * The drum under the PIN, over the keys, in one of the pad's constraint sets; the drum and the
-     * keys keep the visibility updateWheelDrum() gives them.
+     * A wheel pad under the PIN, over the keys, in one of the pad's constraint sets; the pads and
+     * the keys keep the visibility updateWheelDrum() gives them.
      */
-    private void placeWheelDrum(ConstraintSet set) {
-        final int drum = R.id.wheel_pin_drum;
-        set.constrainWidth(drum, ConstraintSet.MATCH_CONSTRAINT);
-        set.constrainHeight(drum, ConstraintSet.MATCH_CONSTRAINT);
-        set.connect(drum, ConstraintSet.TOP, R.id.row0, ConstraintSet.BOTTOM);
+    private void placeWheelPad(ConstraintSet set, int pad) {
+        set.constrainWidth(pad, ConstraintSet.MATCH_CONSTRAINT);
+        set.constrainHeight(pad, ConstraintSet.MATCH_CONSTRAINT);
+        set.connect(pad, ConstraintSet.TOP, R.id.row0, ConstraintSet.BOTTOM);
         // A sibling in the motion layout's pad only
         if (findViewById(R.id.pin_container)
                 .findViewById(R.id.keyguard_selector_fade_container) != null) {
-            set.connect(drum, ConstraintSet.BOTTOM, R.id.keyguard_selector_fade_container,
+            set.connect(pad, ConstraintSet.BOTTOM, R.id.keyguard_selector_fade_container,
                     ConstraintSet.TOP);
         } else {
-            set.connect(drum, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.BOTTOM);
+            set.connect(pad, ConstraintSet.BOTTOM, ConstraintSet.PARENT_ID, ConstraintSet.BOTTOM);
         }
-        set.connect(drum, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START);
-        set.connect(drum, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END);
-        set.setVisibilityMode(drum, ConstraintSet.VISIBILITY_MODE_IGNORE);
+        set.connect(pad, ConstraintSet.START, ConstraintSet.PARENT_ID, ConstraintSet.START);
+        set.connect(pad, ConstraintSet.END, ConstraintSet.PARENT_ID, ConstraintSet.END);
+        set.setVisibilityMode(pad, ConstraintSet.VISIBILITY_MODE_IGNORE);
         for (int row = 1; row < 5; row++) {
             for (View key : mViews[row]) {
                 if (key != null) {
