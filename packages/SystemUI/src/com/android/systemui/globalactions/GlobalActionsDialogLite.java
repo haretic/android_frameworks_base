@@ -3123,9 +3123,10 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
             initializeLayout(dialog, true /* firstTime */);
             mWheelNavigation = PowerMenuWheelNavigation.attach(dialog);
             if (mWheelNavigation != null) {
-                // The wheel's menu is panels with gaps between: the app behind stays well back
+                // The wheel's menu is panels with gaps between: the app behind stays well back,
+                // no bright icon of it showing through a gap as part of the menu
                 window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-                window.setDimAmount(0.85f);
+                window.setDimAmount(0.94f);
             }
             mInitialWindowDimAmount = window.getAttributes().dimAmount;
         }
