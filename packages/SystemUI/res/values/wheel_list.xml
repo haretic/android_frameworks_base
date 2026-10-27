@@ -5,6 +5,7 @@
     <bool name="config_r1CompactQs">false</bool>
     <!-- The PIN drum, in the PIN pad's constraint sets (KeyguardPINView) -->
     <item type="id" name="wheel_pin_drum" />
+    <item type="id" name="wheel_pin_dial" />
     <dimen name="r1_qs_full_tile_height">80dp</dimen>
     <dimen name="r1_qs_full_tile_label_size">16sp</dimen>
     <dimen name="r1_wheel_ring_width">2.4dp</dimen>
@@ -24,5 +25,14 @@
     <string name="wheel_pin_hint_ok">Press to unlock</string>
     <string name="wheel_pin_hint_delete">Press to delete a digit</string>
     <string name="wheel_pin_hold">Hold to delete a digit</string>
+    <!-- The combination dial, the PIN as steps of the wheel: what the middle shows before a turn -->
+    <string name="wheel_dial_idle">Turn</string>
+    <string name="wheel_dial_hint_start">Turn as many steps as the first digit</string>
+    <string name="wheel_dial_hint_back">Turn back to set this digit</string>
+    <string name="wheel_dial_hint_next">Turn for the next digit</string>
+    <string name="wheel_dial_hint_press">Press to unlock - hold to undo</string>
+    <string name="wheel_dial_hint_drum">Press to pick each digit instead</string>
+    <string name="wheel_dial_description">Combination dial</string>
+    <string name="wheel_dial_state_idle">Nothing turned</string>
     <item name="wheel_original_text_size" type="id" />
 </resources>
