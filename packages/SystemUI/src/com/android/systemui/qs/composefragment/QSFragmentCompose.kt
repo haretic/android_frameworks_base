@@ -836,9 +836,8 @@ constructor(
     private fun ContentScope.QuickSettingsElement(modifier: Modifier = Modifier) {
         val qqsPadding = viewModel.qqsHeaderHeight
         val wheel = LocalWheelLayout.current.enabled
-        // The header grows with the full panel; the wheel's is compact
-        val qsExtraPadding =
-            if (wheel) WheelExpandedHeaderExtra else dimensionResource(R.dimen.qs_panel_padding_top)
+        // The header grows with the full panel; the wheel's stays compact, its tabs where they were
+        val qsExtraPadding = if (wheel) 0.dp else dimensionResource(R.dimen.qs_panel_padding_top)
         Column(
             modifier =
                 modifier.collapseExpandSemanticAction(
@@ -1730,12 +1729,6 @@ fun QuickSettingsLayout(
 
 /** The wheel shade's tab header, shared by both tabs so it stays put as they switch. */
 private val WheelShadeTabsKey = ElementKey("WheelShadeTabs")
-
-/**
- * How much taller the wheel shade's header is with the full panel open than with the quick one,
- * with the 8dp the tabs keep from what is above them
- */
-private val WheelExpandedHeaderExtra = 56.dp
 
 private object ResIdTags {
     const val quickSettingsPanel = "quick_settings_panel"
