@@ -6680,9 +6680,27 @@ public final class ViewRootImpl implements ViewParent,
         }
         if (focused != null && isDeadWheelList(focused)) {
             // An empty list the window first focused, as Messaging's with no conversations: no
-            // stop, the first focus goes on to the next in order, as its Start chat, or Dialer's
-            // Add favourite over its empty favourites; or waits for rows
-            final View next = focused.focusSearch(View.FOCUS_FORWARD);
+            // stop. The first focus goes to what is drawn over it, the topmost first, as Dialer's
+            // Add favourite over its empty favourites; else on to the next in order, as Messaging's
+            // Start chat; or waits for rows
+            final Rect area = new Rect();
+            final Rect bounds = new Rect();
+            focused.getBoundsOnScreen(area, true);
+            final ArrayList<View> focusables = new ArrayList<>();
+            mView.addFocusables(focusables, View.FOCUS_FORWARD);
+            View over = null;
+            int overTop = Integer.MAX_VALUE;
+            for (View v : focusables) {
+                if (v == focused || isInside(v, focused) || !v.isShown()) {
+                    continue;
+                }
+                v.getBoundsOnScreen(bounds, true);
+                if (area.contains(bounds) && !bounds.isEmpty() && bounds.top < overTop) {
+                    over = v;
+                    overTop = bounds.top;
+                }
+            }
+            final View next = over != null ? over : focused.focusSearch(View.FOCUS_FORWARD);
             return next != null && next != focused && !isDeadWheelList(next)
                     && next.requestFocus(View.FOCUS_FORWARD);
         }
