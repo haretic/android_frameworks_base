@@ -18,7 +18,7 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginTop="@dimen/settingslib_expressive_space_extrasmall6"
+    android:layout_marginTop="@dimen/settingslib_expressive_untitled_category_margin_top"
     android:baselineAligned="false"
     android:filterTouchesWhenObscured="false">
 </LinearLayout>

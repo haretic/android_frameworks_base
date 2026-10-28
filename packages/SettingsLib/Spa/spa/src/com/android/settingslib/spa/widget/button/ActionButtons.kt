@@ -55,6 +55,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.booleanResource
+import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -89,8 +91,12 @@ data class ActionButton(
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 fun ActionButtons(actionButtons: List<ActionButton>) {
     val buttonHorizontalPadding = itemPaddingEnd
-    val buttonPadding =
-        PaddingValues(horizontal = buttonHorizontalPadding, vertical = buttonPaddingVertical)
+    val verticalPadding = if (isSpaExpressiveEnabled) {
+        dimensionResource(R.dimen.settingslib_spa_action_padding_vertical)
+    } else {
+        buttonPaddingVertical
+    }
+    val buttonPadding = PaddingValues(horizontal = buttonHorizontalPadding, vertical = verticalPadding)
     if (isSpaExpressiveEnabled) {
         BoxWithConstraints {
             val textHorizontalPadding = SettingsSpace.extraSmall4
@@ -176,7 +182,7 @@ private fun ExpressiveActionButton(
         )
     ) {
         IconButton(actionButton)
-        Spacer(Modifier.height(SettingsSpace.extraSmall3))
+        Spacer(Modifier.height(dimensionResource(R.dimen.settingslib_spa_action_label_gap)))
         Text(
             text = actionButton.text,
             modifier = Modifier
@@ -232,17 +238,19 @@ private fun RowScope.ActionButton(actionButton: ActionButton) {
 @Composable
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 private fun IconButton(actionButton: ActionButton) {
+    val widthOption = IconButtonDefaults.IconButtonWidthOption.Wide
+    val containerSize = if (booleanResource(R.bool.settingslib_spa_compact)) {
+        IconButtonDefaults.smallContainerSize(widthOption)
+    } else {
+        IconButtonDefaults.mediumContainerSize(widthOption)
+    }
     FilledIconButton(
         onClick = actionButton.onClick,
         shapes = IconButtonDefaults.shapes(),
         modifier =
             Modifier
-                // Small, as a short screen shows them over the page's first items
-                .size(
-                    IconButtonDefaults.smallContainerSize(
-                        IconButtonDefaults.IconButtonWidthOption.Wide
-                    )
-                )
+                // The small container is 40dp tall; Material also retains its minimum touch target.
+                .size(containerSize)
                 .clearAndSetSemantics {}, // semantics set in IconButton
         enabled = actionButton.enabled,
         // Because buttons could appear, disappear or change positions, reset the interaction source

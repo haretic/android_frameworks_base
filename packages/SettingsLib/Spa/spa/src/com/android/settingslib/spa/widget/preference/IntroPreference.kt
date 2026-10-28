@@ -40,7 +40,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.booleanResource
+import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.tooling.preview.Preview
+import com.android.settingslib.spa.R
 import com.android.settingslib.spa.framework.theme.SettingsDimension
 import com.android.settingslib.spa.framework.theme.SettingsSpace
 
@@ -68,21 +71,24 @@ internal fun IntroPreference(
     descriptions: List<String>,
     icon: @Composable (() -> Unit),
 ) {
-    // A row, the icon beside the title: on a short screen a column stacking them takes as much
-    // as the page's first two items
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(
-                    horizontal = SettingsSpace.small4,
-                    vertical = SettingsSpace.small1,
-                ),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        icon()
-        Spacer(Modifier.width(SettingsSpace.small3))
-        Column {
+    val modifier = Modifier.fillMaxWidth().padding(
+        horizontal = SettingsSpace.small4,
+        vertical = dimensionResource(R.dimen.settingslib_spa_intro_padding_vertical),
+    )
+    // The identity stays beside its icon on a short screen; tall screens keep the stock column.
+    if (booleanResource(R.bool.settingslib_spa_compact)) {
+        Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+            icon()
+            Spacer(Modifier.width(SettingsSpace.small3))
+            Column(Modifier.weight(1f)) {
+                IntroTitle(title)
+                IntroDescription(descriptions)
+            }
+        }
+    } else {
+        Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+            icon()
+            Spacer(Modifier.height(SettingsSpace.small1))
             IntroTitle(title)
             IntroDescription(descriptions)
         }
@@ -94,7 +100,7 @@ private fun IntroIcon(imageVector: ImageVector?) {
     if (imageVector != null) {
         Box(
             modifier =
-                Modifier.size(SettingsDimension.iconLarge)
+                Modifier.size(introIconContainerSize())
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.secondaryContainer),
             contentAlignment = Alignment.Center,
@@ -112,12 +118,17 @@ private fun IntroIcon(imageVector: ImageVector?) {
 @Composable
 private fun IntroAppIcon(appIcon: @Composable () -> Unit) {
     Box(
-        modifier = Modifier.size(SettingsDimension.iconLarge).clip(CircleShape),
+        modifier = Modifier.size(introIconContainerSize()).clip(CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         appIcon()
     }
 }
+
+@Composable
+private fun introIconContainerSize() =
+    if (booleanResource(R.bool.settingslib_spa_compact)) SettingsDimension.iconLarge
+    else SettingsDimension.itemIconContainerSize
 
 @Composable
 private fun IntroTitle(title: String) {

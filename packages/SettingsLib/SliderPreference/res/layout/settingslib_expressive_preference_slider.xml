@@ -33,10 +33,11 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:paddingVertical="@dimen/settingslib_expressive_space_small1">
+        android:paddingVertical="@dimen/settingslib_expressive_slider_padding_vertical">
 
         <TextView
             android:id="@android:id/title"
+            style="@style/SettingsLibSliderTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="start"

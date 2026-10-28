@@ -36,7 +36,9 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.tooling.preview.Preview
+import com.android.settingslib.spa.R
 import com.android.settingslib.spa.framework.compose.thenIf
 import com.android.settingslib.spa.framework.theme.SettingsDimension
 import com.android.settingslib.spa.framework.theme.SettingsShape
@@ -57,11 +59,17 @@ fun CategoryTitle(title: String) {
                 start =
                     if (isSpaExpressiveEnabled) SettingsSpace.extraSmall4
                     else SettingsDimension.itemPaddingStart,
-                top = SettingsSpace.small3,
+                top =
+                    if (isSpaExpressiveEnabled)
+                        dimensionResource(R.dimen.settingslib_spa_category_title_padding_top)
+                    else SettingsSpace.small3,
                 end =
                     if (isSpaExpressiveEnabled) SettingsSpace.extraSmall4
                     else SettingsDimension.itemPaddingEnd,
-                bottom = SettingsSpace.extraSmall4,
+                bottom =
+                    if (isSpaExpressiveEnabled)
+                        dimensionResource(R.dimen.settingslib_spa_category_title_padding_bottom)
+                    else SettingsSpace.extraSmall4,
             ),
         color = MaterialTheme.colorScheme.primary,
         style =
@@ -83,12 +91,13 @@ fun Category(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     var displayTitle by remember { mutableStateOf(false) }
+    val paddingVertical = dimensionResource(R.dimen.settingslib_spa_category_padding_vertical)
     Column(
         modifier =
             Modifier.thenIf(isSpaExpressiveEnabled && displayTitle) {
                 Modifier.padding(
                     horizontal = SettingsSpace.small1,
-                    vertical = SettingsSpace.extraSmall4,
+                    vertical = paddingVertical,
                 )
             }
     ) {

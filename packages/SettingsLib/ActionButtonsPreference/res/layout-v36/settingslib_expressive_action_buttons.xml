@@ -19,7 +19,8 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="@dimen/settingslib_expressive_space_extrasmall4"
+    android:layout_marginHorizontal="@dimen/settingslib_expressive_space_extrasmall4"
+    android:layout_marginVertical="@dimen/settingslib_expressive_action_margin_vertical"
     android:paddingHorizontal="@dimen/settingslib_expressive_space_extrasmall4"
     android:orientation="horizontal"
     android:filterTouchesWhenObscured="true">
@@ -35,13 +36,13 @@
             android:id="@+id/button1"
             style="@style/SettingsLibActionButton.Expressive"
             android:layout_width="@dimen/settingslib_expressive_space_large3"
-            android:layout_height="@dimen/settingslib_expressive_space_medium5"
+            android:layout_height="@dimen/settingslib_expressive_action_button_height"
             android:layout_gravity="center_horizontal"
             android:importantForAccessibility="no"/>
         <TextView
             android:id="@+id/text1"
             style="@style/SettingsLibActionButton.Expressive.Label"
-            android:layout_marginTop="@dimen/settingslib_expressive_space_extrasmall3"
+            android:layout_marginTop="@dimen/settingslib_expressive_action_label_margin_top"
             android:importantForAccessibility="no"
             android:lineBreakWordStyle="phrase"
             android:hyphenationFrequency="normalFast"/>
@@ -59,13 +60,13 @@
             android:id="@+id/button2"
             style="@style/SettingsLibActionButton.Expressive"
             android:layout_width="@dimen/settingslib_expressive_space_large3"
-            android:layout_height="@dimen/settingslib_expressive_space_medium5"
+            android:layout_height="@dimen/settingslib_expressive_action_button_height"
             android:layout_gravity="center_horizontal"
             android:importantForAccessibility="no"/>
         <TextView
             android:id="@+id/text2"
             style="@style/SettingsLibActionButton.Expressive.Label"
-            android:layout_marginTop="@dimen/settingslib_expressive_space_extrasmall3"
+            android:layout_marginTop="@dimen/settingslib_expressive_action_label_margin_top"
             android:importantForAccessibility="no"
             android:lineBreakWordStyle="phrase"
             android:hyphenationFrequency="normalFast"/>
@@ -83,13 +84,13 @@
             android:id="@+id/button3"
             style="@style/SettingsLibActionButton.Expressive"
             android:layout_width="@dimen/settingslib_expressive_space_large3"
-            android:layout_height="@dimen/settingslib_expressive_space_medium5"
+            android:layout_height="@dimen/settingslib_expressive_action_button_height"
             android:layout_gravity="center_horizontal"
             android:importantForAccessibility="no"/>
         <TextView
             android:id="@+id/text3"
             style="@style/SettingsLibActionButton.Expressive.Label"
-            android:layout_marginTop="@dimen/settingslib_expressive_space_extrasmall3"
+            android:layout_marginTop="@dimen/settingslib_expressive_action_label_margin_top"
             android:importantForAccessibility="no"
             android:lineBreakWordStyle="phrase"
             android:hyphenationFrequency="normalFast"/>
@@ -107,13 +108,13 @@
             android:id="@+id/button4"
             style="@style/SettingsLibActionButton.Expressive"
             android:layout_width="@dimen/settingslib_expressive_space_large3"
-            android:layout_height="@dimen/settingslib_expressive_space_medium5"
+            android:layout_height="@dimen/settingslib_expressive_action_button_height"
             android:layout_gravity="center_horizontal"
             android:importantForAccessibility="no"/>
         <TextView
             android:id="@+id/text4"
             style="@style/SettingsLibActionButton.Expressive.Label"
-            android:layout_marginTop="@dimen/settingslib_expressive_space_extrasmall3"
+            android:layout_marginTop="@dimen/settingslib_expressive_action_label_margin_top"
             android:importantForAccessibility="no"
             android:lineBreakWordStyle="phrase"
             android:hyphenationFrequency="normalFast"/>
