@@ -6678,6 +6678,14 @@ public final class ViewRootImpl implements ViewParent,
             }
             return true;
         }
+        if (focused != null && isDeadWheelList(focused)) {
+            // An empty list the window first focused, as Messaging's with no conversations: no
+            // stop, the first focus goes on to the next in order, as its Start chat, or Dialer's
+            // Add favourite over its empty favourites; or waits for rows
+            final View next = focused.focusSearch(View.FOCUS_FORWARD);
+            return next != null && next != focused && !isDeadWheelList(next)
+                    && next.requestFocus(View.FOCUS_FORWARD);
+        }
         // Not on a toolbar's back arrow: nothing to skip
         return true;
     }
