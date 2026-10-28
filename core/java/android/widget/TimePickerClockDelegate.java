@@ -203,6 +203,10 @@ class TimePickerClockDelegate extends TimePicker.AbstractTimePickerDelegate {
             mHourView.setTextColor(headerTextColor);
             mSeparatorView.setTextColor(headerTextColor);
             mMinuteView.setTextColor(headerTextColor);
+            // NumericTextView shows the current value as a hint when it gains keyboard focus.
+            // Keep that value in the header's activated color instead of its disabled hint color.
+            mHourView.setHintTextColor(headerTextColor);
+            mMinuteView.setHintTextColor(headerTextColor);
             mAmLabel.setTextColor(headerTextColor);
             mPmLabel.setTextColor(headerTextColor);
         }
