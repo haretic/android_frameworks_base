@@ -4640,6 +4640,10 @@ public final class ViewRootImpl implements ViewParent,
                 // The page's rows the first focus was to go to may be laid out now
                 mWheelFirstStopPending = SystemClock.uptimeMillis() < mWheelFirstStopUntil
                         && !skipWheelNavigationUp();
+                if (!mWheelFirstStopPending) {
+                    mWheelOverList = null;
+                    mWheelOverPick = null;
+                }
             }
             if (isWheelFocusEnabled() && !mAttachInfo.mInTouchMode) {
                 wheelFocusIntoScrollView();
@@ -6669,6 +6673,21 @@ public final class ViewRootImpl implements ViewParent,
             return true;
         }
         final View focused = mView.findFocus();
+        if (mWheelOverList != null) {
+            // The first focus over an empty list, taken before the page was all in, as Dialer's
+            // keypad button before its empty favourites' Add favourite shows: the topmost again
+            // as the page comes in, until the wheel turns or the focus is moved elsewhere
+            if (focused == null || focused != mWheelOverPick || !mWheelOverList.isShown()) {
+                mWheelOverList = null;
+                mWheelOverPick = null;
+                return true;
+            }
+            final View over = wheelTopOverList(mWheelOverList);
+            if (over != null && over != focused && over.requestFocus(View.FOCUS_FORWARD)) {
+                mWheelOverPick = over;
+            }
+            return false;
+        }
         if (isToolbarNavigation(focused)) {
             final View toolbar = (View) focused.getParent();
             // Down past the toolbar's other buttons, as a page's refresh, onto the page
@@ -6701,29 +6720,16 @@ public final class ViewRootImpl implements ViewParent,
             // stop. The first focus goes to what is drawn over it, the topmost first, as Dialer's
             // Add favourite over its empty favourites; else on to the next in order, as Messaging's
             // Start chat; or waits for rows
-            final Rect area = new Rect();
-            final Rect bounds = new Rect();
-            focused.getBoundsOnScreen(area, true);
-            final ArrayList<View> focusables = new ArrayList<>();
-            mView.addFocusables(focusables, View.FOCUS_FORWARD);
-            View over = null;
-            int overTop = Integer.MAX_VALUE;
-            for (View v : focusables) {
-                // Not a container round the buttons, as Dialer's empty favourites' content: the
-                // button in it
-                if (v == focused || isInside(v, focused) || !v.isShown()
-                        || v instanceof ViewGroup group && hasFocusableInside(group)) {
-                    continue;
-                }
-                v.getBoundsOnScreen(bounds, true);
-                if (area.contains(bounds) && !bounds.isEmpty() && bounds.top < overTop) {
-                    over = v;
-                    overTop = bounds.top;
-                }
-            }
+            final View over = wheelTopOverList(focused);
             final View next = over != null ? over : focused.focusSearch(View.FOCUS_FORWARD);
-            return next != null && next != focused && !isDeadWheelList(next)
-                    && next.requestFocus(View.FOCUS_FORWARD);
+            if (next == null || next == focused || isDeadWheelList(next)
+                    || !next.requestFocus(View.FOCUS_FORWARD)) {
+                return false;
+            }
+            // and again after the layouts to come, for what is still to show over the list
+            mWheelOverList = focused;
+            mWheelOverPick = next;
+            return false;
         }
         // Not on a toolbar's back arrow: nothing to skip
         return true;
@@ -6734,6 +6740,8 @@ public final class ViewRootImpl implements ViewParent,
      * are still to come, after each layout till the wheel turns or WHEEL_FIRST_STOP_MS pass.
      */
     private void wheelFirstStop() {
+        mWheelOverList = null;
+        mWheelOverPick = null;
         mWheelFirstStopPending = !skipWheelNavigationUp();
         if (mWheelFirstStopPending) {
             mWheelFirstStopUntil = SystemClock.uptimeMillis() + WHEEL_FIRST_STOP_MS;
@@ -6745,6 +6753,9 @@ public final class ViewRootImpl implements ViewParent,
      * to take it, and until when the layouts try again, see wheelFirstStop.
      */
     private boolean mWheelFirstStopPending;
+    /** The empty list the first focus went over, and the view it went to, see skipWheelNavigationUp. */
+    private View mWheelOverList;
+    private View mWheelOverPick;
     private long mWheelFirstStopUntil;
 
     /**
@@ -7314,6 +7325,32 @@ public final class ViewRootImpl implements ViewParent,
      * The next view from a list's edge the way the wheel turned: what lies over the list first,
      * nearest that edge, then what is beyond it.
      */
+    /**
+     * The topmost view drawn over an empty list, as a button on its empty state or floating on it,
+     * not a container round such buttons: the button in it.
+     */
+    private View wheelTopOverList(View list) {
+        final Rect area = new Rect();
+        final Rect bounds = new Rect();
+        list.getBoundsOnScreen(area, true);
+        final ArrayList<View> focusables = new ArrayList<>();
+        mView.addFocusables(focusables, View.FOCUS_FORWARD);
+        View over = null;
+        int overTop = Integer.MAX_VALUE;
+        for (View v : focusables) {
+            if (v == list || isInside(v, list) || !v.isShown()
+                    || v instanceof ViewGroup group && hasFocusableInside(group)) {
+                continue;
+            }
+            v.getBoundsOnScreen(bounds, true);
+            if (area.contains(bounds) && !bounds.isEmpty() && bounds.top < overTop) {
+                over = v;
+                overTop = bounds.top;
+            }
+        }
+        return over;
+    }
+
     private View wheelStepOverList(View list, int direction) {
         if (!(mView instanceof ViewGroup root)) {
             return null;
@@ -9530,6 +9567,8 @@ public final class ViewRootImpl implements ViewParent,
         private boolean performFocusNavigation(KeyEvent event) {
             // Moved by the wheel: the first stop is the user's from here on
             mWheelFirstStopPending = false;
+            mWheelOverList = null;
+            mWheelOverPick = null;
             @FocusDirection int direction = 0;
             switch (event.getKeyCode()) {
                 case KeyEvent.KEYCODE_DPAD_LEFT:
