@@ -16,6 +16,7 @@ import android.widget.Button;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.Space;
 
 /**
  * The wheel UI's dialog buttons (config_wheelDialogs): an alert dialog's buttons as a list, one a
@@ -72,8 +73,26 @@ public final class WheelDialogButtons {
         }
         bar.setVisibility(View.GONE);
         anchor.setVisibility(View.GONE);
-        panel.addView(list, panel.indexOfChild(anchor) + 1, new ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        final ViewGroup.LayoutParams listParams;
+        if (panel instanceof LinearLayout row
+                && row.getOrientation() == LinearLayout.HORIZONTAL) {
+            // TimePicker shares this row with its keyboard toggle. Let the pills take only
+            // the remaining width, including the space formerly reserved by a weighted spacer.
+            for (int i = 0; i < row.getChildCount(); i++) {
+                final View child = row.getChildAt(i);
+                if (child instanceof Space
+                        && child.getLayoutParams() instanceof LinearLayout.LayoutParams lp
+                        && lp.weight > 0) {
+                    child.setVisibility(View.GONE);
+                }
+            }
+            listParams = new LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+        } else {
+            listParams = new ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
+        panel.addView(list, panel.indexOfChild(anchor) + 1, listParams);
     }
 
     /** ScrollView, HorizontalScrollView, AndroidX's NestedScrollView: one child each. */
