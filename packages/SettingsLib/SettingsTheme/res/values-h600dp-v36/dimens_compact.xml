@@ -21,4 +21,6 @@
     <dimen name="settingslib_expressive_category_text_padding_top">8dp</dimen>
     <dimen name="settingslib_expressive_category_text_padding_bottom">8dp</dimen>
     <dimen name="settingslib_expressive_untitled_category_margin_top">12dp</dimen>
+    <dimen name="settingslib_expressive_preference_min_height">72dp</dimen>
+    <dimen name="settingslib_expressive_preference_padding_vertical">16dp</dimen>
 </resources>
