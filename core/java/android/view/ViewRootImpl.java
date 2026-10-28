@@ -6718,14 +6718,12 @@ public final class ViewRootImpl implements ViewParent,
                 focused.dispatchKeyEvent(new KeyEvent(now, now, KeyEvent.ACTION_UP,
                         KeyEvent.KEYCODE_DPAD_DOWN, 0));
             }
-            if (whole) {
-                // Done once a row has it, not the host still, nor its top bar's back arrow
-                focused.getFocusedRect(bounds);
-                return !bounds.isEmpty() && (bounds.width() < focused.getWidth()
-                        || bounds.height() < focused.getHeight())
-                        && !(bounds.width() <= 72 * density && bounds.bottom <= 96 * density);
-            }
-            return true;
+            // Done once a row has it, not the host still, nor its top bar's back arrow, as when
+            // the back arrow had it before the rows were in: again as they come
+            focused.getFocusedRect(bounds);
+            return !bounds.isEmpty() && (bounds.width() < focused.getWidth()
+                    || bounds.height() < focused.getHeight())
+                    && !(bounds.width() <= 72 * density && bounds.bottom <= 96 * density);
         }
         if (focused != null && isDeadWheelList(focused)) {
             // An empty list the window first focused, as Messaging's with no conversations: no
