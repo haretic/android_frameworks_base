@@ -237,8 +237,9 @@ private fun IconButton(actionButton: ActionButton) {
         shapes = IconButtonDefaults.shapes(),
         modifier =
             Modifier
+                // Small, as a short screen shows them over the page's first items
                 .size(
-                    IconButtonDefaults.mediumContainerSize(
+                    IconButtonDefaults.smallContainerSize(
                         IconButtonDefaults.IconButtonWidthOption.Wide
                     )
                 )

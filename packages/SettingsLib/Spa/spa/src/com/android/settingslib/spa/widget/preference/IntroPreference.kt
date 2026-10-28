@@ -21,11 +21,13 @@ package com.android.settingslib.spa.widget.preference
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AirplanemodeActive
@@ -66,7 +68,9 @@ internal fun IntroPreference(
     descriptions: List<String>,
     icon: @Composable (() -> Unit),
 ) {
-    Column(
+    // A row, the icon beside the title: on a short screen a column stacking them takes as much
+    // as the page's first two items
+    Row(
         modifier =
             Modifier
                 .fillMaxWidth()
@@ -74,12 +78,14 @@ internal fun IntroPreference(
                     horizontal = SettingsSpace.small4,
                     vertical = SettingsSpace.small1,
                 ),
-        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         icon()
-        Spacer(Modifier.height(SettingsSpace.small1))
-        IntroTitle(title)
-        IntroDescription(descriptions)
+        Spacer(Modifier.width(SettingsSpace.small3))
+        Column {
+            IntroTitle(title)
+            IntroDescription(descriptions)
+        }
     }
 }
 
@@ -88,7 +94,7 @@ private fun IntroIcon(imageVector: ImageVector?) {
     if (imageVector != null) {
         Box(
             modifier =
-                Modifier.size(SettingsDimension.itemIconContainerSize)
+                Modifier.size(SettingsDimension.iconLarge)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.secondaryContainer),
             contentAlignment = Alignment.Center,
@@ -106,7 +112,7 @@ private fun IntroIcon(imageVector: ImageVector?) {
 @Composable
 private fun IntroAppIcon(appIcon: @Composable () -> Unit) {
     Box(
-        modifier = Modifier.size(SettingsDimension.itemIconContainerSize).clip(CircleShape),
+        modifier = Modifier.size(SettingsDimension.iconLarge).clip(CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         appIcon()
