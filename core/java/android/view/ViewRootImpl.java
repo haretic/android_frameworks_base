@@ -6546,7 +6546,25 @@ public final class ViewRootImpl implements ViewParent,
                         ? Math.max(0, mWheelFocusCardRadius - out)
                         : square ? ring.height() / 2 : WHEEL_FOCUS_RADIUS_DP * density,
                 ring.height() / 2);
-        canvas.drawRoundRect(ring, radius, radius, mWheelFocusPaint);
+        if (!(canvas instanceof RecordingCanvas recording)) {
+            canvas.drawRoundRect(ring, radius, radius, mWheelFocusPaint);
+            return;
+        }
+        // In a node of its own that force dark leaves alone: a light app the system darkens, as
+        // Messaging or Dialer, would otherwise darken the ring into its dark page
+        if (mWheelFocusNode == null) {
+            mWheelFocusNode = new RenderNode("WheelFocusRing");
+            mWheelFocusNode.setForceDarkAllowed(false);
+            mWheelFocusNode.setClipToBounds(false);
+        }
+        mWheelFocusNode.setPosition(0, 0, mWidth, mHeight);
+        final RecordingCanvas ringCanvas = mWheelFocusNode.beginRecording(mWidth, mHeight);
+        try {
+            ringCanvas.drawRoundRect(ring, radius, radius, mWheelFocusPaint);
+        } finally {
+            mWheelFocusNode.endRecording();
+        }
+        recording.drawRenderNode(mWheelFocusNode);
     }
 
     private boolean isWheelFocusDirty() {
@@ -13092,6 +13110,7 @@ public final class ViewRootImpl implements ViewParent,
     private View mWheelPassThroughChecked;
     private boolean mWheelPassThrough;
     private Paint mWheelFocusPaint;
+    private RenderNode mWheelFocusNode;
     private boolean mWheelFocusEnabled;
     private int mWheelFocusConfigSeq = -1;
 
