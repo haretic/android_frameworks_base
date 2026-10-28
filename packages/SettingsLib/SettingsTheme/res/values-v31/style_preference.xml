@@ -37,6 +37,9 @@
     </style>
 
     <style name="SettingsCategoryPreference.SettingsLib" parent="@style/Preference.Category.Material">
+        <!-- A section title with half the room around it: on a short screen the stock gaps cost
+             a row per section -->
+        <item name="layout">@layout/settingslib_preference_category_compact</item>
         <item name="iconSpaceReserved">@bool/settingslib_config_icon_space_reserved</item>
         <item name="allowDividerAbove">@bool/settingslib_config_allow_divider</item>
         <item name="allowDividerBelow">@bool/settingslib_config_allow_divider</item>
