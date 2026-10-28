@@ -6748,6 +6748,22 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     /**
+     * Whether {@code focused} and {@code next} are both in a strip that scrolls sideways, as a
+     * home screen's tabs or a row of chips: the wheel steps on past it, not along all of it.
+     */
+    private boolean inSidewaysScroller(View focused, View next) {
+        for (ViewParent p = focused.getParent(); p instanceof ViewGroup group && p != mView;
+                p = p.getParent()) {
+            if ((group instanceof android.widget.HorizontalScrollView
+                    || group.canScrollHorizontally(1) || group.canScrollHorizontally(-1))
+                    && isInside(next, group)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Whether {@code next} lies beside {@code focused} the way {@code along} goes, past its
      * middle: not a view under it reaching out beyond it, as a home tile under the tile's menu.
      */
@@ -9558,7 +9574,8 @@ public final class ViewRootImpl implements ViewParent,
                                 ? View.FOCUS_RIGHT : View.FOCUS_LEFT;
                         final View next = focused.focusSearch(along);
                         if (next != null && next != focused && !isInside(focused, next)
-                                && isOnSameRow(focused, next) && isBeside(focused, next, along)) {
+                                && isOnSameRow(focused, next) && isBeside(focused, next, along)
+                                && !inSidewaysScroller(focused, next)) {
                             v = next;
                             direction = along;
                         }
