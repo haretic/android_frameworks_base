@@ -6705,13 +6705,23 @@ public final class ViewRootImpl implements ViewParent,
             final Rect bounds = new Rect();
             focused.getFocusedRect(bounds);
             final float density = mContext.getResources().getDisplayMetrics().density;
-            if (!bounds.isEmpty() && bounds.width() <= 72 * density
-                    && bounds.bottom <= 96 * density) {
+            // or the host as a whole, nothing in it focused, as Settings' All apps before its
+            // rows load: no ring, so on to its first row, once there is one
+            final boolean whole = bounds.isEmpty() || bounds.width() >= focused.getWidth()
+                    && bounds.height() >= focused.getHeight();
+            if (whole || bounds.width() <= 72 * density && bounds.bottom <= 96 * density) {
                 final long now = SystemClock.uptimeMillis();
                 focused.dispatchKeyEvent(new KeyEvent(now, now, KeyEvent.ACTION_DOWN,
                         KeyEvent.KEYCODE_DPAD_DOWN, 0));
                 focused.dispatchKeyEvent(new KeyEvent(now, now, KeyEvent.ACTION_UP,
                         KeyEvent.KEYCODE_DPAD_DOWN, 0));
+            }
+            if (whole) {
+                // Done once a row has it, not the host still, nor its top bar's back arrow
+                focused.getFocusedRect(bounds);
+                return !bounds.isEmpty() && (bounds.width() < focused.getWidth()
+                        || bounds.height() < focused.getHeight())
+                        && !(bounds.width() <= 72 * density && bounds.bottom <= 96 * density);
             }
             return true;
         }
