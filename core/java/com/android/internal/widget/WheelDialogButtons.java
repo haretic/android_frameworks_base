@@ -58,7 +58,8 @@ public final class WheelDialogButtons {
         list.setId(com.android.internal.R.id.wheel_dialog_buttons);
         list.setOrientation(LinearLayout.VERTICAL);
         final int pad = dp(context, 16);
-        list.setPadding(pad, dp(context, 4), pad, dp(context, 12));
+        // Clear of the message above by more than the focus ring reaches out
+        list.setPadding(pad, dp(context, 12), pad, dp(context, 12));
         int index = 0;
         for (View button : new View[] {positive, negative, neutral}) {
             if (!(button instanceof Button) || button.getParent() != bar) {
