@@ -226,7 +226,10 @@ public class UsageProgressBarPreference extends Preference implements GroupSecti
         if (matcher.find()) {
             final SpannableString spannableSummary = new SpannableString(summary);
             spannableSummary.setSpan(
-                    new TextAppearanceSpan(getContext(), NUMBER_TEXT_APPEARANCE),
+                    new TextAppearanceSpan(getContext(),
+                            SettingsThemeHelper.isExpressiveTheme(getContext())
+                                    ? R.style.TextAppearance_SettingsLib_UsageNumber
+                                    : NUMBER_TEXT_APPEARANCE),
                     matcher.start(),
                     matcher.end(),
                     Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
