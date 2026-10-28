@@ -181,8 +181,8 @@
         <item name="android:paddingStart">?android:attr/listPreferredItemPaddingStart</item>
         <item name="android:paddingRight">?android:attr/listPreferredItemPaddingRight</item>
         <item name="android:paddingEnd">?android:attr/listPreferredItemPaddingEnd</item>
-        <!-- Half the stock room over a section title: on a short screen it costs a row a section -->
-        <item name="android:paddingTop">@dimen/settingslib_expressive_space_extrasmall4</item>
+        <!-- The title and both item decorations must fit between the cards on a short screen. -->
+        <item name="android:paddingTop">@dimen/settingslib_expressive_category_padding_top</item>
         <item name="android:background">?android:attr/selectableItemBackground</item>
         <item name="android:baselineAligned">false</item>
         <item name="android:gravity">center_vertical</item>
@@ -193,8 +193,8 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_weight">1</item>
         <item name="android:paddingStart">@dimen/settingslib_expressive_space_extrasmall4</item>
-        <item name="android:paddingTop">@dimen/settingslib_expressive_space_extrasmall2</item>
-        <item name="android:paddingBottom">@dimen/settingslib_expressive_space_extrasmall2</item>
+        <item name="android:paddingTop">@dimen/settingslib_expressive_category_text_padding_top</item>
+        <item name="android:paddingBottom">@dimen/settingslib_expressive_category_text_padding_bottom</item>
     </style>
 
     <style
