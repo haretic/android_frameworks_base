@@ -150,12 +150,14 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private static final String MODE_BRIGHTNESS = "brightness";
     private static final String MODE_MEDIA = "media";
     private static final String MODE_ZOOM = "zoom";
+    /** Two fingers pinching about the middle of the screen, out for a step up (r1-wheeld). */
+    private static final String MODE_PINCH = "pinch";
     /** Touch zones: kept as "touch:X1:Y1:X2:Y2", the points the steps tap (r1-wheeld). */
     private static final String MODE_TOUCH = "touch";
     /** Every mode, in the order the Wheel mode list shows them. */
     private static final List<String> MODES = List.of(MODE_TASKBAR, MODE_APP, MODE_SCROLL,
             MODE_TAB, MODE_ARROWS, MODE_PAGE, MODE_VOLUME, MODE_BRIGHTNESS, MODE_MEDIA,
-            MODE_ZOOM, MODE_TOUCH);
+            MODE_PINCH, MODE_ZOOM, MODE_TOUCH);
     /** The R1Wheel page that places an app's touch zones over it. */
     private static final ComponentName TOUCH_ZONES = new ComponentName(
             "cat.kenny.r1.wheel.settings", "cat.kenny.r1.wheel.settings.TouchZonesActivity");
@@ -2651,6 +2653,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 return mContext.getString(R.string.wheel_taskbar_mode_brightness);
             case MODE_MEDIA:
                 return mContext.getString(R.string.wheel_taskbar_mode_media);
+            case MODE_PINCH:
+                return mContext.getString(R.string.wheel_taskbar_mode_pinch);
             case MODE_ZOOM:
                 return mContext.getString(R.string.wheel_taskbar_mode_zoom);
             case MODE_TOUCH:
@@ -2682,6 +2686,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 return R.drawable.ic_wheel_taskbar_mode_brightness;
             case MODE_MEDIA:
                 return R.drawable.ic_wheel_taskbar_mode_media;
+            case MODE_PINCH:
+                return R.drawable.ic_wheel_taskbar_mode_pinch;
             case MODE_ZOOM:
                 return R.drawable.ic_wheel_taskbar_mode_zoom;
             case MODE_TOUCH:
