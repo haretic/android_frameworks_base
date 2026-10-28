@@ -6852,7 +6852,7 @@ public final class ViewRootImpl implements ViewParent,
     private boolean isBeside(View focused, View next, int along) {
         final Rect from = mTempRect;
         final Rect to = mAttachInfo.mTmpInvalRect;
-        if (!next.getGlobalVisibleRect(to)) {
+        if (!isInSight(next)) {
             return false;
         }
         focused.getBoundsOnScreen(from, true);
@@ -6861,8 +6861,20 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     /**
+     * Whether any of {@code view} is on the screen: not on a pager's page beside the one up, as
+     * a launcher's next or last page, which a search left or right finds as well.
+     */
+    private boolean isInSight(View view) {
+        return view.getGlobalVisibleRect(mWheelSightRect);
+    }
+
+    private final Rect mWheelSightRect = new Rect();
+
+    /**
      * The view at the start of {@code v}'s row the way a step {@code direction} comes into it
-     * from {@code focused}, the first as text reads for a step down, the last for one up.
+     * from {@code focused}, the first as text reads for a step down, the last for one up: along
+     * the row on the screen only, not on into the page beside, as a launcher's home row by row
+     * would hop from page to page.
      */
     private View wheelRowEnd(View focused, View v, int direction) {
         final boolean rtl = v.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
@@ -6871,7 +6883,8 @@ public final class ViewRootImpl implements ViewParent,
         for (int i = 0; i < 16; i++) {
             final View before = end.focusSearch(back);
             if (before == null || before == end || before == focused || isInside(focused, before)
-                    || !isOnSameRow(end, before) || isOnSameRow(focused, before)) {
+                    || !isOnSameRow(end, before) || isOnSameRow(focused, before)
+                    || !isInSight(before)) {
                 break;
             }
             end = before;
@@ -9723,7 +9736,8 @@ public final class ViewRootImpl implements ViewParent,
                         final int along = (direction == View.FOCUS_DOWN) != rtl
                                 ? View.FOCUS_RIGHT : View.FOCUS_LEFT;
                         final View next = focused.focusSearch(along);
-                        if (next != null && next != focused
+                        // On the screen: not the next page's, as at the end of a launcher page
+                        if (next != null && next != focused && isInSight(next)
                                 && (isAlongTheWay(focused, next, direction)
                                         || isOnSameRow(focused, next))) {
                             v = next;
