@@ -22,6 +22,7 @@ import android.text.BidiFormatter
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -78,7 +79,8 @@ class AppInfoProvider(private val packageInfo: PackageInfo) {
                 },
             )
         } else {
-            Column(
+            // A row, the icon beside the name: on a short screen a column takes the page's room
+            Row(
                 modifier =
                     Modifier.fillMaxWidth()
                         .padding(
@@ -86,15 +88,17 @@ class AppInfoProvider(private val packageInfo: PackageInfo) {
                             vertical = SettingsDimension.itemPaddingVertical,
                         )
                         .semantics(mergeDescendants = true) {},
-                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 val app = checkNotNull(packageInfo.applicationInfo)
-                Box(modifier = Modifier.padding(SettingsDimension.itemPaddingAround)) {
+                Box(modifier = Modifier.padding(end = SettingsDimension.itemPaddingAround)) {
                     AppIcon(app = app, size = SettingsDimension.appIconInfoSize)
                 }
-                AppLabel(app, isClonedAppPage)
-                InstallType(app)
-                if (displayVersion) AppVersion()
+                Column {
+                    AppLabel(app, isClonedAppPage)
+                    InstallType(app)
+                    if (displayVersion) AppVersion()
+                }
             }
         }
     }
