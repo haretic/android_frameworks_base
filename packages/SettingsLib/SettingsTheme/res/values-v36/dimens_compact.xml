@@ -16,9 +16,12 @@
   -->
 
 <resources>
-    <!-- Compact by default; screens at least 600dp high keep the stock section spacing. -->
+    <!-- Compact by default; screens at least 600dp high keep the stock section spacing and
+         row height. -->
     <dimen name="settingslib_expressive_category_padding_top">4dp</dimen>
     <dimen name="settingslib_expressive_category_text_padding_top">0dp</dimen>
     <dimen name="settingslib_expressive_category_text_padding_bottom">2dp</dimen>
     <dimen name="settingslib_expressive_untitled_category_margin_top">4dp</dimen>
+    <dimen name="settingslib_expressive_preference_min_height">56dp</dimen>
+    <dimen name="settingslib_expressive_preference_padding_vertical">10dp</dimen>
 </resources>
