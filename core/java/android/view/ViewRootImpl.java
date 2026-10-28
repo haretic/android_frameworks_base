@@ -6691,7 +6691,10 @@ public final class ViewRootImpl implements ViewParent,
             View over = null;
             int overTop = Integer.MAX_VALUE;
             for (View v : focusables) {
-                if (v == focused || isInside(v, focused) || !v.isShown()) {
+                // Not a container round the buttons, as Dialer's empty favourites' content: the
+                // button in it
+                if (v == focused || isInside(v, focused) || !v.isShown()
+                        || v instanceof ViewGroup group && hasFocusableInside(group)) {
                     continue;
                 }
                 v.getBoundsOnScreen(bounds, true);
