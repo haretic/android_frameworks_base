@@ -623,7 +623,8 @@ constructor(
     private fun updatePosition() {
         if (!largeScreenActive && visible) {
             logInstantEvent("updatePosition: $qsExpandedFraction")
-            header.progress = qsExpandedFraction
+            // The wheel shade keeps the compact header over both its tabs, so they stay put
+            header.progress = if (WheelLayoutSettings.shade(context)) 0f else qsExpandedFraction
             updateBatteryMode()
         }
     }
