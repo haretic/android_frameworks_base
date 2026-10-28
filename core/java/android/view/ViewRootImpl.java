@@ -6765,11 +6765,15 @@ public final class ViewRootImpl implements ViewParent,
 
     /**
      * Whether {@code next} lies beside {@code focused} the way {@code along} goes, past its
-     * middle: not a view under it reaching out beyond it, as a home tile under the tile's menu.
+     * middle: not a view under it reaching out beyond it, as a home tile under the tile's menu,
+     * and in sight: not on the next page of a pager, beside it off the screen.
      */
     private boolean isBeside(View focused, View next, int along) {
         final Rect from = mTempRect;
         final Rect to = mAttachInfo.mTmpInvalRect;
+        if (!next.getGlobalVisibleRect(to)) {
+            return false;
+        }
         focused.getBoundsOnScreen(from, true);
         next.getBoundsOnScreen(to, true);
         return along == View.FOCUS_RIGHT ? to.left >= from.centerX() : to.right <= from.centerX();
