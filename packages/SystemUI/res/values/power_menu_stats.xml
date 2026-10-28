@@ -25,9 +25,9 @@
     <dimen name="global_actions_stats_graph_height">18dp</dimen>
     <dimen name="global_actions_stats_graph_width">0dp</dimen>
     <dimen name="global_actions_stats_graph_gap">3dp</dimen>
-    <dimen name="global_actions_stats_label_size">10sp</dimen>
+    <dimen name="global_actions_stats_label_size">12sp</dimen>
     <dimen name="global_actions_stats_value_size">15sp</dimen>
-    <dimen name="global_actions_stats_extra_size">10sp</dimen>
+    <dimen name="global_actions_stats_extra_size">12sp</dimen>
     <dimen name="global_actions_stats_strip_corner_radius">16dp</dimen>
 
     <style name="GlobalActionsStats" />
