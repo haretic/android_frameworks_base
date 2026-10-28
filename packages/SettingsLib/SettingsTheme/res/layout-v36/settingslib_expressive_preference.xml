@@ -28,7 +28,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
-        android:minHeight="72dp"
+        android:minHeight="@dimen/settingslib_expressive_preference_min_height"
         android:baselineAligned="false"
         android:orientation="horizontal"
         android:clipToPadding="false">

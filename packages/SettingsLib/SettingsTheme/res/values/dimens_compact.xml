@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<resources>
+    <!-- The stock row height, before v36 and for layouts outside SettingsLib (values-v36 compact) -->
+    <dimen name="settingslib_expressive_preference_min_height">72dp</dimen>
+    <dimen name="settingslib_expressive_preference_padding_vertical">16dp</dimen>
+</resources>
