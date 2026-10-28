@@ -91,8 +91,35 @@ public final class WheelDialogButtons {
         } else {
             listParams = new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            if (panel instanceof LinearLayout column) {
+                // The list is taller than the bar was: in a short window, as a landscape share
+                // sheet, the message and custom view above shrink and scroll, not the buttons
+                for (int i = 0; i < column.getChildCount(); i++) {
+                    final View child = column.getChildAt(i);
+                    if (isContentPanel(child)
+                            && child.getLayoutParams() instanceof LinearLayout.LayoutParams lp
+                            && lp.weight == 0
+                            && lp.height == ViewGroup.LayoutParams.WRAP_CONTENT) {
+                        lp.weight = 1;
+                        child.setLayoutParams(lp);
+                    }
+                }
+            }
         }
         panel.addView(list, panel.indexOfChild(anchor) + 1, listParams);
+    }
+
+    /** An alert dialog's message or custom view panel, the framework's or AndroidX's. */
+    private static boolean isContentPanel(View view) {
+        if (view.getId() == View.NO_ID) {
+            return false;
+        }
+        try {
+            final String name = view.getResources().getResourceEntryName(view.getId());
+            return name.equals("contentPanel") || name.equals("customPanel");
+        } catch (android.content.res.Resources.NotFoundException e) {
+            return false;
+        }
     }
 
     /** ScrollView, HorizontalScrollView, AndroidX's NestedScrollView: one child each. */
