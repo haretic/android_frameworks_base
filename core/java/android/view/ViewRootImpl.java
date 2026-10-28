@@ -4636,15 +4636,8 @@ public final class ViewRootImpl implements ViewParent,
                 || mAttachInfo.mRecomputeGlobalAttributes;
         if (didLayout) {
             performLayout(lp, mWidth, mHeight);
-            if (mWheelFirstStopPending) {
-                // The page's rows the first focus was to go to may be laid out now
-                mWheelFirstStopPending = SystemClock.uptimeMillis() < mWheelFirstStopUntil
-                        && !skipWheelNavigationUp();
-                if (!mWheelFirstStopPending) {
-                    mWheelOverList = null;
-                    mWheelOverPick = null;
-                }
-            }
+            // The page's rows the first focus was to go to may be laid out now
+            retryWheelFirstStop();
             if (isWheelFocusEnabled() && !mAttachInfo.mInTouchMode) {
                 wheelFocusIntoScrollView();
             }
@@ -4928,6 +4921,8 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         mIsInTraversal = false;
+        // and once drawn: a Compose page, as Settings' All apps, lays its rows out as it draws
+        retryWheelFirstStop();
         mRelayoutRequested = false;
         mImmediateScrolling = false;
         mLastInsetsDuringAnimationProgress = null;
@@ -6672,7 +6667,14 @@ public final class ViewRootImpl implements ViewParent,
         if (!isWheelFocusEnabled() || mAttachInfo.mInTouchMode || mView == null) {
             return true;
         }
-        final View focused = mView.findFocus();
+        View focused = mView.findFocus();
+        if (focused == null) {
+            // Nothing took the first focus, as a page whose views come in after it opened: the
+            // default focus again, till one does
+            if (!mView.restoreDefaultFocus() || (focused = mView.findFocus()) == null) {
+                return false;
+            }
+        }
         if (mWheelOverList != null) {
             // The first focus over an empty list, taken before the page was all in, as Dialer's
             // keypad button before its empty favourites' Add favourite shows: the topmost again
@@ -6755,6 +6757,19 @@ public final class ViewRootImpl implements ViewParent,
         mWheelFirstStopPending = !skipWheelNavigationUp();
         if (mWheelFirstStopPending) {
             mWheelFirstStopUntil = SystemClock.uptimeMillis() + WHEEL_FIRST_STOP_MS;
+        }
+    }
+
+    /** The first stop again, while pending, as the page comes in, see wheelFirstStop. */
+    private void retryWheelFirstStop() {
+        if (!mWheelFirstStopPending) {
+            return;
+        }
+        mWheelFirstStopPending = SystemClock.uptimeMillis() < mWheelFirstStopUntil
+                && !skipWheelNavigationUp();
+        if (!mWheelFirstStopPending) {
+            mWheelOverList = null;
+            mWheelOverPick = null;
         }
     }
 
