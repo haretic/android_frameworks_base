@@ -23,25 +23,7 @@ import androidx.dynamicanimation.animation.SpringForce;
  * that each step only retargets, so a fast spin is one smooth glide that keeps its speed.
  * {@link Row} is the same along a bar at the top or bottom of the screen.
  */
-final class WheelTaskbarScroll extends ScrollView implements WheelTaskbarScroll.Glides {
-
-    /** What the taskbar asks of a list's scroll, whichever way it goes. */
-    interface Glides {
-        /** 1 full, 0.5 quick, 0 none, as the animation setting has it. */
-        void setSpeed(float speed);
-
-        /** Glides to {@code at}, kept within the content. */
-        void glideTo(int at);
-
-        /** At {@code at} at once. */
-        void jumpTo(int at);
-
-        /**
-         * Brings {@code child}, a view anywhere in the content, in view with {@code margin}
-         * around it, gliding or at once.
-         */
-        void reveal(View child, int margin, boolean jump);
-    }
+final class WheelTaskbarScroll extends ScrollView implements WheelTaskbarGlides {
 
     private final Glide mGlide;
 
@@ -104,7 +86,7 @@ final class WheelTaskbarScroll extends ScrollView implements WheelTaskbarScroll.
     }
 
     /** The bar's apps in a row, along a bar at the top or bottom of the screen. */
-    static final class Row extends HorizontalScrollView implements Glides {
+    static final class Row extends HorizontalScrollView implements WheelTaskbarGlides {
         private final Glide mGlide;
 
         Row(Context context) {
