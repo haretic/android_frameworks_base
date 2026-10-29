@@ -28,6 +28,6 @@
     android:gravity="start|center_vertical"
     android:paddingStart="@dimen/resolver_edge_margin"
     android:paddingEnd="@dimen/resolver_edge_margin"
-    android:paddingTop="@dimen/resolver_small_margin"
-    android:paddingBottom="@dimen/resolver_edge_margin"
+    android:paddingTop="@dimen/resolver_header_padding_top"
+    android:paddingBottom="@dimen/resolver_header_padding_bottom"
     android:elevation="1dp" />

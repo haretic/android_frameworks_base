@@ -32,7 +32,7 @@
         android:layout_height="wrap_content"
         android:layout_alwaysShow="true"
         android:elevation="@dimen/resolver_elevation"
-        android:paddingTop="@dimen/resolver_small_margin"
+        android:paddingTop="@dimen/resolver_header_padding_top"
         android:paddingStart="@dimen/resolver_edge_margin"
         android:paddingEnd="@dimen/resolver_edge_margin"
         android:paddingBottom="@dimen/resolver_title_padding_bottom"
