@@ -6537,12 +6537,14 @@ public final class ViewRootImpl implements ViewParent,
         final float out = width / 2;
         final RectF ring = new RectF(mWheelFocusRect);
         ring.inset(-out, -out);
-        // The card's own corners where it has them, the ring's stroke being inside its edge
+        // The card's own corners where they are rounder, the ring's stroke being inside its
+        // edge; a card with tighter ones, as a grouped list's middle rows, still has the ring
+        // its first and last rows have, not a square one between them
         // A square, an icon button, is round in its ring as on its touch ripple
         final boolean square = Math.abs(mWheelFocusRect.width() - mWheelFocusRect.height())
                 <= density;
         final float radius = Math.min(mWheelFocusCardRadius >= 0
-                        ? Math.max(0, mWheelFocusCardRadius - out)
+                        ? Math.max(WHEEL_FOCUS_RADIUS_DP * density, mWheelFocusCardRadius - out)
                         : square ? ring.height() / 2 : WHEEL_FOCUS_RADIUS_DP * density,
                 ring.height() / 2);
         if (!(canvas instanceof RecordingCanvas recording)) {
