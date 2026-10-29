@@ -1308,7 +1308,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         final FrameLayout scroll = across ? new WheelTaskbarScroll.Row(mContext)
                 : new WheelTaskbarScroll(mContext);
         scroll.setFadingEdgeLength(dp(16));
-        ((WheelTaskbarScroll.Glides) scroll).setSpeed(mSettings.animation);
+        ((WheelTaskbarGlides) scroll).setSpeed(mSettings.animation);
         mAppsColumn = new AppsColumn(mContext);
         mAppsColumn.setOrientation(across ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
         mAppsColumn.setGravity(across ? Gravity.CENTER_VERTICAL : Gravity.CENTER_HORIZONTAL);
@@ -1678,7 +1678,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             public void onViewAttachedToWindow(View v) {
                 for (View p = (View) v.getParent(); p != null && p != mBarFrame;
                         p = p.getParent() instanceof View parent ? parent : null) {
-                    if (p instanceof ViewGroup group && !(p instanceof WheelTaskbarScroll.Glides)) {
+                    if (p instanceof ViewGroup group && !(p instanceof WheelTaskbarGlides)) {
                         group.setClipChildren(false);
                     }
                 }
@@ -1739,12 +1739,12 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         }
         final View cell = (View) button.getParent();
         if (cell.getParent() == mAppsColumn) {
-            ((WheelTaskbarScroll.Glides) mAppsScroll).reveal(cell, cellSize() / 2, false);
+            ((WheelTaskbarGlides) mAppsScroll).reveal(cell, cellSize() / 2, false);
             return;
         }
         final int at = mBar.indexOfChild(cell);
         if (at >= 0) {
-            ((WheelTaskbarScroll.Glides) mAppsScroll).glideTo(
+            ((WheelTaskbarGlides) mAppsScroll).glideTo(
                     at < mBar.indexOfChild(mAppsScroll) ? 0 : Integer.MAX_VALUE);
         }
     }
