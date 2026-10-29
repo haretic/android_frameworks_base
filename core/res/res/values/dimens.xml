@@ -1096,6 +1096,10 @@
     <dimen name="resolver_empty_state_container_padding_top">48dp</dimen>
     <dimen name="resolver_empty_state_container_padding_bottom">8dp</dimen>
     <dimen name="resolver_profile_tab_margin">4dp</dimen>
+    <!-- The resolver's title and header below 600dp tall, the stock ones in values-h600dp -->
+    <dimen name="resolver_default_title_padding_bottom">8dp</dimen>
+    <dimen name="resolver_header_padding_top">8dp</dimen>
+    <dimen name="resolver_header_padding_bottom">8dp</dimen>
 
     <dimen name="chooser_action_button_icon_size">18dp</dimen>
 

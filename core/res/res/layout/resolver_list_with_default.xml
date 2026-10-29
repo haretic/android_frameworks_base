@@ -37,7 +37,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:paddingBottom="@dimen/resolver_edge_margin"
+            android:paddingBottom="@dimen/resolver_default_title_padding_bottom"
             android:paddingEnd="@dimen/resolver_edge_margin">
             <ImageView
                 android:id="@+id/icon"
