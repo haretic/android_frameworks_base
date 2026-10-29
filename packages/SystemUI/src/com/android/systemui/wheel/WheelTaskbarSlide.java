@@ -40,7 +40,9 @@ final class WheelTaskbarSlide extends DisplayAreaOrganizer {
     /** The OneHanded areas: the wallpaper, the apps and the system bars sit in separate ones. */
     private final Map<WindowContainerToken, SurfaceControl> mLeashes = new ArrayMap<>();
     private boolean mRegistered;
+    /** How far the screen is moved, sideways, or up or down where {@link #mDown}. */
     private float mX;
+    private boolean mDown;
     /** The display's size, which the screen is made smaller from to fit beside the bar. */
     private int mWidth;
     private int mHeight;
@@ -51,20 +53,28 @@ final class WheelTaskbarSlide extends DisplayAreaOrganizer {
     }
 
     /**
-     * Moves the screen to {@code x} pixels from where it belongs, 0 to put it back.
+     * Moves the screen to {@code x} pixels from where it belongs, 0 to put it back, sideways
+     * or, {@code down}, up or down for a bar along the top or bottom.
      * {@code follower} (the taskbar) moves along at {@code x + width}: off screen at 0, in place
      * when the screen has moved aside by its width. {@code endAction} runs once it got there,
      * after {@code durationMs}; 0 moves both at once.
      */
-    void slide(float x, View follower, float width, long durationMs, Runnable endAction) {
+    void slide(float x, boolean down, View follower, float width, long durationMs,
+            Runnable endAction) {
         if (mAnimator != null) {
             mAnimator.cancel();
             mAnimator = null;
         }
+        if (down != mDown) {
+            // Turned from a bar at the side to one at the top: the screen goes from where it is
+            // the other way, so it starts back in place
+            moveTo(0);
+            mDown = down;
+        }
         if (durationMs == 0) {
             moveTo(x);
             if (follower != null) {
-                follower.setTranslationX(x + width);
+                follow(follower, x + width);
             }
             if (endAction != null) {
                 endAction.run();
@@ -78,7 +88,7 @@ final class WheelTaskbarSlide extends DisplayAreaOrganizer {
             final float now = (float) a.getAnimatedValue();
             moveTo(now);
             if (follower != null) {
-                follower.setTranslationX(now + width);
+                follow(follower, now + width);
             }
         });
         if (endAction != null) {
@@ -117,6 +127,14 @@ final class WheelTaskbarSlide extends DisplayAreaOrganizer {
         }
     }
 
+    private void follow(View follower, float at) {
+        if (mDown) {
+            follower.setTranslationY(at);
+        } else {
+            follower.setTranslationX(at);
+        }
+    }
+
     private void moveTo(float x) {
         mX = x;
         try (SurfaceControl.Transaction t = new SurfaceControl.Transaction()) {
@@ -131,17 +149,22 @@ final class WheelTaskbarSlide extends DisplayAreaOrganizer {
 
     /**
      * The screen {@code mX} aside: as wide as the room beside the bar, as much smaller in height,
-     * level in the middle, on the side away from the bar.
+     * level in the middle, on the side away from the bar; for a bar at the top or bottom as tall
+     * as the room under or over it, as much narrower, in the middle.
      */
     private void place(SurfaceControl.Transaction t, SurfaceControl leash) {
         if (mWidth <= 0 || mHeight <= 0 || mX == 0) {
             t.setMatrix(leash, 1, 0, 0, 1);
-            t.setPosition(leash, mX, 0);
+            t.setPosition(leash, mDown ? 0 : mX, mDown ? mX : 0);
             return;
         }
-        final float scale = Math.max(0.5f, 1 - Math.abs(mX) / mWidth);
+        final float scale = Math.max(0.5f, 1 - Math.abs(mX) / (mDown ? mHeight : mWidth));
         t.setMatrix(leash, scale, 0, 0, scale);
-        t.setPosition(leash, mX > 0 ? mX : 0, mHeight * (1 - scale) / 2);
+        if (mDown) {
+            t.setPosition(leash, mWidth * (1 - scale) / 2, mX > 0 ? mX : 0);
+        } else {
+            t.setPosition(leash, mX > 0 ? mX : 0, mHeight * (1 - scale) / 2);
+        }
     }
 
     private void size(DisplayAreaInfo info) {

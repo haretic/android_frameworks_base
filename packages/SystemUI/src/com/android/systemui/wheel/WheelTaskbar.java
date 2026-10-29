@@ -41,6 +41,7 @@ import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Log;
 import android.util.TypedValue;
+import android.view.Display;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
@@ -48,6 +49,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
+import android.view.ViewPropertyAnimator;
 import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
@@ -55,6 +57,7 @@ import android.view.animation.DecelerateInterpolator;
 import android.view.animation.OvershootInterpolator;
 import android.view.animation.PathInterpolator;
 import android.widget.FrameLayout;
+import android.hardware.display.DisplayManager;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -203,6 +206,10 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private final UserTracker mUserTracker;
     private final Handler mHandler;
     private final WheelTaskbarSlide mSlide;
+    /** The edge the bar is on, as WheelTaskbarSettings.edge has it for the screen's turn. */
+    private int mEdge = WheelTaskbarSettings.EDGE_RIGHT;
+    /** The screen's turn the daemon's tuning was last sent for. */
+    private int mRotation;
     private final WindowManager mWindowManager;
     private final Executor mBackground;
     private final JavaAdapter mJavaAdapter;
@@ -241,7 +248,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private LinearLayout mBar;
     private WheelTaskbarHighlight mBarHighlight;
     private AppsColumn mAppsColumn;
-    private WheelTaskbarScroll mAppsScroll;
+    /** A WheelTaskbarScroll, or its Row along a bar at the top or bottom. */
+    private FrameLayout mAppsScroll;
     private View mDrawerButton;
     private View mNotificationsButton;
     private View mModeButton;
@@ -257,12 +265,12 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private TextView mLabelTitle;
     private TextView mLabelHint;
     private ImageView mLabelPreview;
-    private SpringAnimation mLabelY;
+    private SpringAnimation mLabelGlide;
     /** The button the label names, and the task whose screen it shows (-1: none). */
     private View mLabelFor;
     private int mLabelTask = -1;
     private boolean mLabelAppearing;
-    private float mLabelTargetY;
+    private float mLabelTarget;
 
     private LinearLayout mPanel;
     private View mBarFrame;
@@ -440,7 +448,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 updateMode();
                 requestApps();
                 if (mModeClient != null) {
-                    mModeClient.tune(mSettings.daemonTuning(newUser));
+                    mModeClient.tune(mSettings.daemonTuning(newUser, rotation()));
                 }
             }
         }, mContext.getMainExecutor());
@@ -487,16 +495,45 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 new android.database.ContentObserver(mHandler) {
                     @Override
                     public void onChange(boolean selfChange) {
-                        mModeClient.tune(mSettings.daemonTuning(mUserTracker.getUserId()));
+                        mModeClient.tune(mSettings.daemonTuning(mUserTracker.getUserId(), rotation()));
                     }
                 };
         for (String key : new String[] {LineageSettings.Secure.WHEEL_SCROLL_DISTANCE,
                 LineageSettings.Secure.WHEEL_SPIN, LineageSettings.Secure.WHEEL_PRESS_GUARD,
-                LineageSettings.Secure.WHEEL_REVERSE}) {
+                LineageSettings.Secure.WHEEL_REVERSE,
+                LineageSettings.Secure.WHEEL_TURN_WITH_SCREEN}) {
             mContext.getContentResolver().registerContentObserver(
                     LineageSettings.Secure.getUriFor(key), false, tuning, UserHandle.USER_ALL);
         }
-        mModeClient.tune(mSettings.daemonTuning(mUserTracker.getUserId()));
+        // The screen turning: the wheel's way turns with it, and an open bar goes over to the
+        // edge the wheel is on now
+        mRotation = rotation();
+        mContext.getSystemService(DisplayManager.class).registerDisplayListener(
+                new DisplayManager.DisplayListener() {
+                    @Override
+                    public void onDisplayChanged(int displayId) {
+                        final int rotation = rotation();
+                        if (displayId != Display.DEFAULT_DISPLAY || rotation == mRotation) {
+                            return;
+                        }
+                        mRotation = rotation;
+                        mModeClient.tune(mSettings.daemonTuning(mUserTracker.getUserId(),
+                                rotation));
+                        if (mRoot != null && mSettings.edge(rotation) != mEdge) {
+                            hide();
+                            show();
+                        }
+                    }
+
+                    @Override
+                    public void onDisplayAdded(int displayId) {
+                    }
+
+                    @Override
+                    public void onDisplayRemoved(int displayId) {
+                    }
+                }, mHandler);
+        mModeClient.tune(mSettings.daemonTuning(mUserTracker.getUserId(), rotation()));
         readAppModes();
         updateMode();
     }
@@ -789,6 +826,86 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 mContext.getResources().getDisplayMetrics());
     }
 
+    /** The screen's turn, a Surface.ROTATION_ value. */
+    private int rotation() {
+        final Display display = mContext.getSystemService(DisplayManager.class)
+                .getDisplay(Display.DEFAULT_DISPLAY);
+        return display != null ? display.getRotation() : 0;
+    }
+
+    /** Whether the bar lies along the top or bottom of the screen, its buttons in a row. */
+    private boolean across() {
+        return mEdge == WheelTaskbarSettings.EDGE_TOP || mEdge == WheelTaskbarSettings.EDGE_BOTTOM;
+    }
+
+    /** Which way is out of the screen from the app over the bar: 1 right or down, -1 left or up. */
+    private int outward() {
+        return mEdge == WheelTaskbarSettings.EDGE_RIGHT
+                || mEdge == WheelTaskbarSettings.EDGE_BOTTOM ? 1 : -1;
+    }
+
+    /** The edge's gravity, and the one across from it, towards the app. */
+    private int edgeGravity() {
+        switch (mEdge) {
+            case WheelTaskbarSettings.EDGE_TOP:
+                return Gravity.TOP;
+            case WheelTaskbarSettings.EDGE_LEFT:
+                return Gravity.LEFT;
+            case WheelTaskbarSettings.EDGE_BOTTOM:
+                return Gravity.BOTTOM;
+            default:
+                return Gravity.RIGHT;
+        }
+    }
+
+    private int innerGravity() {
+        switch (mEdge) {
+            case WheelTaskbarSettings.EDGE_TOP:
+                return Gravity.BOTTOM;
+            case WheelTaskbarSettings.EDGE_LEFT:
+                return Gravity.RIGHT;
+            case WheelTaskbarSettings.EDGE_BOTTOM:
+                return Gravity.TOP;
+            default:
+                return Gravity.LEFT;
+        }
+    }
+
+    /** Moves {@code view} out from the app towards the edge by {@code by}, -by into it. */
+    private void setOut(View view, float by) {
+        if (across()) {
+            view.setTranslationY(by);
+        } else {
+            view.setTranslationX(by);
+        }
+    }
+
+    private ViewPropertyAnimator out(ViewPropertyAnimator animator, float by) {
+        return across() ? animator.translationY(by) : animator.translationX(by);
+    }
+
+    /** Along the bar, as {@link #setOut} across it. */
+    private ViewPropertyAnimator along(ViewPropertyAnimator animator, float by) {
+        return across() ? animator.translationX(by) : animator.translationY(by);
+    }
+
+    /** Layout params {@code thick} across the bar and {@code length} along it. */
+    private LinearLayout.LayoutParams barParams(int thick, int length) {
+        return across() ? new LinearLayout.LayoutParams(length, thick)
+                : new LinearLayout.LayoutParams(thick, length);
+    }
+
+    /** Spaces the cells along the bar: below each one, or after it along a row. */
+    private void gapAfter(LinearLayout.LayoutParams lp) {
+        final int gap = mContext.getResources().getDimensionPixelSize(
+                R.dimen.wheel_taskbar_gap) / 2;
+        if (across()) {
+            lp.rightMargin = gap;
+        } else {
+            lp.bottomMargin = gap;
+        }
+    }
+
     /** The bar's width, its cells and buttons for the size setting. */
     private int barWidth() {
         return dp(new int[] {56, 64, 76}[mSettings.size]);
@@ -885,6 +1002,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private void show() {
         removeClosing();
         mSettings.read(mUserTracker.getUserId());
+        mEdge = mSettings.edge(rotation());
         mThumbnails.clear();
         mDrawerApps = null;
         final FrameLayout root = new FrameLayout(mContext) {
@@ -908,51 +1026,80 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         mPlaced = false;
         mMoved = false;
 
-        // [label and lists] [bar], mirrored on the left edge
+        // [label and lists] [bar], from the app out to the edge: side by side for a bar at a
+        // side, one over the other for one at the top or bottom
+        final boolean across = across();
+        final boolean outerFirst = mEdge == WheelTaskbarSettings.EDGE_LEFT
+                || mEdge == WheelTaskbarSettings.EDGE_TOP;
         final LinearLayout row = new LinearLayout(mContext);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setLayoutDirection(mSettings.left ? View.LAYOUT_DIRECTION_RTL
-                : View.LAYOUT_DIRECTION_LTR);
-        root.addView(row, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                mSettings.left ? Gravity.START : Gravity.END));
+        row.setOrientation(across ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
+        row.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
+        root.addView(row, across
+                ? new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT)
+                : new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT, edgeGravity()));
 
         final FrameLayout side = new FrameLayout(mContext);
         side.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
-        row.addView(side, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.MATCH_PARENT));
+        final LinearLayout.LayoutParams sideParams = across
+                ? new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+                : new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT);
         buildLabel(side);
         buildPanel(side);
         // Below the status bar: the clock, battery and the rest stay in sight. Padded, as a
         // window over the status bar gets no inset from it. Where the app moves aside, the
-        // status bar goes with it and the bar stands up to the top of the screen
+        // status bar goes with it and the bar stands up to the top of the screen; under a bar
+        // at the top there is none
         final int statusBar = com.android.internal.policy.SystemBarUtils.getStatusBarHeight(
                 mContext);
-        side.setPadding(0, statusBar, 0, 0);
+        side.setPadding(0, mEdge == WheelTaskbarSettings.EDGE_TOP ? 0 : statusBar, 0, 0);
 
         // The bar, its focus light under the buttons and a hairline towards the app
         final FrameLayout frame = new FrameLayout(mContext);
         frame.setBackgroundColor(barColor());
         mBarHighlight = highlight(dp(14));
         // Wider than the bar on the app's side, for the magnified item's light
-        frame.addView(mBarHighlight, new FrameLayout.LayoutParams(barWidth() + cellSize(),
-                ViewGroup.LayoutParams.MATCH_PARENT, mSettings.left ? Gravity.LEFT : Gravity.RIGHT));
+        final int lit = barWidth() + cellSize();
+        frame.addView(mBarHighlight, across
+                ? new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, lit,
+                        edgeGravity())
+                : new FrameLayout.LayoutParams(lit, ViewGroup.LayoutParams.MATCH_PARENT,
+                        edgeGravity()));
         frame.setClipChildren(false);
         row.setClipChildren(false);
         mBar = new LinearLayout(mContext);
-        mBar.setOrientation(LinearLayout.VERTICAL);
-        mBar.setGravity(Gravity.CENTER_HORIZONTAL);
-        mBar.setPadding(0, mContext.getResources().getDimensionPixelSize(
-                R.dimen.wheel_taskbar_top) + (mSettings.push ? statusBar : 0), 0, dp(12));
+        mBar.setOrientation(across ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
+        mBar.setGravity(across ? Gravity.CENTER_VERTICAL : Gravity.CENTER_HORIZONTAL);
+        final int start = mContext.getResources().getDimensionPixelSize(
+                R.dimen.wheel_taskbar_top);
+        if (across) {
+            // Along the row as text reads, its ends clear of the screen's round corners
+            mBar.setPadding(start, 0, dp(12), 0);
+        } else {
+            mBar.setPadding(0, start + (mSettings.push ? statusBar : 0), 0, dp(12));
+        }
         frame.addView(mBar, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
         final View hairline = new View(mContext);
         hairline.setBackgroundColor(mContext.getColor(R.color.wheel_taskbar_divider));
-        frame.addView(hairline, new FrameLayout.LayoutParams(Math.max(1, dp(0.5f)),
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                mSettings.left ? Gravity.RIGHT : Gravity.LEFT));
-        row.addView(frame, new LinearLayout.LayoutParams(barWidth(),
-                ViewGroup.LayoutParams.MATCH_PARENT));
+        final int hair = Math.max(1, dp(0.5f));
+        frame.addView(hairline, across
+                ? new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, hair,
+                        innerGravity())
+                : new FrameLayout.LayoutParams(hair, ViewGroup.LayoutParams.MATCH_PARENT,
+                        innerGravity()));
+        final LinearLayout.LayoutParams frameParams = across
+                ? new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, barWidth())
+                : new LinearLayout.LayoutParams(barWidth(), ViewGroup.LayoutParams.MATCH_PARENT);
+        if (outerFirst) {
+            row.addView(frame, frameParams);
+            row.addView(side, sideParams);
+        } else {
+            row.addView(side, sideParams);
+            row.addView(frame, frameParams);
+        }
         mBarFrame = frame;
         buildBar();
 
@@ -968,7 +1115,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                         | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT);
-        lp.gravity = Gravity.TOP | (mSettings.left ? Gravity.START : Gravity.END);
+        lp.gravity = Gravity.TOP | Gravity.LEFT;
         lp.setTitle("WheelTaskbar");
         lp.setFitInsetsTypes(0);
         if (!mSettings.push) {
@@ -981,11 +1128,11 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         lp.inputFeatures |= WindowManager.LayoutParams.INPUT_FEATURE_POWER_KEY_SELECTS;
         // Drawn off screen first; once that frame is up, the bar and the app slide together
         final int width = barWidth();
-        final int out = mSettings.left ? -width : width;
-        root.setTranslationX(out);
+        final int out = outward() * width;
+        setOut(root, out);
         root.getViewTreeObserver().registerFrameCommitCallback(() -> mHandler.post(() -> {
             if (mRoot == root) {
-                slide(mSettings.left ? width : -width, root, out, null);
+                slide(-out, root, out, null);
             }
         }));
         // The focus asked for before the window has it may not stick: ask again once it does
@@ -1047,18 +1194,18 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private void slide(float x, View bar, float barOut, Runnable end) {
         final long duration = mSettings.duration(SLIDE_MS);
         if (mSettings.push) {
-            mSlide.slide(x, bar, barOut, duration, end);
+            mSlide.slide(x, across(), bar, barOut, duration, end);
             return;
         }
         final float to = x == 0 ? barOut : 0;
         if (duration == 0) {
-            bar.setTranslationX(to);
+            setOut(bar, to);
             if (end != null) {
                 end.run();
             }
             return;
         }
-        bar.animate().translationX(to).setDuration(duration)
+        out(bar.animate(), to).setDuration(duration)
                 .setInterpolator(new DecelerateInterpolator(1.5f))
                 .withEndAction(end).start();
     }
@@ -1080,20 +1227,21 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 cells.add(child);
             }
         }
-        final float from = mSettings.left ? -dp(14) : dp(14);
+        final float from = outward() * dp(14);
         for (int i = 0; i < cells.size(); i++) {
             final View cell = cells.get(i);
             cell.setAlpha(0f);
-            cell.setTranslationX(from);
-            cell.animate().alpha(1f).translationX(0f).setDuration(duration)
+            setOut(cell, from);
+            out(cell.animate().alpha(1f), 0f).setDuration(duration)
                     .setStartDelay(mSettings.duration(40 + i * STAGGER_MS))
                     .setInterpolator(new DecelerateInterpolator(2f)).start();
         }
     }
 
     private void buildBar() {
-        fitCells(mWindowManager.getCurrentWindowMetrics().getBounds().height()
-                - mBar.getPaddingTop() - mBar.getPaddingBottom());
+        final android.graphics.Rect screen = mWindowManager.getCurrentWindowMetrics().getBounds();
+        fitCells(across() ? screen.width() - mBar.getPaddingLeft() - mBar.getPaddingRight()
+                : screen.height() - mBar.getPaddingTop() - mBar.getPaddingBottom());
         mBar.removeAllViews();
         mAppsColumn = null;
         mAppsScroll = null;
@@ -1146,7 +1294,9 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         if (mAppsColumn == null) {
             // Without the apps the buttons still end at the top, settings at the bottom
             final View space = new View(mContext);
-            mBar.addView(space, new LinearLayout.LayoutParams(1, 0, 1f));
+            final LinearLayout.LayoutParams lp = barParams(1, 0);
+            lp.weight = 1f;
+            mBar.addView(space, lp);
         }
         addButton(R.drawable.ic_wheel_taskbar_settings,
                 mContext.getString(R.string.wheel_taskbar_settings), this::openSettings);
@@ -1154,18 +1304,28 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
 
     /** The pinned and running apps, scrolling between the buttons when they don't fit. */
     private void buildApps() {
-        final WheelTaskbarScroll scroll = new WheelTaskbarScroll(mContext);
+        final boolean across = across();
+        final FrameLayout scroll = across ? new WheelTaskbarScroll.Row(mContext)
+                : new WheelTaskbarScroll(mContext);
         scroll.setFadingEdgeLength(dp(16));
-        scroll.setSpeed(mSettings.animation);
+        ((WheelTaskbarScroll.Glides) scroll).setSpeed(mSettings.animation);
         mAppsColumn = new AppsColumn(mContext);
-        mAppsColumn.setOrientation(LinearLayout.VERTICAL);
-        mAppsColumn.setGravity(Gravity.CENTER_HORIZONTAL);
-        scroll.addView(mAppsColumn, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        final LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
-        lp.topMargin = dp(2);
-        lp.bottomMargin = dp(6);
+        mAppsColumn.setOrientation(across ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
+        mAppsColumn.setGravity(across ? Gravity.CENTER_VERTICAL : Gravity.CENTER_HORIZONTAL);
+        scroll.addView(mAppsColumn, across
+                ? new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT)
+                : new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT));
+        final LinearLayout.LayoutParams lp = barParams(ViewGroup.LayoutParams.MATCH_PARENT, 0);
+        lp.weight = 1f;
+        if (across) {
+            lp.leftMargin = dp(2);
+            lp.rightMargin = dp(6);
+        } else {
+            lp.topMargin = dp(2);
+            lp.bottomMargin = dp(6);
+        }
         mBar.addView(scroll, lp);
         mAppsScroll = scroll;
         applyApps(false);
@@ -1210,9 +1370,15 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             final GradientDrawable line = new GradientDrawable();
             line.setCornerRadius(dp(2));
             dot.setBackground(line);
-            dot.setScaleY(0f);
-            addView(dot, new FrameLayout.LayoutParams(dp(3), dp(18),
-                    Gravity.CENTER_VERTICAL | (mSettings.left ? Gravity.RIGHT : Gravity.LEFT)));
+            if (across()) {
+                dot.setScaleX(0f);
+                addView(dot, new FrameLayout.LayoutParams(dp(18), dp(3),
+                        Gravity.CENTER_HORIZONTAL | innerGravity()));
+            } else {
+                dot.setScaleY(0f);
+                addView(dot, new FrameLayout.LayoutParams(dp(3), dp(18),
+                        Gravity.CENTER_VERTICAL | innerGravity()));
+            }
             // New notifications: a dot on the icon's top corner
             notified = new View(mContext);
             final GradientDrawable spot = new GradientDrawable();
@@ -1248,13 +1414,20 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             ((GradientDrawable) dot.getBackground()).setColor(app.front ? ringColor()
                     : mContext.getColor(R.color.wheel_taskbar_text_secondary));
             final float scale = app.front ? 1f : app.running() ? 7f / 18f : 0f;
+            // Its length is along the bar
+            final boolean across = across();
             if (animate) {
-                dot.animate().scaleY(scale).alpha(scale > 0 ? 1f : 0f)
+                final ViewPropertyAnimator grow = dot.animate();
+                (across ? grow.scaleX(scale) : grow.scaleY(scale)).alpha(scale > 0 ? 1f : 0f)
                         .setDuration(mSettings.duration(CHANGE_MS)).setInterpolator(EMPHASIZED)
                         .start();
             } else {
                 dot.animate().cancel();
-                dot.setScaleY(scale);
+                if (across) {
+                    dot.setScaleX(scale);
+                } else {
+                    dot.setScaleY(scale);
+                }
                 dot.setAlpha(scale > 0 ? 1f : 0f);
             }
             if (old != null && !old.same(app) && button.isFocused()) {
@@ -1284,17 +1457,17 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         final FrameLayout cell = new FrameLayout(mContext);
         final View line = new View(mContext);
         line.setBackgroundColor(mContext.getColor(R.color.wheel_taskbar_divider));
-        cell.addView(line, new FrameLayout.LayoutParams(dp(22), Math.max(1, dp(1)),
-                Gravity.CENTER));
+        final int thin = Math.max(1, dp(1));
+        cell.addView(line, across() ? new FrameLayout.LayoutParams(thin, dp(22), Gravity.CENTER)
+                : new FrameLayout.LayoutParams(dp(22), thin, Gravity.CENTER));
         return cell;
     }
 
     private LinearLayout.LayoutParams cellParams(View cell) {
-        final LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(barWidth(),
+        final LinearLayout.LayoutParams lp = barParams(barWidth(),
                 cell instanceof AppCell ? cellSize() : dp(9));
         if (cell instanceof AppCell) {
-            lp.bottomMargin = mContext.getResources().getDimensionPixelSize(
-                    R.dimen.wheel_taskbar_gap) / 2;
+            gapAfter(lp);
         }
         return lp;
     }
@@ -1317,15 +1490,17 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 ? cell : null;
 
         // Where each one is drawn now, and the apps' buttons by app
-        final WheelTaskbarScroll scroll = mAppsScroll;
-        final int wasScrolled = scroll.getScrollY();
+        final FrameLayout scroll = mAppsScroll;
+        final boolean across = across();
+        final int wasScrolled = across ? scroll.getScrollX() : scroll.getScrollY();
         final Map<View, Float> was = new ArrayMap<>();
         final Map<String, AppCell> cells = new ArrayMap<>();
         final List<AppCell> oldCells = new ArrayList<>();
         View oldDivider = null;
         for (int i = 0; i < column.getChildCount(); i++) {
             final View child = column.getChildAt(i);
-            was.put(child, child.getTop() + child.getTranslationY());
+            was.put(child, across ? child.getLeft() + child.getTranslationX()
+                    : child.getTop() + child.getTranslationY());
             if (child instanceof AppCell cell) {
                 cells.put(cell.entry.packageName, cell);
                 oldCells.add(cell);
@@ -1410,7 +1585,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 column.getViewTreeObserver().removeOnPreDrawListener(this);
                 // A shorter column scrolls back at once: that jump glides too (the fading
                 // ones stay put, the scroll's overlay doesn't scroll)
-                final int scrolled = scroll.getScrollY() - wasScrolled;
+                final int scrolled = (across ? scroll.getScrollX() : scroll.getScrollY())
+                        - wasScrolled;
                 for (View view : order) {
                     final Float from = was.get(view);
                     if (from == null) {
@@ -1420,9 +1596,13 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                         view.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(duration)
                                 .setStartDelay(duration / 3)
                                 .setInterpolator(new OvershootInterpolator(1.4f)).start();
-                    } else if (from + scrolled != view.getTop()) {
-                        view.setTranslationY(from + scrolled - view.getTop());
-                        view.animate().translationY(0f).setDuration(duration).setStartDelay(0)
+                    } else if (from + scrolled != (across ? view.getLeft() : view.getTop())) {
+                        if (across) {
+                            view.setTranslationX(from + scrolled - view.getLeft());
+                        } else {
+                            view.setTranslationY(from + scrolled - view.getTop());
+                        }
+                        along(view.animate(), 0f).setDuration(duration).setStartDelay(0)
                                 .setInterpolator(EMPHASIZED).start();
                     }
                 }
@@ -1485,8 +1665,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 Gravity.CENTER));
         final LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(cellSize(),
                 cellSize());
-        lp.bottomMargin = mContext.getResources().getDimensionPixelSize(
-                R.dimen.wheel_taskbar_gap) / 2;
+        gapAfter(lp);
         mBar.addView(cell, lp);
         return cell;
     }
@@ -1499,7 +1678,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             public void onViewAttachedToWindow(View v) {
                 for (View p = (View) v.getParent(); p != null && p != mBarFrame;
                         p = p.getParent() instanceof View parent ? parent : null) {
-                    if (p instanceof ViewGroup group && !(p instanceof WheelTaskbarScroll)) {
+                    if (p instanceof ViewGroup group && !(p instanceof WheelTaskbarScroll.Glides)) {
                         group.setClipChildren(false);
                     }
                 }
@@ -1536,14 +1715,14 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         if (at < 0) {
             return;
         }
-        final float out = (mSettings.left ? 1 : -1) * cellSize() * MAGNIFY[0] * 0.6f;
+        final float in = -outward() * cellSize() * MAGNIFY[0] * 0.6f;
         for (int i = 0; i < targets.size(); i++) {
             final int distance = Math.abs(i - at);
             final float scale = 1f + (distance < MAGNIFY.length ? MAGNIFY[distance] : 0f);
             final float away = distance < GIVE_WAY.length
                     ? Math.signum(i - at) * dp(GIVE_WAY[distance]) : 0f;
-            targets.get(i).animate().scaleX(scale).scaleY(scale)
-                    .translationX(distance == 0 ? out : 0f).translationY(away)
+            along(out(targets.get(i).animate().scaleX(scale).scaleY(scale),
+                    distance == 0 ? in : 0f), away)
                     .setDuration(mSettings.duration(FOCUS_MS))
                     .setInterpolator(new DecelerateInterpolator()).start();
         }
@@ -1560,12 +1739,13 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         }
         final View cell = (View) button.getParent();
         if (cell.getParent() == mAppsColumn) {
-            mAppsScroll.reveal(cell, cellSize() / 2, false);
+            ((WheelTaskbarScroll.Glides) mAppsScroll).reveal(cell, cellSize() / 2, false);
             return;
         }
         final int at = mBar.indexOfChild(cell);
         if (at >= 0) {
-            mAppsScroll.glideTo(at < mBar.indexOfChild(mAppsScroll) ? 0 : Integer.MAX_VALUE);
+            ((WheelTaskbarScroll.Glides) mAppsScroll).glideTo(
+                    at < mBar.indexOfChild(mAppsScroll) ? 0 : Integer.MAX_VALUE);
         }
     }
 
@@ -1671,7 +1851,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         mLabel.addView(mLabelPreview, plp);
         // As wide as the screen leaves beside the bar
         final int maxWidth = mContext.getResources().getDisplayMetrics().widthPixels
-                - barWidth() - 2 * gap - dp(24);
+                - (across() ? 0 : barWidth()) - 2 * gap - dp(24);
         mLabelTitle = new TextView(mContext);
         mLabelTitle.setTextAppearance(R.style.TextAppearance_WheelTaskbar_Label);
         mLabelTitle.setSingleLine(true);
@@ -1691,14 +1871,19 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         mLabelHint.setMaxWidth(maxWidth);
         mLabel.addView(mLabelHint, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        // Beside the bar, or under or over a bar at the top or bottom; it glides along the bar
         final FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.TOP | (mSettings.left ? Gravity.START : Gravity.END));
-        lp.setMarginStart(gap);
-        lp.setMarginEnd(gap);
+                across() ? edgeGravity() | Gravity.LEFT : Gravity.TOP | edgeGravity());
+        lp.setMargins(gap, gap, gap, gap);
+        if (!across()) {
+            lp.topMargin = 0;
+            lp.bottomMargin = 0;
+        }
         side.addView(mLabel, lp);
-        mLabelY = new SpringAnimation(mLabel, DynamicAnimation.TRANSLATION_Y);
-        mLabelY.setSpring(new SpringForce().setStiffness(mSettings.animation >= 1 ? 700f : 1500f)
+        mLabelGlide = new SpringAnimation(mLabel, across() ? DynamicAnimation.TRANSLATION_X
+                : DynamicAnimation.TRANSLATION_Y);
+        mLabelGlide.setSpring(new SpringForce().setStiffness(mSettings.animation >= 1 ? 700f : 1500f)
                 .setDampingRatio(0.85f));
     }
 
@@ -1773,8 +1958,14 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private void showPreview(Bitmap thumbnail, boolean fadeIn) {
         final int width = mContext.getResources().getDimensionPixelSize(
                 R.dimen.wheel_taskbar_preview_width);
-        final int height = thumbnail.getWidth() <= 0 ? width * 4 / 3 : Math.max(width / 2,
+        int height = thumbnail.getWidth() <= 0 ? width * 4 / 3 : Math.max(width / 2,
                 Math.min(width * 2, width * thumbnail.getHeight() / thumbnail.getWidth()));
+        if (across()) {
+            // Under or over a bar at the top or bottom of a screen on its side: half the room
+            // that leaves, the name under it in sight
+            height = Math.min(height, (mContext.getResources().getDisplayMetrics().heightPixels
+                    - barWidth()) / 2);
+        }
         final ViewGroup.LayoutParams lp = mLabelPreview.getLayoutParams();
         if (lp.height != height) {
             lp.height = height;
@@ -1796,7 +1987,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         }
         mLabelFor = null;
         mLabelTask = -1;
-        mLabelY.cancel();
+        mLabelGlide.cancel();
         mLabel.animate().cancel();
         mLabel.setVisibility(View.GONE);
     }
@@ -1812,30 +2003,52 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         mLabelFor.getLocationInWindow(at);
         final View parent = (View) mLabel.getParent();
         parent.getLocationInWindow(side);
-        // From the top of the parent's content, which is where the label lays out
-        final float centre = at[1] - side[1] - parent.getPaddingTop()
-                + mLabelFor.getHeight() * mLabelFor.getScaleY() / 2f;
-        final float margin = dp(8);
-        final float y = Math.max(margin, Math.min(parent.getHeight() - parent.getPaddingTop()
-                - parent.getPaddingBottom() - mLabel.getHeight() - margin,
-                centre - mLabel.getHeight() / 2f));
+        // From the start of the parent's content, which is where the label lays out: its top,
+        // or its left for a bar at the top or bottom, the label going along the bar
+        final boolean across = across();
+        final float centre = across
+                ? at[0] - side[0] - parent.getPaddingLeft()
+                        + mLabelFor.getWidth() * mLabelFor.getScaleX() / 2f
+                : at[1] - side[1] - parent.getPaddingTop()
+                        + mLabelFor.getHeight() * mLabelFor.getScaleY() / 2f;
+        final float along;
+        if (across) {
+            // Laid out a gap in from the start: as far along as the screen leaves, a gap from
+            // the other end
+            final int gap = mContext.getResources().getDimensionPixelSize(
+                    R.dimen.wheel_taskbar_gap);
+            final float room = parent.getWidth() - parent.getPaddingLeft()
+                    - parent.getPaddingRight() - mLabel.getWidth() - 2 * gap;
+            along = Math.max(0, Math.min(room, centre - mLabel.getWidth() / 2f - gap));
+        } else {
+            final float margin = dp(8);
+            along = Math.max(margin, Math.min(parent.getHeight() - parent.getPaddingTop()
+                    - parent.getPaddingBottom() - mLabel.getHeight() - margin,
+                    centre - mLabel.getHeight() / 2f));
+        }
         if (mLabelAppearing) {
             mLabelAppearing = false;
-            mLabelY.cancel();
-            mLabel.setTranslationY(y);
-            mLabelTargetY = y;
-            mLabel.setTranslationX(mSettings.left ? -dp(8) : dp(8));
-            mLabel.animate().alpha(1f).translationX(0f)
+            mLabelGlide.cancel();
+            if (across) {
+                mLabel.setTranslationX(along);
+            } else {
+                mLabel.setTranslationY(along);
+            }
+            mLabelTarget = along;
+            setOut(mLabel, outward() * dp(8));
+            out(mLabel.animate().alpha(1f), 0f)
                     .setDuration(mSettings.duration(FOCUS_MS * 3 / 2))
                     .setInterpolator(new DecelerateInterpolator()).start();
             return;
         }
-        if (y != mLabelTargetY) {
-            mLabelTargetY = y;
+        if (along != mLabelTarget) {
+            mLabelTarget = along;
             if (mSettings.animation > 0) {
-                mLabelY.animateToFinalPosition(y);
+                mLabelGlide.animateToFinalPosition(along);
+            } else if (across) {
+                mLabel.setTranslationX(along);
             } else {
-                mLabel.setTranslationY(y);
+                mLabel.setTranslationY(along);
             }
         }
     }
@@ -1859,8 +2072,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         lp.inputFeatures &= ~WindowManager.LayoutParams.INPUT_FEATURE_POWER_KEY_SELECTS;
         mWindowManager.updateViewLayout(closing, lp);
         mClosing = closing;
-        final int width = barWidth();
-        slide(0, closing, mSettings.left ? -width : width, () -> {
+        slide(0, closing, outward() * barWidth(), () -> {
             if (mClosing == closing) {
                 removeClosing();
             }
@@ -2221,17 +2433,22 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         // As tall as its rows, up to the screen's height
         mPanel.addView(mPanelScroll, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        final int gap = mContext.getResources().getDimensionPixelSize(R.dimen.wheel_taskbar_gap);
         final FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
                 mContext.getResources().getDimensionPixelSize(R.dimen.wheel_taskbar_menu_width),
                 ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.TOP | (mSettings.left ? Gravity.START : Gravity.END));
-        lp.topMargin = mContext.getResources().getDimensionPixelSize(
-                R.dimen.wheel_taskbar_menu_top);
-        lp.bottomMargin = dp(16);
-        lp.setMarginStart(mContext.getResources().getDimensionPixelSize(
-                R.dimen.wheel_taskbar_gap));
-        lp.setMarginEnd(mContext.getResources().getDimensionPixelSize(
-                R.dimen.wheel_taskbar_gap));
+                across() ? edgeGravity() | Gravity.LEFT : Gravity.TOP | edgeGravity());
+        if (across()) {
+            // Next to the bar, under the button it opens from (see openMenu)
+            lp.topMargin = mEdge == WheelTaskbarSettings.EDGE_TOP ? gap : dp(16);
+            lp.bottomMargin = mEdge == WheelTaskbarSettings.EDGE_TOP ? dp(16) : gap;
+        } else {
+            lp.topMargin = mContext.getResources().getDimensionPixelSize(
+                    R.dimen.wheel_taskbar_menu_top);
+            lp.bottomMargin = dp(16);
+        }
+        lp.leftMargin = gap;
+        lp.rightMargin = gap;
         side.addView(mPanel, lp);
     }
 
@@ -2263,16 +2480,41 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         if (nested) {
             slideContent(1);
         } else {
+            if (across() && focused != null) {
+                placePanel(focused);
+            }
             mPanel.animate().cancel();
             mPanel.setAlpha(0f);
-            mPanel.setTranslationX(mSettings.left ? -dp(16) : dp(16));
+            setOut(mPanel, outward() * dp(16));
             mPanel.setScaleY(0.96f);
-            mPanel.animate().alpha(1f).translationX(0).scaleY(1f).setDuration(duration)
+            out(mPanel.animate().alpha(1f), 0).scaleY(1f).setDuration(duration)
                     .setInterpolator(EMPHASIZED).start();
             // The bar's light stays on the button the list came from, dimmed
             mBarHighlight.animate().alpha(0.35f).setDuration(duration).start();
         }
         keepOpen();
+    }
+
+    /**
+     * A list from a bar at the top or bottom opens under or over its button, as far along as
+     * the screen lets it.
+     */
+    private void placePanel(View button) {
+        final FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) mPanel.getLayoutParams();
+        final View side = (View) mPanel.getParent();
+        final int[] at = new int[2];
+        final int[] in = new int[2];
+        button.getLocationInWindow(at);
+        side.getLocationInWindow(in);
+        final int gap = mContext.getResources().getDimensionPixelSize(R.dimen.wheel_taskbar_gap);
+        final int centre = at[0] - in[0] + button.getWidth() / 2;
+        final int left = Math.max(gap, Math.min(side.getWidth() - lp.width - gap,
+                centre - lp.width / 2));
+        if (lp.leftMargin != left) {
+            lp.leftMargin = left;
+            lp.rightMargin = 0;
+            mPanel.setLayoutParams(lp);
+        }
     }
 
     /** Back one list: to the list it came from, or to its button in the bar. */
@@ -2289,7 +2531,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         }
         final long duration = mSettings.duration(PANEL_MS * 3 / 4);
         mPanel.animate().cancel();
-        mPanel.animate().alpha(0f).translationX(mSettings.left ? -dp(16) : dp(16))
+        out(mPanel.animate().alpha(0f), outward() * dp(16))
                 .setDuration(duration).withEndAction(() -> {
                     if (mMenus.isEmpty()) {
                         mPanel.setVisibility(View.GONE);
@@ -2355,7 +2597,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             return;
         }
         mPanelContent.setAlpha(0f);
-        mPanelContent.setTranslationX(direction * dp(24) * (mSettings.left ? -1 : 1));
+        mPanelContent.setTranslationX(direction * dp(24)
+                * (mEdge == WheelTaskbarSettings.EDGE_LEFT ? -1 : 1));
         mPanelContent.animate().alpha(1f).translationX(0f).setDuration(duration)
                 .setInterpolator(EMPHASIZED).start();
         mPanelTitle.setAlpha(0f);
