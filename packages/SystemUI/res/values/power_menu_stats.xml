@@ -116,4 +116,14 @@
     <string name="global_actions_stats_description">System stats of the last 10 minutes</string>
     <!-- Title over the apps pinned to the power menu [CHAR LIMIT=20] -->
     <string name="global_actions_pinned_title">PINNED</string>
+    <!-- Line under the Restart menu's System row, what it does [CHAR LIMIT=40] -->
+    <string name="global_action_restart_system_summary">Android starts again</string>
+    <!-- Line under the Restart menu's Recovery row, what it is for [CHAR LIMIT=40] -->
+    <string name="global_action_restart_recovery_summary">For updates and a factory reset</string>
+    <!-- Line under the Restart menu's Bootloader row, what it is for [CHAR LIMIT=40] -->
+    <string name="global_action_restart_bootloader_summary">For flashing from a computer</string>
+    <!-- Line under the Restart menu's Fastbootd row, what it is for [CHAR LIMIT=40] -->
+    <string name="global_action_restart_fastboot_summary">For flashing partitions from a computer</string>
+    <!-- Line under the Restart menu's Download row, what it is for [CHAR LIMIT=40] -->
+    <string name="global_action_restart_download_summary">For flashing from a computer</string>
 </resources>

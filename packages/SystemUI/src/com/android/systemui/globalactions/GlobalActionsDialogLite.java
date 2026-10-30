@@ -1295,10 +1295,28 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
         }
     }
 
+    /** A restart target's row in the Restart menu, a line under it saying what it is for. */
+    private static View withRestartSummary(View view, int summary) {
+        final TextView line = view.findViewById(
+                com.android.systemui.res.R.id.global_actions_restart_summary);
+        if (line != null) {
+            line.setText(summary);
+            line.setVisibility(View.VISIBLE);
+        }
+        return view;
+    }
+
     private final class RestartSystemAction extends SinglePressAction implements LongPressAction {
         RestartSystemAction() {
             super(R.drawable.ic_restart,
                     com.android.systemui.res.R.string.global_action_restart_system);
+        }
+
+        @Override
+        public View create(Context context, View convertView, ViewGroup parent,
+                LayoutInflater inflater) {
+            return withRestartSummary(super.create(context, convertView, parent, inflater),
+                    com.android.systemui.res.R.string.global_action_restart_system_summary);
         }
 
         @Override
@@ -1317,7 +1335,17 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
     }
 
     private abstract class RestartReasonAction extends SinglePressAction {
-        RestartReasonAction(int icon, int label) { super(icon, label); }
+        private final int mSummary;
+        RestartReasonAction(int icon, int label, int summary) {
+            super(icon, label);
+            mSummary = summary;
+        }
+        @Override
+        public View create(Context context, View convertView, ViewGroup parent,
+                LayoutInflater inflater) {
+            return withRestartSummary(super.create(context, convertView, parent, inflater),
+                    mSummary);
+        }
         @Override public boolean showDuringKeyguard() { return true; }
         @Override public boolean showBeforeProvisioning() { return true; }
         abstract String getReason();
@@ -1326,25 +1354,29 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
 
     private final class RestartRecoveryAction extends RestartReasonAction {
         RestartRecoveryAction() { super(com.android.systemui.res.R.drawable.ic_lock_restart_recovery,
-                com.android.systemui.res.R.string.global_action_restart_recovery); }
+                com.android.systemui.res.R.string.global_action_restart_recovery,
+                com.android.systemui.res.R.string.global_action_restart_recovery_summary); }
         @Override String getReason() { return PowerManager.REBOOT_RECOVERY; }
     }
 
     private final class RestartBootloaderAction extends RestartReasonAction {
         RestartBootloaderAction() { super(com.android.systemui.res.R.drawable.ic_lock_restart_bootloader,
-                com.android.systemui.res.R.string.global_action_restart_bootloader); }
+                com.android.systemui.res.R.string.global_action_restart_bootloader,
+                com.android.systemui.res.R.string.global_action_restart_bootloader_summary); }
         @Override String getReason() { return PowerManager.REBOOT_BOOTLOADER; }
     }
 
     private final class RestartFastbootAction extends RestartReasonAction {
         RestartFastbootAction() { super(com.android.systemui.res.R.drawable.ic_lock_restart_fastboot,
-                com.android.systemui.res.R.string.global_action_restart_fastboot); }
+                com.android.systemui.res.R.string.global_action_restart_fastboot,
+                com.android.systemui.res.R.string.global_action_restart_fastboot_summary); }
         @Override String getReason() { return PowerManager.REBOOT_FASTBOOT; }
     }
 
     private final class RestartDownloadAction extends RestartReasonAction {
         RestartDownloadAction() { super(com.android.systemui.res.R.drawable.ic_lock_restart_bootloader,
-                com.android.systemui.res.R.string.global_action_restart_download); }
+                com.android.systemui.res.R.string.global_action_restart_download,
+                com.android.systemui.res.R.string.global_action_restart_download_summary); }
         @Override String getReason() { return PowerManager.REBOOT_DOWNLOAD; }
     }
 
