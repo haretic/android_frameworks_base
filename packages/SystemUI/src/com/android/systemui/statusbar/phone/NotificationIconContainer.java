@@ -473,8 +473,12 @@ public class NotificationIconContainer extends ViewGroup {
 
             final boolean forceOverflow =
                     shouldForceOverflow(i, iconState.iconAppearAmount, maxVisibleIcons);
-            final boolean isOverflowing = forceOverflow || isOverflowing(
-                    /* isLastChild= */ i == childCount - 1, translationX, layoutRight, mIconSize);
+            // An icon not shown at all, as the shelf's for a notification still above it on the
+            // lock screen, takes no room: it no longer sends the icons after it into the overflow,
+            // a lone icon behind it becoming a bare dot in a pill sized for it
+            final boolean isOverflowing = forceOverflow || (iconState.iconAppearAmount > 0f
+                    && isOverflowing(/* isLastChild= */ i == childCount - 1, translationX,
+                            layoutRight, mIconSize));
 
             // First icon to overflow.
             if (mFirstOverflowIndex == -1 && isOverflowing) {
