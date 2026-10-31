@@ -3155,10 +3155,11 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
             initializeLayout(dialog, true /* firstTime */);
             mWheelNavigation = PowerMenuWheelNavigation.attach(dialog);
             if (mWheelNavigation != null) {
-                // The wheel's menu is panels with gaps between: the app behind stays well back,
-                // no bright icon of it showing through a gap as part of the menu
+                // The wheel's menu is panels with gaps between: the app behind goes dark, no
+                // icon or line of its text showing through a gap as part of the menu, as even a
+                // 0.94 dim left white text readable. Still faded in and out with the menu
                 window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-                window.setDimAmount(0.94f);
+                window.setDimAmount(1f);
             }
             mInitialWindowDimAmount = window.getAttributes().dimAmount;
         }
