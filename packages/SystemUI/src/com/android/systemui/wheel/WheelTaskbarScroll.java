@@ -40,6 +40,21 @@ final class WheelTaskbarScroll extends ScrollView implements WheelTaskbarGlides 
     }
 
     @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        final int pad = getMeasuredHeight() - peekEnd(this, getMeasuredHeight(), false);
+        if (pad != getPaddingBottom()) {
+            setPadding(0, 0, 0, pad);
+        }
+    }
+
+    /** The fade at the end of the list's room, over the app peeking out, see peekEnd. */
+    @Override
+    protected boolean isPaddingOffsetRequired() {
+        return true;
+    }
+
+    @Override
     protected void dispatchDraw(Canvas canvas) {
         // Apps scrolled out stay hidden above and below; to the sides one grows out of the bar,
         // and at an end with nothing past it the first or last one moves out a little too
@@ -48,7 +63,8 @@ final class WheelTaskbarScroll extends ScrollView implements WheelTaskbarGlides 
         canvas.clipRect(getScrollX() - getWidth(),
                 getScrollY() - (canScrollVertically(-1) ? 0 : margin),
                 getScrollX() + 2 * getWidth(),
-                getScrollY() + getHeight() + (canScrollVertically(1) ? 0 : margin));
+                getScrollY() + getHeight() - getPaddingBottom()
+                        + (canScrollVertically(1) ? 0 : margin));
         super.dispatchDraw(canvas);
         canvas.restoreToCount(save);
     }
@@ -100,13 +116,23 @@ final class WheelTaskbarScroll extends ScrollView implements WheelTaskbarGlides 
         }
 
         @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+            final int pad = getMeasuredWidth() - peekEnd(this, getMeasuredWidth(), true);
+            if (pad != getPaddingRight()) {
+                setPadding(0, 0, pad, 0);
+            }
+        }
+
+        @Override
         protected void dispatchDraw(Canvas canvas) {
             // Hidden past the ends, grown out of the bar above and below
             final int save = canvas.save();
             final int margin = getWidth();
             canvas.clipRect(getScrollX() - (canScrollHorizontally(-1) ? 0 : margin),
                     getScrollY() - getHeight(),
-                    getScrollX() + getWidth() + (canScrollHorizontally(1) ? 0 : margin),
+                    getScrollX() + getWidth() - getPaddingRight()
+                            + (canScrollHorizontally(1) ? 0 : margin),
                     getScrollY() + 2 * getHeight());
             super.dispatchDraw(canvas);
             canvas.restoreToCount(save);
@@ -142,6 +168,43 @@ final class WheelTaskbarScroll extends ScrollView implements WheelTaskbarGlides 
             mGlide.cancel();
             super.onDetachedFromWindow();
         }
+    }
+
+    /**
+     * Where a list of the bar's apps too long for its room ends: half way into an app, as the
+     * focus's reveal leaves it, its second half faded out, so the cut reads as more to come and
+     * not as an app drawn wrong. The room past it is padding, so the buttons after the list stay
+     * where they are. The whole room when the list fits.
+     */
+    static int peekEnd(ViewGroup scroll, int room, boolean across) {
+        if (scroll.getChildCount() == 0 || !(scroll.getChildAt(0) instanceof ViewGroup column)) {
+            return room;
+        }
+        if ((across ? column.getMeasuredWidth() : column.getMeasuredHeight()) <= room) {
+            return room;
+        }
+        int at = across ? column.getPaddingLeft() : column.getPaddingTop();
+        int end = 0;
+        for (int i = 0; i < column.getChildCount(); i++) {
+            final View child = column.getChildAt(i);
+            if (child.getVisibility() == View.GONE) {
+                continue;
+            }
+            int before = 0;
+            int after = 0;
+            if (child.getLayoutParams() instanceof ViewGroup.MarginLayoutParams lp) {
+                before = across ? lp.leftMargin : lp.topMargin;
+                after = across ? lp.rightMargin : lp.bottomMargin;
+            }
+            final int size = across ? child.getMeasuredWidth() : child.getMeasuredHeight();
+            final int middle = at + before + size / 2;
+            if (middle > room) {
+                break;
+            }
+            end = middle;
+            at += before + size + after;
+        }
+        return end > 0 ? end : room;
     }
 
     /** The one spring a scroll glides on, down or, {@code across}, sideways. */
