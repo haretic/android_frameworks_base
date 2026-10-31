@@ -16,6 +16,7 @@
 
 package com.android.systemui.shared.rotation;
 
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.content.pm.PackageManager.FEATURE_PC;
 import static android.view.Display.DEFAULT_DISPLAY;
 
@@ -24,6 +25,7 @@ import static com.android.systemui.shared.system.QuickStepContract.isGesturalMod
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ObjectAnimator;
+import android.app.ActivityManager;
 import android.annotation.AnyThread;
 import android.annotation.ColorInt;
 import android.annotation.DrawableRes;
@@ -711,7 +713,16 @@ public class RotationButtonController {
         }
         // Only override user prefs when returning to the natural rotation (normally portrait).
         // Don't let apps that force landscape or 180 alter user lock.
-        return rotation == RotationPolicy.getNaturalRotation();
+        // Nor a home that never turns, as the R1's: it turns the screen upright as it comes up,
+        // which is not the user turning back to portrait, and the next app keeps the lock's way
+        return rotation == RotationPolicy.getNaturalRotation()
+                && !(!mHomeRotationEnabled && isHomeOnTop());
+    }
+
+    private static boolean isHomeOnTop() {
+        final ActivityManager.RunningTaskInfo top =
+                ActivityManagerWrapper.getInstance().getRunningTask();
+        return top != null && top.getActivityType() == ACTIVITY_TYPE_HOME;
     }
 
     private void rescheduleRotationTimeout(final boolean reasonHover) {
