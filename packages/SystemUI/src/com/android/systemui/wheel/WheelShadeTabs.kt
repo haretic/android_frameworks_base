@@ -60,7 +60,9 @@ fun WheelShadeTabs(
                 .clip(RoundedCornerShape(24.dp))
                 .background(colors.surfaceContainerHigh)
                 .focusProperties { canFocus = shown }
-                .thenIf(onSwitch != null) {
+                // Not clickable either while out of sight: the shade's wheel navigator takes
+                // what is clickable as a stop, and put its ring round the tabs while they were hidden
+                .thenIf(onSwitch != null && shown) {
                     Modifier.clickable(onClickLabel = switchLabel) { onSwitch?.invoke() }
                 }
                 .clearAndSetSemantics {
