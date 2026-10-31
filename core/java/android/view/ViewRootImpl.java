@@ -9880,6 +9880,12 @@ public final class ViewRootImpl implements ViewParent,
                         if (v.requestFocus(direction, mTempRect)) {
                             if (isWheelFocusEnabled()) {
                                 scrollWheelFocusIntoSight(v);
+                                // Off a text field, as from a search's query to its results:
+                                // the wheel is going through the page, not typing, and the
+                                // keyboard goes, the rows it covered coming into sight
+                                if (focused.onCheckIsTextEditor() && !v.onCheckIsTextEditor()) {
+                                    getInsetsController().hide(WindowInsets.Type.ime());
+                                }
                             }
                             boolean isFastScrolling = event.getRepeatCount() > 0;
                             playSoundEffect(
