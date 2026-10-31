@@ -32,6 +32,9 @@
         <item name="android:minHeight">?android:attr/listPreferredItemHeight</item>
         <item name="android:paddingStart">?android:attr/listPreferredItemPaddingStart</item>
         <item name="android:paddingEnd">?android:attr/listPreferredItemPaddingEnd</item>
+        <!-- A footer ending its page, as most do: its last line a little clear of the screen's
+             edge, not on it -->
+        <item name="android:paddingBottom">@dimen/settingslib_expressive_space_extrasmall6</item>
         <item name="android:background">?android:attr/selectableItemBackground</item>
         <item name="android:orientation">vertical</item>
         <item name="android:clipToPadding">false</item>
