@@ -804,7 +804,7 @@ constructor(
                             WheelShadeTabs(
                                 controls = false,
                                 onSwitch = wheelSwitchTab(),
-                                shown = viewModel.isQsVisibleAndAnyShadeExpanded,
+                                shown = viewModel.wheelTabsShown,
                             )
                         }
                         Media()
@@ -854,7 +854,7 @@ constructor(
                     WheelShadeTabs(
                         controls = true,
                         onSwitch = wheelSwitchTab(),
-                        shown = viewModel.isQsVisibleAndAnyShadeExpanded,
+                        shown = viewModel.wheelTabsShown,
                     )
                 }
             }

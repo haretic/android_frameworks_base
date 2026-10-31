@@ -155,6 +155,14 @@ constructor(
     val isQsVisibleAndAnyShadeExpanded: Boolean
         get() = isPanelExpanded && isQsVisible
 
+    /**
+     * Whether the wheel shade's tabs are a stop: the shade out and in sight, never over the lock
+     * screen's own collapsed shade, which counts as expanded and shows QS for a moment as the
+     * screen wakes; the wheel's first step then stopped on the tabs, out of sight.
+     */
+    val wheelTabsShown: Boolean
+        get() = isQsVisibleAndAnyShadeExpanded && statusBarState != StatusBarState.KEYGUARD
+
     // This can only be negative if undefined (in which case it will be -1f), else it will be
     // in [0, 1]. In some cases, it could be set back to -1f internally to indicate that it's
     // different to every value in [0, 1].
