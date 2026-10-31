@@ -6547,8 +6547,25 @@ public final class ViewRootImpl implements ViewParent,
                         ? Math.max(WHEEL_FOCUS_RADIUS_DP * density, mWheelFocusCardRadius - out)
                         : square ? ring.height() / 2 : WHEEL_FOCUS_RADIUS_DP * density,
                 ring.height() / 2);
+        // A dark line inside the ring: a button filled to its edge in the ring's light colour,
+        // as Messaging's Start chat, keeps a ring that shows, and on a dark card it is all but
+        // the card's own colour
+        if (mWheelFocusEdgePaint == null) {
+            mWheelFocusEdgePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            mWheelFocusEdgePaint.setStyle(Paint.Style.STROKE);
+        }
+        mWheelFocusEdgePaint.setColor(mContext.getColor(android.R.color.system_neutral1_900));
+        final float edgeWidth = WHEEL_FOCUS_EDGE_DP * density;
+        mWheelFocusEdgePaint.setStrokeWidth(edgeWidth);
+        final RectF edge = new RectF(ring);
+        final float in = (width + edgeWidth) / 2;
+        edge.inset(in, in);
+        final float edgeRadius = Math.max(0, radius - in);
         if (!(canvas instanceof RecordingCanvas recording)) {
             canvas.drawRoundRect(ring, radius, radius, mWheelFocusPaint);
+            if (!edge.isEmpty()) {
+                canvas.drawRoundRect(edge, edgeRadius, edgeRadius, mWheelFocusEdgePaint);
+            }
             return;
         }
         // In a node of its own that force dark leaves alone: a light app the system darkens, as
@@ -6562,6 +6579,9 @@ public final class ViewRootImpl implements ViewParent,
         final RecordingCanvas ringCanvas = mWheelFocusNode.beginRecording(mWidth, mHeight);
         try {
             ringCanvas.drawRoundRect(ring, radius, radius, mWheelFocusPaint);
+            if (!edge.isEmpty()) {
+                ringCanvas.drawRoundRect(edge, edgeRadius, edgeRadius, mWheelFocusEdgePaint);
+            }
         } finally {
             mWheelFocusNode.endRecording();
         }
@@ -13201,6 +13221,8 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     private static final float WHEEL_FOCUS_WIDTH_DP = 3;
+    /** The dark line inside the ring, which keeps it apart from a light fill. */
+    private static final float WHEEL_FOCUS_EDGE_DP = 1.5f;
     private static final float WHEEL_FOCUS_RADIUS_DP = 18;
     /**
      * How long the first focus waits for the page's rows to come past the back arrow, as
@@ -13216,6 +13238,7 @@ public final class ViewRootImpl implements ViewParent,
     private View mWheelPassThroughChecked;
     private boolean mWheelPassThrough;
     private Paint mWheelFocusPaint;
+    private Paint mWheelFocusEdgePaint;
     private RenderNode mWheelFocusNode;
     private boolean mWheelFocusEnabled;
     private int mWheelFocusConfigSeq = -1;
