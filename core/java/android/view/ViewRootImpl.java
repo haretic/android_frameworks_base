@@ -6629,12 +6629,18 @@ public final class ViewRootImpl implements ViewParent,
         final int inset = (int) Math.ceil(
                 WHEEL_FOCUS_WIDTH_DP * mContext.getResources().getDisplayMetrics().density);
         // A text field whose text runs to its edge, as a browser's address: the ring goes round
-        // it outside, not over its first letter, as far as the window has room
+        // it outside, not over its first letter, where the window has room for all of it; one
+        // as wide as the window, as Calculator's display, has it inside, not cut at the sides
         if (focused instanceof android.widget.EditText field
                 && Math.min(field.getTotalPaddingLeft(), field.getTotalPaddingRight())
                         < inset * 2) {
-            bounds.inset(-inset, -inset);
-            return bounds.intersect(0, 0, mWidth, mHeight);
+            final Rect outside = new Rect(bounds);
+            outside.inset(-inset, -inset);
+            if (outside.left >= 0 && outside.top >= 0 && outside.right <= mWidth
+                    && outside.bottom <= mHeight) {
+                bounds.set(outside);
+                return true;
+            }
         }
         bounds.inset(inset, inset);
         return !bounds.isEmpty();
