@@ -93,13 +93,13 @@ public class NotificationActionListLayout extends LinearLayout {
             MarginLayoutParams lp = (MarginLayoutParams) child.getLayoutParams();
             child.measure(
                     MeasureSpec.makeMeasureSpec(
-                            Math.max(0, cellWidth - lp.leftMargin - lp.rightMargin),
+                            cellWidth,
                             MeasureSpec.EXACTLY),
                     MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
             if (child.getMeasuredHeight() < getActionRowHeight()) {
                 child.measure(
                         MeasureSpec.makeMeasureSpec(
-                                Math.max(0, cellWidth - lp.leftMargin - lp.rightMargin),
+                                cellWidth,
                                 MeasureSpec.EXACTLY),
                         MeasureSpec.makeMeasureSpec(getActionRowHeight(), MeasureSpec.EXACTLY));
             }
@@ -130,7 +130,9 @@ public class NotificationActionListLayout extends LinearLayout {
             int column = at++ % mButtonColumns;
             if (isLayoutRtl()) column = mButtonColumns - 1 - column;
             MarginLayoutParams lp = (MarginLayoutParams) child.getLayoutParams();
-            int left = mPaddingLeft + column * (cellWidth + gap) + lp.leftMargin;
+            // Each button fills its cell: the side margins are the stock row's, as the first
+            // action's start margin, which in a list set it in from the ones below it
+            int left = mPaddingLeft + column * (cellWidth + gap);
             int childTop = top + lp.topMargin;
             child.layout(
                     left,
