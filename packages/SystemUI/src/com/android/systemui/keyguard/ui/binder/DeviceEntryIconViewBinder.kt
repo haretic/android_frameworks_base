@@ -209,6 +209,9 @@ object DeviceEntryIconViewBinder {
                             .collect { hint ->
                                 view.accessibilityHintType = hint
                                 if (hint != DeviceEntryIconView.AccessibilityHintType.NONE) {
+                                    // Focusable again after a moment with no hint, as while the
+                                    // screen wakes: the wheel's first stop was then the date row
+                                    view.focusable = View.FOCUSABLE_AUTO
                                     view.setOnClickListener {
                                         if (Flags.msdlFeedback()) {
                                             val token =
