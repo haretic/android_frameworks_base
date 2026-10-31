@@ -6670,6 +6670,7 @@ public final class ViewRootImpl implements ViewParent,
             return true;
         }
         View focused = mView.findFocus();
+        logWheelFocus("first stop from", focused);
         if (focused == null) {
             // Nothing took the first focus, as a page whose views come in after it opened: the
             // default focus again, till one does
@@ -6682,6 +6683,17 @@ public final class ViewRootImpl implements ViewParent,
             // keypad button before its empty favourites' Add favourite shows: the topmost again
             // as the page comes in, until the wheel turns or the focus is moved elsewhere
             if (focused == null || focused != mWheelOverPick || !mWheelOverList.isShown()) {
+                mWheelOverList = null;
+                mWheelOverPick = null;
+                return true;
+            }
+            if (!isDeadWheelList(mWheelOverList)) {
+                // Its rows came in, as the buttons of Contacts' empty state in its scroll view:
+                // the first focus is in it, not on what lies over it, as a floating add button
+                if (!isInside(focused, mWheelOverList)) {
+                    mWheelOverList.requestFocus(View.FOCUS_DOWN);
+                }
+                logWheelFocus("list came in, first stop", mView.findFocus());
                 mWheelOverList = null;
                 mWheelOverPick = null;
                 return true;
@@ -6892,6 +6904,16 @@ public final class ViewRootImpl implements ViewParent,
             end = before;
         }
         return end;
+    }
+
+    /**
+     * Logs the wheel's first stop with debug.r1.wheel_focus set: there is no debugger on the
+     * gadget to watch the focus with.
+     */
+    private void logWheelFocus(String what, View view) {
+        if (SystemProperties.getBoolean("debug.r1.wheel_focus", false)) {
+            Log.d(mTag, "wheel focus: " + what + " " + view);
+        }
     }
 
     /** Whether {@code view} is a toolbar's button, as its back arrow. */
