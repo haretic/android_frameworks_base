@@ -574,14 +574,20 @@ public class ScrollView extends FrameLayout {
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
             switch (event.getKeyCode()) {
                 case KeyEvent.KEYCODE_DPAD_UP:
-                    if (!event.isAltPressed()) {
+                    if (!event.isAltPressed() && isWheelFocusStep(View.FOCUS_UP)) {
+                        // The wheel's: its own steps go on from here
+                        return false;
+                    } else if (!event.isAltPressed()) {
                         handled = arrowScroll(View.FOCUS_UP);
                     } else {
                         handled = fullScroll(View.FOCUS_UP);
                     }
                     break;
                 case KeyEvent.KEYCODE_DPAD_DOWN:
-                    if (!event.isAltPressed()) {
+                    if (!event.isAltPressed() && isWheelFocusStep(View.FOCUS_DOWN)) {
+                        // The wheel's: its own steps go on from here
+                        return false;
+                    } else if (!event.isAltPressed()) {
                         handled = arrowScroll(View.FOCUS_DOWN);
                     } else {
                         handled = fullScroll(View.FOCUS_DOWN);
@@ -1394,6 +1400,26 @@ public class ScrollView extends FrameLayout {
      *                  pressed
      * @return True if we consumed the event, false otherwise
      */
+    /**
+     * Whether an arrow key the way {@code direction} goes is a wheel's step from the focus here
+     * onto another view {@link #arrowScroll} would bring in: one left to the window's own steps
+     * under the wheel, as along a keypad's rows, not straight down its columns. With none in
+     * reach, the arrow scrolls, the page's text between coming into sight.
+     */
+    private boolean isWheelFocusStep(int direction) {
+        if (isInTouchMode() || !mContext.getResources().getBoolean(R.bool.config_wheelFocus)) {
+            return false;
+        }
+        final View currentFocused = findFocus();
+        if (currentFocused == null || currentFocused == this) {
+            return false;
+        }
+        final View nextFocused = FocusFinder.getInstance().findNextFocus(this, currentFocused,
+                direction);
+        return nextFocused != null
+                && isWithinDeltaOfScreen(nextFocused, getMaxScrollAmount(), getHeight());
+    }
+
     public boolean arrowScroll(int direction) {
 
         View currentFocused = findFocus();
