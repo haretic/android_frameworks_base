@@ -110,10 +110,20 @@ public class NumericTextView extends TextView {
      * @param value the value to display
      */
     public final void setValue(int value) {
+        final boolean untyped = isFocused() && mCount == 0;
+        if (untyped) {
+            // Set while focused with no digits typed, as by the wheel's steps in the time picker:
+            // the value the blur keeps, not the one it had when it took the focus
+            mPreviousValue = value;
+        }
         if (mValue != value) {
             mValue = value;
 
             updateDisplayedValue();
+        }
+        if (untyped) {
+            // And the text the blur puts back
+            setHint(getText());
         }
     }
 
