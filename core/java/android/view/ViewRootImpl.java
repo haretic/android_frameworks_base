@@ -7400,11 +7400,24 @@ public final class ViewRootImpl implements ViewParent,
     private static boolean isDeadWheelList(View view) {
         // An AbsListView with nothing in its adapter only: one that moves its selection itself,
         // as a dialog's choices, has rows that take no focus
+        // A pager round such a list, as Messaging's contacts with none yet, is one too
         return view instanceof ViewGroup group && (isWheelScroller(view) || isRecyclerView(view)
+                        || isPager(view)
                         || view instanceof android.widget.AbsListView list
                                 && list.getCount() == 0)
                 && !hasFocusableInside(group)
                 && !view.canScrollVertically(1) && !view.canScrollVertically(-1);
+    }
+
+    /** An androidx or support ViewPager, its pages side by side. */
+    private static boolean isPager(View view) {
+        for (Class<?> c = view.getClass(); c != null && c != ViewGroup.class;
+                c = c.getSuperclass()) {
+            if (c.getName().endsWith(".ViewPager")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -9775,6 +9788,11 @@ public final class ViewRootImpl implements ViewParent,
                         final View over = wheelStepOverList(v, direction);
                         if (over != null && over != focused) {
                             v = over;
+                        } else if (over == null) {
+                            // Nothing over it nor beyond, as under Messaging's contact tabs
+                            // with no contacts: no stop there at all, the step goes on along
+                            // the row it came from instead
+                            v = null;
                         }
                     }
                     if ((v == null || v == focused) && isWheelFocusEnabled()
