@@ -7582,6 +7582,45 @@ public final class ViewRootImpl implements ViewParent,
         return to.top < box.bottom + reach && to.bottom > box.top - reach;
     }
 
+    /**
+     * Whether {@code view} is plain text, focusable only to be read: a stock TextView, no field,
+     * link nor selectable text, with nothing to do when pressed.
+     */
+    private static boolean isInertWheelText(View view) {
+        final String name = view.getClass().getName();
+        if (!(view instanceof android.widget.TextView text)
+                || !(name.equals("android.widget.TextView")
+                        || name.endsWith(".AppCompatTextView")
+                        || name.endsWith(".MaterialTextView"))) {
+            return false;
+        }
+        return !text.onCheckIsTextEditor() && !text.isTextSelectable()
+                && text.getMovementMethod() == null
+                && !view.isClickable() && !view.isLongClickable() && !view.isContextClickable()
+                && !view.hasOnClickListeners()
+                && !view.hasOnKeyListener();
+    }
+
+    /**
+     * With only plain text the way the wheel turned, scrolls the nearest scroller round
+     * {@code focused} that goes that way half its height, as its own arrow keys would, the
+     * text coming into sight with the focus left where it is.
+     */
+    private static boolean scrollWheelPastText(View focused, int direction) {
+        final int dir = direction == View.FOCUS_UP ? -1 : direction == View.FOCUS_DOWN ? 1 : 0;
+        if (dir == 0) {
+            return false;
+        }
+        for (ViewParent p = focused.getParent(); p instanceof ViewGroup group;
+                p = p.getParent()) {
+            if (group.canScrollVertically(dir)) {
+                group.scrollBy(0, dir * group.getHeight() / 2);
+                return true;
+            }
+        }
+        return false;
+    }
+
     private boolean isWheelFocusEnabled() {
         final int seq = mContext.getResources().getConfiguration().seq;
         if (seq != mWheelFocusConfigSeq) {
@@ -9914,6 +9953,27 @@ public final class ViewRootImpl implements ViewParent,
                                 (ViewGroup) v, null, direction);
                         if (inner != null && inner != v) {
                             v = inner;
+                        }
+                    }
+                    if (v != null && v != focused && isWheelFocusEnabled()
+                            && !mAttachInfo.mInTouchMode) {
+                        // Plain text made focusable to be read, as Notification history's turned
+                        // off: nothing to press, no stop, the step goes on past it, or with
+                        // nothing beyond, the page scrolls, the text coming into sight
+                        boolean skippedText = false;
+                        for (int i = 0; i < 16 && v != null && v != focused
+                                && isInertWheelText(v); i++) {
+                            skippedText = true;
+                            v = v.focusSearch(direction);
+                        }
+                        if (v != null && isInertWheelText(v)) {
+                            v = null;
+                        }
+                        if (v == null && skippedText) {
+                            // Scrolled, or at the page's end, the step taken: not handed on to
+                            // a scroller that would focus the text itself
+                            scrollWheelPastText(focused, direction);
+                            return true;
                         }
                     }
                     if (v != null && v != focused && isWheelFocusEnabled()) {
