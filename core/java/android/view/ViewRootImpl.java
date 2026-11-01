@@ -7538,6 +7538,50 @@ public final class ViewRootImpl implements ViewParent,
         return false;
     }
 
+    /**
+     * Whether {@code event} is a wheel's step from the focus in an androidx NestedScrollView,
+     * as round a Wi-Fi dialog's fields, onto another view in it the scroller would bring in. The
+     * scroller moves the focus itself, straight down, not along a row, past the window's steps:
+     * past a text field without the keyboard going, onto buttons under it.
+     */
+    private boolean isWheelStepInNestedScroller(KeyEvent event) {
+        final int code = event.getKeyCode();
+        if (event.getAction() != KeyEvent.ACTION_DOWN
+                || (code != KeyEvent.KEYCODE_DPAD_DOWN && code != KeyEvent.KEYCODE_DPAD_UP)
+                || !event.hasNoModifiers() || mAttachInfo.mInTouchMode || mView == null
+                || !isWheelFocusEnabled()) {
+            return false;
+        }
+        final View focused = mView.findFocus();
+        if (focused == null) {
+            return false;
+        }
+        ViewGroup scroller = null;
+        for (ViewParent p = focused.getParent(); p instanceof ViewGroup group;
+                p = p.getParent()) {
+            if (group.getClass().getName().endsWith(".NestedScrollView")) {
+                scroller = group;
+                break;
+            }
+        }
+        if (scroller == null) {
+            return false;
+        }
+        final int direction = code == KeyEvent.KEYCODE_DPAD_DOWN
+                ? View.FOCUS_DOWN : View.FOCUS_UP;
+        final View next = FocusFinder.getInstance().findNextFocus(scroller, focused, direction);
+        if (next == null) {
+            return false;
+        }
+        // In the scroller's reach, as its arrowScroll's: half its height past its edge
+        final Rect box = new Rect();
+        final Rect to = new Rect();
+        scroller.getBoundsOnScreen(box, true);
+        next.getBoundsOnScreen(to, true);
+        final int reach = box.height() / 2;
+        return to.top < box.bottom + reach && to.bottom > box.top - reach;
+    }
+
     private boolean isWheelFocusEnabled() {
         final int seq = mContext.getResources().getConfiguration().seq;
         if (seq != mWheelFocusConfigSeq) {
@@ -10003,6 +10047,14 @@ public final class ViewRootImpl implements ViewParent,
 
             if (mUnhandledKeyManager.preViewDispatch(event)) {
                 return FINISH_HANDLED;
+            }
+
+            if (isWheelStepInNestedScroller(event)) {
+                // An app's own scroller would take the wheel's step itself, straight down: the
+                // focused view has its say, then the step is the wheel's, as in a ScrollView
+                if (mView.findFocus().dispatchKeyEvent(event) || performFocusNavigation(event)) {
+                    return FINISH_HANDLED;
+                }
             }
 
             // Deliver the key to the view hierarchy.
