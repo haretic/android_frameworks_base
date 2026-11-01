@@ -33,6 +33,7 @@ import android.text.style.TtsSpan;
 import android.util.AttributeSet;
 import android.util.StateSet;
 import android.view.HapticFeedbackConstants;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
@@ -148,6 +149,7 @@ class TimePickerClockDelegate extends TimePicker.AbstractTimePickerDelegate {
         mHourView = (NumericTextView) mainView.findViewById(R.id.hours);
         mHourView.setOnClickListener(mClickListener);
         mHourView.setOnFocusChangeListener(mFocusListener);
+        mHourView.setOnKeyListener(mWheelKeyListener);
         mHourView.setOnDigitEnteredListener(mDigitEnteredListener);
         mHourView.setAccessibilityDelegate(
                 new ClickActionDelegate(context, R.string.select_hours));
@@ -156,6 +158,7 @@ class TimePickerClockDelegate extends TimePicker.AbstractTimePickerDelegate {
         mMinuteView = (NumericTextView) mainView.findViewById(R.id.minutes);
         mMinuteView.setOnClickListener(mClickListener);
         mMinuteView.setOnFocusChangeListener(mFocusListener);
+        mMinuteView.setOnKeyListener(mWheelKeyListener);
         mMinuteView.setOnDigitEnteredListener(mDigitEnteredListener);
         mMinuteView.setAccessibilityDelegate(
                 new ClickActionDelegate(context, R.string.select_minutes));
@@ -993,6 +996,9 @@ class TimePickerClockDelegate extends TimePicker.AbstractTimePickerDelegate {
     private final View.OnFocusChangeListener mFocusListener = new View.OnFocusChangeListener() {
         @Override
         public void onFocusChange(View v, boolean focused) {
+            if (!focused && v == mWheelGrabbed) {
+                setWheelGrabbed(null);
+            }
             if (focused) {
                 switch (v.getId()) {
                     case R.id.am_label:
@@ -1016,6 +1022,83 @@ class TimePickerClockDelegate extends TimePicker.AbstractTimePickerDelegate {
             }
         }
     };
+
+    /** How long a field the side button grabbed waits for the wheel before letting go. */
+    private static final long WHEEL_GRAB_TIMEOUT_MS = 4000;
+    private static final long WHEEL_GRAB_FAST_STEP_MS = 60;
+    /** Minutes a step while the wheel spins. */
+    private static final int WHEEL_GRAB_FAST_MINUTES = 5;
+
+    /** The hour or the minute the wheel has grabbed, or null. */
+    private View mWheelGrabbed;
+    private long mWheelLastStep;
+    private final Runnable mWheelLetGo = () -> setWheelGrabbed(null);
+
+    /**
+     * The wheel UI's time (config_wheelFocus), as its sliders in AbsSeekBar: the side button's
+     * press (Enter) on the hour or the minute grabs it, the clock face showing it, the wheel's
+     * steps (up and down) then set it, an hour or a minute a step, five minutes while it spins,
+     * and a press, a pause or the focus moving on lets go. Without it the wheel only stepped past
+     * the time to OK, the clock face being for touch.
+     */
+    private final View.OnKeyListener mWheelKeyListener = new View.OnKeyListener() {
+        @Override
+        public boolean onKey(View v, int keyCode, KeyEvent event) {
+            if (!v.getResources().getBoolean(R.bool.config_wheelFocus)) {
+                return false;
+            }
+            final boolean confirm = KeyEvent.isConfirmKey(keyCode);
+            final boolean step = keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                    || keyCode == KeyEvent.KEYCODE_DPAD_UP;
+            if (event.getAction() != KeyEvent.ACTION_DOWN) {
+                // The press's up, no click on top of the grab; a grabbed field's steps' ups
+                return confirm || step && mWheelGrabbed == v;
+            }
+            if (confirm) {
+                if (event.getRepeatCount() == 0) {
+                    setWheelGrabbed(mWheelGrabbed == v ? null : v);
+                }
+                return true;
+            }
+            if (!step || mWheelGrabbed != v) {
+                return false;
+            }
+            mDelegator.removeCallbacks(mWheelLetGo);
+            mDelegator.postDelayed(mWheelLetGo, WHEEL_GRAB_TIMEOUT_MS);
+            final long now = event.getEventTime();
+            final boolean fast = now - mWheelLastStep < WHEEL_GRAB_FAST_STEP_MS;
+            mWheelLastStep = now;
+            final int direction = keyCode == KeyEvent.KEYCODE_DPAD_DOWN ? 1 : -1;
+            if (v == mHourView) {
+                setHourInternal(Math.floorMod(mCurrentHour + direction, 24), FROM_EXTERNAL_API,
+                        true, true);
+            } else {
+                final int by = fast ? WHEEL_GRAB_FAST_MINUTES : 1;
+                setMinuteInternal(Math.floorMod(mCurrentMinute + direction * by, 60),
+                        FROM_EXTERNAL_API, true);
+            }
+            tryVibrate();
+            return true;
+        }
+    };
+
+    private void setWheelGrabbed(View field) {
+        mDelegator.removeCallbacks(mWheelLetGo);
+        if (field == mWheelGrabbed) {
+            return;
+        }
+        if (mWheelGrabbed != null) {
+            mWheelGrabbed.setPressed(false);
+        }
+        mWheelGrabbed = field;
+        if (field != null) {
+            // Pressed while the wheel has it, as a grabbed slider's thumb
+            field.setPressed(true);
+            setCurrentItemShowing(field == mHourView ? HOUR_INDEX : MINUTE_INDEX, true);
+            mDelegator.postDelayed(mWheelLetGo, WHEEL_GRAB_TIMEOUT_MS);
+            Toast.makeText(mContext, R.string.wheel_slider_grabbed, Toast.LENGTH_SHORT).show();
+        }
+    }
 
     private final View.OnClickListener mClickListener = new View.OnClickListener() {
         @Override
