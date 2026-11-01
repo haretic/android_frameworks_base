@@ -9787,6 +9787,7 @@ public final class ViewRootImpl implements ViewParent,
                         && ViewRootImpl.this.mAccessibilityFocusedHost != null) {
                     focused = ViewRootImpl.this.mAccessibilityFocusedHost;
                 }
+                logWheelFocus("navigation " + direction + " from", focused);
                 if (focused != null) {
                     mAttachInfo.mNextFocusLooped = false;
                     // The wheel on a container an app focused, as a file browser's whole window:
@@ -9835,6 +9836,7 @@ public final class ViewRootImpl implements ViewParent,
                         }
                     }
                     View v = focused.focusSearch(direction);
+                    logWheelFocus("step search from " + focused + " found", v);
                     if (v != null && v != focused && isWheelFocusEnabled()
                             && !mAttachInfo.mInTouchMode
                             && (direction == View.FOCUS_DOWN || direction == View.FOCUS_UP)) {
@@ -9999,6 +10001,7 @@ public final class ViewRootImpl implements ViewParent,
                             ((ViewGroup) mView).offsetRectIntoDescendantCoords(
                                     v, mTempRect);
                         }
+                        logWheelFocus("step to", v);
                         if (v.requestFocus(direction, mTempRect)) {
                             if (isWheelFocusEnabled()) {
                                 scrollWheelFocusIntoSight(v);
