@@ -141,6 +141,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -1041,6 +1042,12 @@ private fun LazyGridItemScope.TileGridCell(
                     contentDescription = cell.tile.label.text
 
                     if (isSelectable) {
+                        // A press selects it, as a tap: a control to the wheel, which walks
+                        // the window's clickable nodes, and to a screen reader
+                        onClick(label = toggleSelectionLabel) {
+                            selectionState.onTap(cell.tile.tileSpec)
+                            true
+                        }
                         val actions =
                             mutableListOf(
                                 CustomAccessibilityAction(togglePlacementModeLabel) {
