@@ -142,6 +142,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -1046,6 +1047,12 @@ private fun LazyGridItemScope.TileGridCell(
                         // the window's clickable nodes, and to a screen reader
                         onClick(label = toggleSelectionLabel) {
                             selectionState.onTap(cell.tile.tileSpec)
+                            true
+                        }
+                        // A hold picks it up to move, as a double tap: a press on another tile
+                        // then puts it there
+                        onLongClick(label = togglePlacementModeLabel) {
+                            selectionState.togglePlacementMode(cell.tile.tileSpec)
                             true
                         }
                         val actions =
