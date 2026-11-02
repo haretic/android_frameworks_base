@@ -116,7 +116,9 @@ public class NumericTextView extends TextView {
             // the value the blur keeps, not the one it had when it took the focus
             mPreviousValue = value;
         }
-        if (mValue != value) {
+        // Focused, the value reads 0 and the text is empty until a digit is typed: a value of 0
+        // set then is shown all the same
+        if (mValue != value || untyped) {
             mValue = value;
 
             updateDisplayedValue();
