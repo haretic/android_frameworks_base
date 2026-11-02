@@ -1036,6 +1036,10 @@ public class NumberPicker extends LinearLayout {
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         final int keyCode = event.getKeyCode();
+        if (mHasSelectorWheel && isEnabled()
+                && getContext().getResources().getBoolean(R.bool.config_wheelFocus)) {
+            return dispatchWheelKeyEvent(event) || super.dispatchKeyEvent(event);
+        }
         switch (keyCode) {
             case KeyEvent.KEYCODE_DPAD_CENTER:
             case KeyEvent.KEYCODE_ENTER:
@@ -1069,6 +1073,93 @@ public class NumberPicker extends LinearLayout {
                 }
         }
         return super.dispatchKeyEvent(event);
+    }
+
+    /** How long a picker the side button grabbed waits for the wheel before letting go. */
+    private static final long WHEEL_GRAB_TIMEOUT_MS = 4000;
+
+    private boolean mWheelGrabbed;
+    private final Runnable mWheelLetGo = () -> setWheelGrabbed(false);
+
+    /**
+     * The wheel UI's pickers (config_wheelFocus), as its sliders in AbsSeekBar: the side
+     * button's press (Enter) grabs the picker, the wheel's steps (up and down) then set it, and
+     * a press, a pause or the focus moving on lets go. Without it every step set the picker, the
+     * wheel never getting past the first, as the date picker's day, to the next or to its
+     * buttons.
+     */
+    private boolean dispatchWheelKeyEvent(KeyEvent event) {
+        final int keyCode = event.getKeyCode();
+        final boolean down = event.getAction() == KeyEvent.ACTION_DOWN;
+        if (KeyEvent.isConfirmKey(keyCode)) {
+            if (down && event.getRepeatCount() == 0) {
+                setWheelGrabbed(!mWheelGrabbed);
+            }
+            return true;
+        }
+        if (keyCode != KeyEvent.KEYCODE_DPAD_DOWN && keyCode != KeyEvent.KEYCODE_DPAD_UP) {
+            return false;
+        }
+        if (mWheelGrabbed && !hasFocus()) {
+            setWheelGrabbed(false);
+        }
+        if (!mWheelGrabbed) {
+            return false;
+        }
+        if (down) {
+            removeCallbacks(mWheelLetGo);
+            postDelayed(mWheelLetGo, WHEEL_GRAB_TIMEOUT_MS);
+            // Set at once, not by changeValueByOne's scroll, which hides the input text and so
+            // drops its focus and ring, and drops the steps of a wheel turned faster than it.
+            // Nor requestFocus, as without the wheel: the focus stays put.
+            setValueInternal(mValue + (keyCode == KeyEvent.KEYCODE_DPAD_DOWN ? 1 : -1), true);
+        }
+        return true;
+    }
+
+    /** The wheel UI's, its focus on its input text. */
+    private boolean isWheelInputStop() {
+        return mHasSelectorWheel && !isInTouchMode()
+                && getContext().getResources().getBoolean(R.bool.config_wheelFocus);
+    }
+
+    /**
+     * The wheel's stop is the input text alone, which shows the focus ring, the picker that holds
+     * it a stop of its own before it without one: two steps a picker, the first lost.
+     */
+    @Override
+    public void addFocusables(ArrayList<View> views, int direction, int focusableMode) {
+        if (isWheelInputStop() && mInputText.getVisibility() == View.VISIBLE
+                && getDescendantFocusability() != FOCUS_BLOCK_DESCENDANTS) {
+            mInputText.addFocusables(views, direction, focusableMode);
+            return;
+        }
+        super.addFocusables(views, direction, focusableMode);
+    }
+
+    @Override
+    protected void onFocusChanged(boolean gainFocus, int direction, Rect previouslyFocusedRect) {
+        super.onFocusChanged(gainFocus, direction, previouslyFocusedRect);
+        // The picker itself the wheel's stop, as its input text was hidden by a scroll: the text
+        // back, the focus on it
+        if (gainFocus && isWheelInputStop() && mInputText.getVisibility() != View.VISIBLE) {
+            mInputText.setVisibility(View.VISIBLE);
+            mInputText.requestFocus();
+        }
+    }
+
+    private void setWheelGrabbed(boolean grabbed) {
+        removeCallbacks(mWheelLetGo);
+        if (grabbed == mWheelGrabbed) {
+            return;
+        }
+        mWheelGrabbed = grabbed;
+        // Pressed while the wheel has it, as a grabbed slider's thumb
+        setPressed(grabbed);
+        if (grabbed) {
+            postDelayed(mWheelLetGo, WHEEL_GRAB_TIMEOUT_MS);
+            Toast.makeText(getContext(), R.string.wheel_slider_grabbed, Toast.LENGTH_SHORT).show();
+        }
     }
 
     @Override
@@ -1614,6 +1705,7 @@ public class NumberPicker extends LinearLayout {
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         removeAllCallbacks();
+        setWheelGrabbed(false);
     }
 
     @CallSuper
