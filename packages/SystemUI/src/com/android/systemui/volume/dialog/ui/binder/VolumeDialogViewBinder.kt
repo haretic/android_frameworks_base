@@ -49,6 +49,7 @@ import com.android.systemui.volume.dialog.ui.utils.JankListenerFactory
 import com.android.systemui.volume.dialog.ui.utils.suspendAnimate
 import com.android.systemui.volume.dialog.ui.viewmodel.VolumeDialogViewModel
 import com.android.systemui.volume.dialog.utils.VolumeTracer
+import com.android.systemui.wheel.WheelSystemWindows
 import javax.inject.Inject
 import kotlin.math.ceil
 import kotlinx.coroutines.CoroutineScope
@@ -217,6 +218,7 @@ constructor(
             .onEach {
                 when (it) {
                     is VolumeDialogVisibilityModel.Visible -> {
+                        WheelSystemWindows.setVolumeShowing(true)
                         tracer.traceVisibilityEnd(it)
                         junkListener?.let(animation::removeUpdateListener)
                         junkListener =
@@ -225,6 +227,7 @@ constructor(
                     }
 
                     is VolumeDialogVisibilityModel.Dismissed -> {
+                        WheelSystemWindows.setVolumeShowing(false)
                         tracer.traceVisibilityEnd(it)
                         junkListener?.let(animation::removeUpdateListener)
                         junkListener =

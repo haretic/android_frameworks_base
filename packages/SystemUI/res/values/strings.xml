@@ -5070,6 +5070,8 @@
 
     <!-- Wheel taskbar (WheelTaskbar): its buttons, also read out by TalkBack [CHAR LIMIT=24] -->
     <string name="wheel_taskbar_home">Home</string>
+    <!-- The wheel taskbar's button that goes back in the app under it [CHAR LIMIT=20] -->
+    <string name="wheel_taskbar_back">Back</string>
     <!-- Wheel taskbar: button and list of all apps, A to Z [CHAR LIMIT=24] -->
     <string name="wheel_taskbar_drawer">All apps</string>
     <!-- Wheel taskbar: label of the app in front [CHAR LIMIT=32] -->

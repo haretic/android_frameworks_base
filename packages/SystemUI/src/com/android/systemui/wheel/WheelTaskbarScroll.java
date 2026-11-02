@@ -11,6 +11,7 @@ import android.graphics.Rect;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.HorizontalScrollView;
+import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import androidx.dynamicanimation.animation.FloatPropertyCompat;
 import androidx.dynamicanimation.animation.SpringAnimation;
@@ -177,8 +178,19 @@ final class WheelTaskbarScroll extends ScrollView implements WheelTaskbarGlides 
      * where they are. The whole room when the list fits.
      */
     static int peekEnd(ViewGroup scroll, int room, boolean across) {
-        if (scroll.getChildCount() == 0 || !(scroll.getChildAt(0) instanceof ViewGroup column)) {
+        if (scroll.getChildCount() == 0 || !(scroll.getChildAt(0) instanceof ViewGroup content)) {
             return room;
+        }
+        // The rows: the content itself, or the column in it over a focus light as big as it, as
+        // a list's are; the light no row to end in
+        ViewGroup column = content;
+        if (!(content instanceof LinearLayout)) {
+            for (int i = 0; i < content.getChildCount(); i++) {
+                if (content.getChildAt(i) instanceof LinearLayout rows) {
+                    column = rows;
+                    break;
+                }
+            }
         }
         if ((across ? column.getMeasuredWidth() : column.getMeasuredHeight()) <= room) {
             return room;

@@ -20,6 +20,7 @@ import java.util.List;
  */
 final class WheelTaskbarSettings {
 
+    static final String BUTTON_BACK = "back";
     static final String BUTTON_HOME = "home";
     static final String BUTTON_DRAWER = "drawer";
     static final String BUTTON_APPS = "apps";
@@ -27,7 +28,8 @@ final class WheelTaskbarSettings {
     static final String BUTTON_MODE = "mode";
     static final String BUTTON_POWER = "power";
     private static final String[] BUTTONS = {
-        BUTTON_HOME, BUTTON_DRAWER, BUTTON_APPS, BUTTON_NOTIFICATIONS, BUTTON_MODE, BUTTON_POWER,
+        BUTTON_BACK, BUTTON_HOME, BUTTON_DRAWER, BUTTON_APPS, BUTTON_NOTIFICATIONS, BUTTON_MODE,
+        BUTTON_POWER,
     };
 
     /** The screen's edges, a quarter turn apart the way the wheel goes as the screen turns. */
@@ -53,6 +55,8 @@ final class WheelTaskbarSettings {
     /** 0: stays open. */
     long timeoutMs = 3000;
     boolean labels = true;
+    /** The Power button shows its options in the bar when the highlight rests on it. */
+    boolean powerLinger = true;
     /** 1 full, 0.5 quick, 0 none. */
     float animation = 1f;
     int size = 1;
@@ -123,6 +127,8 @@ final class WheelTaskbarSettings {
         timeoutMs = 1000L * Math.max(0, getInt(resolver,
                 LineageSettings.Secure.WHEEL_TASKBAR_TIMEOUT, 3, userId));
         labels = getInt(resolver, LineageSettings.Secure.WHEEL_TASKBAR_LABELS, 1, userId) != 0;
+        powerLinger = getInt(resolver, LineageSettings.Secure.WHEEL_TASKBAR_POWER_LINGER, 1,
+                userId) != 0;
         final int animations = getInt(resolver, LineageSettings.Secure.WHEEL_TASKBAR_ANIMATIONS,
                 2, userId);
         animation = animations >= 2 ? 1f : animations == 1 ? 0.5f : 0f;
