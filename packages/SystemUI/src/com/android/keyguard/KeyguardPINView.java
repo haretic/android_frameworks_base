@@ -31,11 +31,15 @@ import android.app.ActivityManager;
 import android.annotation.Nullable;
 import android.content.Context;
 import android.content.res.Configuration;
+import android.graphics.drawable.GradientDrawable;
 import android.util.AttributeSet;
 import android.util.MathUtils;
+import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.View;
 import android.view.animation.AnimationUtils;
 import android.view.animation.Interpolator;
+import android.widget.TextView;
 
 import androidx.constraintlayout.motion.widget.MotionLayout;
 import androidx.constraintlayout.widget.ConstraintLayout;
@@ -70,6 +74,10 @@ public class KeyguardPINView extends KeyguardPinBasedInputView {
     @Nullable private WheelPinDrum mWheelDrum;
     @Nullable private WheelCombinationDial mWheelDial;
     private final List<View> mWheelHiddenKeys = new ArrayList<>();
+    /** For touch: the number keys in place of the wheel's pad (showTouchKeypad). */
+    @Nullable private TextView mTouchKeypadButton;
+    /** The number keys showing for touch, the wheel's pad put away. */
+    private boolean mTouchKeypad;
     private int mDisappearYTranslation;
     private View[][] mViews;
     private int mYTrans;
@@ -343,7 +351,11 @@ public class KeyguardPINView extends KeyguardPinBasedInputView {
             });
             addWheelPad(mWheelDrum, false);
             addWheelPad(mWheelDial, true);
+            addTouchKeypadButton();
         }
+        // Each time the bouncer shows it starts on the wheel's pad
+        mTouchKeypad = false;
+        setWheelStepInterceptor(false);
         if (mWheelDrum == null) {
             return;
         }
@@ -356,9 +368,11 @@ public class KeyguardPINView extends KeyguardPinBasedInputView {
         if (!wheel) {
             mWheelDrum.setVisibility(View.GONE);
             mWheelDial.setVisibility(View.GONE);
+            mTouchKeypadButton.setVisibility(View.GONE);
             findViewById(R.id.row0).setVisibility(View.VISIBLE);
             return;
         }
+        mTouchKeypadButton.setVisibility(View.VISIBLE);
         for (int row = 1; row < 5; row++) {
             for (View key : mViews[row]) {
                 if (key != null && key.getVisibility() == View.VISIBLE) {
@@ -390,6 +404,96 @@ public class KeyguardPINView extends KeyguardPinBasedInputView {
         // A PIN tried or cleared: the dial's pins and its digit being turned with it
         if (mWheelDial != null) {
             mWheelDial.reset();
+        }
+    }
+
+    /**
+     * A button at the pad's top corner for touch: the stock number keys in place of the wheel's
+     * pad. Touch only, no stop for the wheel, which goes on turning the pad.
+     */
+    private void addTouchKeypadButton() {
+        final Context context = getContext();
+        final TextView button = new TextView(context);
+        button.setId(R.id.wheel_pin_touch_keypad);
+        button.setText(R.string.wheel_pin_touch_keypad);
+        button.setContentDescription(context.getString(R.string.wheel_pin_touch_keypad_description));
+        button.setTextColor(context.getColor(com.android.internal.R.color.materialColorOnSurface));
+        button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        button.setGravity(Gravity.CENTER);
+        final int minSize = getResources().getDimensionPixelSize(
+                R.dimen.wheel_pin_touch_keypad_size);
+        button.setMinWidth(minSize);
+        button.setMinHeight(minSize);
+        final GradientDrawable pill = new GradientDrawable();
+        pill.setCornerRadius(minSize / 2f);
+        pill.setColor(context.getColor(
+                com.android.internal.R.color.materialColorSurfaceContainerHigh));
+        button.setBackground(pill);
+        button.setFocusable(false);
+        button.setOnClickListener(v -> showTouchKeypad());
+        final int margin = getResources().getDimensionPixelSize(
+                R.dimen.wheel_pin_touch_keypad_margin);
+        final ConstraintLayout container = findViewById(R.id.pin_container);
+        final ConstraintLayout.LayoutParams lp = new ConstraintLayout.LayoutParams(
+                ConstraintLayout.LayoutParams.WRAP_CONTENT,
+                ConstraintLayout.LayoutParams.WRAP_CONTENT);
+        lp.topToTop = ConstraintLayout.LayoutParams.PARENT_ID;
+        lp.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID;
+        lp.topMargin = margin;
+        lp.setMarginEnd(margin);
+        button.setVisibility(View.GONE);
+        container.addView(button, lp);
+        mTouchKeypadButton = button;
+        if (container instanceof MotionLayout motion) {
+            for (int id : motion.getConstraintSetIds()) {
+                final ConstraintSet set = motion.getConstraintSet(id);
+                set.constrainWidth(button.getId(), ConstraintSet.WRAP_CONTENT);
+                set.constrainHeight(button.getId(), ConstraintSet.WRAP_CONTENT);
+                set.connect(button.getId(), ConstraintSet.TOP, ConstraintSet.PARENT_ID,
+                        ConstraintSet.TOP, margin);
+                set.connect(button.getId(), ConstraintSet.END, ConstraintSet.PARENT_ID,
+                        ConstraintSet.END, margin);
+                set.setVisibilityMode(button.getId(), ConstraintSet.VISIBILITY_MODE_IGNORE);
+                motion.updateState(id, set);
+            }
+        }
+    }
+
+    /** The stock number keys for touch, the wheel's pad put away until the wheel turns. */
+    private void showTouchKeypad() {
+        mTouchKeypad = true;
+        for (View key : mWheelHiddenKeys) {
+            key.setVisibility(View.VISIBLE);
+        }
+        mWheelHiddenKeys.clear();
+        mWheelDrum.setVisibility(View.GONE);
+        mWheelDial.setVisibility(View.GONE);
+        mTouchKeypadButton.setVisibility(View.GONE);
+        findViewById(R.id.row0).setVisibility(View.VISIBLE);
+        // The wheel's next step, before a digit, brings its pad back
+        setWheelStepInterceptor(true);
+    }
+
+    /**
+     * The wheel turned on the touch keys before a digit was typed: back to the wheel's pad, the
+     * step taken. With digits typed the keys stay, the wheel going through them.
+     */
+    private boolean onWheelStepOnKeys() {
+        if (!isShown()) {
+            // The bouncer gone, the wheel goes on through the lock screen
+            setWheelStepInterceptor(false);
+            return false;
+        }
+        if (!mTouchKeypad || mPasswordEntry.getText().length() > 0) {
+            return false;
+        }
+        updateWheelDrum();
+        return true;
+    }
+
+    private void setWheelStepInterceptor(boolean set) {
+        if (getRootView() instanceof WindowRootView root) {
+            root.setWheelStepInterceptor(set ? this::onWheelStepOnKeys : null);
         }
     }
 
