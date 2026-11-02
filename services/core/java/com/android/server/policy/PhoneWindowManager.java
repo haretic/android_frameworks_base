@@ -4782,7 +4782,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     /**
      * A press of the side button in an app as its wheel mode has it (config_wheelAppModeDefaults
      * and LineageSettings.Secure.WHEEL_APP_MODES): Enter where the wheel moves through the app
-     * (app, scroll, tab, arrows, page), play or pause where it skips tracks (media). Sent to
+     * (app, scroll, tab, arrows, page) or zooms it (zoom: a camera's shutter), play or pause where it skips tracks (media). Sent to
      * the app, true. Other modes, other windows, the keyguard or the stock look: false, the
      * press does what it always does.
      */
@@ -4812,6 +4812,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             case "tab":
             case "arrows":
             case "page":
+            case "zoom":
                 keyCode = KeyEvent.KEYCODE_ENTER;
                 break;
             case "media":
