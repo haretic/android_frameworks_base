@@ -1038,7 +1038,15 @@ public class NumberPicker extends LinearLayout {
         final int keyCode = event.getKeyCode();
         if (mHasSelectorWheel && isEnabled()
                 && getContext().getResources().getBoolean(R.bool.config_wheelFocus)) {
-            return dispatchWheelKeyEvent(event) || super.dispatchKeyEvent(event);
+            if (dispatchWheelKeyEvent(event)) {
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN || keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                // Not grabbed: the step the wheel's, on to the next stop, not the input text's
+                // cursor, which a set value left at the start and so took the step after it
+                return false;
+            }
+            return super.dispatchKeyEvent(event);
         }
         switch (keyCode) {
             case KeyEvent.KEYCODE_DPAD_CENTER:
