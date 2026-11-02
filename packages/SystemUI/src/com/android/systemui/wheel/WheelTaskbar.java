@@ -24,6 +24,9 @@ import android.graphics.Region;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.StateListDrawable;
+import android.hardware.input.InputManager;
+import android.hardware.input.InputManagerGlobal;
+import android.inputmethodservice.InputMethodService;
 import android.net.Uri;
 import android.os.BatteryManager;
 import android.os.Handler;
@@ -43,6 +46,8 @@ import android.util.Log;
 import android.util.TypedValue;
 import android.view.Display;
 import android.view.Gravity;
+import android.view.InputDevice;
+import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -254,6 +259,21 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private View mNotificationsButton;
     private View mModeButton;
     private View mPowerButton;
+    /** How long the highlight rests on Power before its options show in the bar. */
+    private static final long POWER_LINGER_MS = 1000;
+    /** How long Back waits for the focus to leave the closing bar. */
+    private static final long BACK_AFTER_HIDE_MS = 120;
+    /** Power's options, the highlight having stayed on it. */
+    private final Runnable mPowerLinger = () -> {
+        if (this.mRoot != null && this.mMenus.isEmpty() && this.mPowerButton != null
+                && this.mPowerButton.isFocused()) {
+            openMenu(MENU_POWER, null);
+        }
+    };
+    /** The keyboard showing on the default display, as CommandQueue has it. */
+    private boolean mImeShowing;
+    /** The legend and the one-time hints. */
+    private final WheelGuide mGuide;
     private IStatusBarService mBarService;
     private WheelFeedback mFeedback;
     /** Whether the wheel's latest step went up, for its click. */
@@ -347,6 +367,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         mSlide = new WheelTaskbarSlide(executor);
         mWindowManager = context.getSystemService(WindowManager.class);
         mSettings = new WheelTaskbarSettings(context);
+        mGuide = new WheelGuide(context, mWindowManager, handler, userTracker::getUserId);
     }
 
     @Override
@@ -489,6 +510,9 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         mJavaAdapter.alwaysCollectFlow(mShadeInteractor.isAnyExpanded(), expanded -> {
             mShadeExpanded = expanded;
             updateMode();
+            if (expanded && isEnabled() && !mKeyguardStateController.isShowing()) {
+                mGuide.hint(WheelGuide.HINT_SHADE, R.string.wheel_hint_shade, Gravity.BOTTOM);
+            }
         });
         // The user's tuning of the wheel's feel, which the daemon applies
         final android.database.ContentObserver tuning =
@@ -686,15 +710,41 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             return;
         }
         final String mode;
+        // The mode the legend names: an app's, none while the bar, the shade or the lock screen
+        // has the wheel
+        String guided = null;
         if (!isEnabled()) {
             mode = MODE_APP;
         } else if (mRoot != null || mShadeExpanded || mKeyguardStateController.isShowing()
                 || WheelSystemWindows.showing()) {
             mode = MODE_TASKBAR;
+        } else if (WheelSystemWindows.volumeShowing()) {
+            // The volume panel up, as after a volume key: the wheel goes on setting it
+            mode = MODE_VOLUME;
         } else {
-            mode = appMode(mForegroundPackage);
+            final String picked = appMode(mForegroundPackage);
+            final String base = modeKind(picked);
+            // Scroll, pinch and touch put a finger on the screen, on the keyboard when it shows,
+            // where a step typed the key under it: while it shows the wheel moves the highlight
+            mode = mImeShowing && (MODE_SCROLL.equals(base) || MODE_PINCH.equals(base)
+                    || MODE_TOUCH.equals(base)) ? MODE_APP : picked;
+            guided = modeKind(mode);
         }
         mModeClient.set(mode);
+        mGuide.onMode(guided, guideGravity());
+    }
+
+    @Override
+    public void setImeWindowStatus(int displayId, int vis, int backDisposition,
+            boolean showImeSwitcherButton) {
+        if (displayId != Display.DEFAULT_DISPLAY) {
+            return;
+        }
+        final boolean showing = (vis & InputMethodService.IME_VISIBLE) != 0;
+        if (showing != mImeShowing) {
+            mImeShowing = showing;
+            updateMode();
+        }
     }
 
     // ---- The apps ----
@@ -842,6 +892,20 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private int outward() {
         return mEdge == WheelTaskbarSettings.EDGE_RIGHT
                 || mEdge == WheelTaskbarSettings.EDGE_BOTTOM ? 1 : -1;
+    }
+
+    /** The guide by the wheel: its edge for the rotation now, the bar not having to show. */
+    private int guideGravity() {
+        switch (mSettings.edge(rotation())) {
+            case WheelTaskbarSettings.EDGE_TOP:
+                return Gravity.TOP;
+            case WheelTaskbarSettings.EDGE_LEFT:
+                return Gravity.LEFT;
+            case WheelTaskbarSettings.EDGE_BOTTOM:
+                return Gravity.BOTTOM;
+            default:
+                return Gravity.RIGHT;
+        }
     }
 
     /** The edge's gravity, and the one across from it, towards the app. */
@@ -1177,6 +1241,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             }
         });
         mWindowManager.addView(root, lp);
+        mGuide.hint(WheelGuide.HINT_TASKBAR, R.string.wheel_hint_taskbar, innerGravity());
         staggerIn();
         // The wheel starts where it was left, the light shows at once
         focusRemembered();
@@ -1279,10 +1344,16 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                     mBadge = badge(cell);
                     break;
                 }
+                case WheelTaskbarSettings.BUTTON_BACK:
+                    addButton(R.drawable.ic_wheel_taskbar_back,
+                            mContext.getString(R.string.wheel_taskbar_back), this::goBack);
+                    break;
                 case WheelTaskbarSettings.BUTTON_POWER:
+                    // Its press the power menu; its options in the bar when the highlight rests
+                    // on it (mPowerLinger)
                     mPowerButton = ((ViewGroup) addButton(R.drawable.ic_wheel_taskbar_power,
                             mContext.getString(R.string.wheel_taskbar_power),
-                            () -> openMenu(MENU_POWER, null))).getChildAt(0);
+                            this::showPowerMenu)).getChildAt(0);
                     break;
                 case WheelTaskbarSettings.BUTTON_MODE:
                     if (hasModeButton()) {
@@ -1697,7 +1768,13 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             if (mRefilling) {
                 return;
             }
+            mHandler.removeCallbacks(mPowerLinger);
             if (hasFocus) {
+                if (v == mPowerButton && mSettings.powerLinger) {
+                    mHandler.postDelayed(mPowerLinger, POWER_LINGER_MS);
+                    mGuide.hint(WheelGuide.HINT_POWER, R.string.wheel_hint_power,
+                            innerGravity());
+                }
                 magnify(v);
                 if (mMoved) {
                     remember(v);
@@ -2800,15 +2877,37 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         }
         addRow(mContext.getDrawable(R.drawable.ic_wheel_taskbar_power_menu),
                 mContext.getString(R.string.wheel_taskbar_power_menu), null, true)
-                .setOnClickListener(v -> {
-                    hide();
-                    try {
-                        WindowManagerGlobal.getWindowManagerService().showGlobalActions();
-                    } catch (RemoteException e) {
-                        Log.w(TAG, "No power menu", e);
-                    }
-                });
+                .setOnClickListener(v -> showPowerMenu());
         return 0;
+    }
+
+    /** The power menu, the bar out of its way. */
+    private void showPowerMenu() {
+        hide();
+        try {
+            WindowManagerGlobal.getWindowManagerService().showGlobalActions();
+        } catch (RemoteException e) {
+            Log.w(TAG, "No power menu", e);
+        }
+    }
+
+    /**
+     * Back in the app under the bar: the bar out of the way first, so the key goes to the app
+     * once the focus is back with it, rather than closing the bar. Some screens have nothing the
+     * wheel can reach to go back with, a dialog with no buttons for one.
+     */
+    private void goBack() {
+        hide();
+        mHandler.postDelayed(() -> {
+            final long now = SystemClock.uptimeMillis();
+            for (int action : new int[] {KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP}) {
+                InputManagerGlobal.getInstance().injectInputEvent(new KeyEvent(now, now, action,
+                        KeyEvent.KEYCODE_BACK, 0, 0, KeyCharacterMap.VIRTUAL_KEYBOARD, 0,
+                        KeyEvent.FLAG_FROM_SYSTEM | KeyEvent.FLAG_VIRTUAL_HARD_KEY,
+                        InputDevice.SOURCE_KEYBOARD),
+                        InputManager.INJECT_INPUT_EVENT_MODE_ASYNC);
+            }
+        }, BACK_AFTER_HIDE_MS);
     }
 
     /** Where to restart to, as the power menu's advanced restart lists them. */

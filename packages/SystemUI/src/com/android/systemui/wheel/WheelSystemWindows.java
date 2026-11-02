@@ -20,6 +20,7 @@ public final class WheelSystemWindows {
 
     private static final List<Runnable> sListeners = new ArrayList<>();
     private static int sShowing;
+    private static boolean sVolumeShowing;
 
     private WheelSystemWindows() {
     }
@@ -44,6 +45,21 @@ public final class WheelSystemWindows {
 
     static boolean showing() {
         return sShowing > 0;
+    }
+
+    /**
+     * The volume panel showing, or gone. It takes no focus, so while it shows the wheel turns
+     * the volume rather than moving the highlight in the app under it.
+     */
+    public static void setVolumeShowing(boolean showing) {
+        if (sVolumeShowing != showing) {
+            sVolumeShowing = showing;
+            changed();
+        }
+    }
+
+    static boolean volumeShowing() {
+        return sVolumeShowing;
     }
 
     static void addListener(Runnable listener) {
