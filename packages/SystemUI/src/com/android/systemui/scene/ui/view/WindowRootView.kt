@@ -58,6 +58,11 @@ open class WindowRootView(context: Context, attrs: AttributeSet?) : FrameLayout(
     /** Puts the wheel on the view, see WheelNavigator.focus. */
     fun focusWheelOn(view: View): Boolean = wheelSelects() && wheelNavigator().focus(view)
 
+    /** Steps of the wheel taken before they move the ring; null hands them back to it. */
+    fun setWheelStepInterceptor(interceptor: WheelNavigator.StepInterceptor?) {
+        wheelNavigator().setStepInterceptor(interceptor)
+    }
+
     /** The shade's levels for the wheel, see WheelNavigator.Levels. */
     var wheelLevels: WheelNavigator.Levels? = null
         set(value) {

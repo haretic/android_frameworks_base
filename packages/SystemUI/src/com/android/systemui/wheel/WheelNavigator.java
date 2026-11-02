@@ -5,6 +5,7 @@
 
 package com.android.systemui.wheel;
 
+import android.annotation.Nullable;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.ColorFilter;
@@ -186,18 +187,30 @@ public final class WheelNavigator {
         mLevels = levels;
     }
 
+    /** Takes the wheel's steps before they move the ring, as the lock screen's touch keys do. */
+    public interface StepInterceptor {
+        /** Whether the step was taken here, the ring staying put. */
+        boolean interceptWheelStep();
+    }
+
+    @Nullable private StepInterceptor mStepInterceptor;
+
+    public void setStepInterceptor(@Nullable StepInterceptor interceptor) {
+        mStepInterceptor = interceptor;
+    }
+
     /** Whether the key was the wheel's or the side button's, and handled. */
     public boolean dispatchKey(KeyEvent event) {
         switch (event.getKeyCode()) {
             case KeyEvent.KEYCODE_NAVIGATE_NEXT:
             case KeyEvent.KEYCODE_DPAD_DOWN:
-                if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                if (event.getAction() == KeyEvent.ACTION_DOWN && !interceptStep()) {
                     step(1, event.getEventTime());
                 }
                 return true;
             case KeyEvent.KEYCODE_NAVIGATE_PREVIOUS:
             case KeyEvent.KEYCODE_DPAD_UP:
-                if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                if (event.getAction() == KeyEvent.ACTION_DOWN && !interceptStep()) {
                     step(-1, event.getEventTime());
                 }
                 return true;
@@ -218,6 +231,10 @@ public final class WheelNavigator {
             default:
                 return false;
         }
+    }
+
+    private boolean interceptStep() {
+        return mStepInterceptor != null && mStepInterceptor.interceptWheelStep();
     }
 
     /** Forgets the stop and hides the ring, as when the window closes. */
