@@ -6,6 +6,10 @@
     <!-- The PIN drum, in the PIN pad's constraint sets (KeyguardPINView) -->
     <item type="id" name="wheel_pin_drum" />
     <item type="id" name="wheel_pin_dial" />
+    <!-- The bouncer's button for the stock number keys, for touch, at the pad's top corner -->
+    <item type="id" name="wheel_pin_touch_keypad" />
+    <dimen name="wheel_pin_touch_keypad_size">48dp</dimen>
+    <dimen name="wheel_pin_touch_keypad_margin">4dp</dimen>
     <dimen name="r1_qs_full_tile_height">80dp</dimen>
     <dimen name="r1_qs_full_tile_label_size">16sp</dimen>
     <dimen name="r1_wheel_ring_width">2.4dp</dimen>
@@ -35,5 +39,29 @@
     <string name="wheel_dial_hint_drum">Press to pick each digit instead</string>
     <string name="wheel_dial_description">Combination dial</string>
     <string name="wheel_dial_state_idle">Nothing turned</string>
+    <!-- The bouncer's button for touch: the number keys in place of the wheel's pad -->
+    <string name="wheel_pin_touch_keypad">123</string>
+    <string name="wheel_pin_touch_keypad_description">Number keys</string>
+    <!-- The wheel guide's legend (WheelGuide): what a turn, a press and a hold do in the
+         wheel's mode, a line each [CHAR LIMIT=30] -->
+    <string name="wheel_legend_turn_move">Turn - move the highlight</string>
+    <string name="wheel_legend_turn_scroll">Turn - scroll</string>
+    <string name="wheel_legend_turn_tab">Turn - next or previous field</string>
+    <string name="wheel_legend_turn_arrows">Turn - left and right</string>
+    <string name="wheel_legend_turn_page">Turn - page up and down</string>
+    <string name="wheel_legend_turn_volume">Turn - volume</string>
+    <string name="wheel_legend_turn_brightness">Turn - brightness</string>
+    <string name="wheel_legend_turn_media">Turn - previous or next track</string>
+    <string name="wheel_legend_turn_zoom">Turn - zoom</string>
+    <string name="wheel_legend_turn_taskbar">Turn - open the taskbar</string>
+    <string name="wheel_legend_turn_touch">Turn - tap the set spots</string>
+    <string name="wheel_legend_press_select">Press - select</string>
+    <string name="wheel_legend_press_play">Press - play or pause</string>
+    <string name="wheel_legend_hold_options">Hold - options</string>
+    <string name="wheel_legend_double_taskbar">Double press - taskbar</string>
+    <!-- The wheel guide's hints, each shown once, the first time it applies -->
+    <string name="wheel_hint_taskbar">Turn to pick - press to open. Hold an app for its options. Back is at the top.</string>
+    <string name="wheel_hint_power">Rest here a moment for the power options - press for the power menu</string>
+    <string name="wheel_hint_shade">Turn through notifications - press to open one - hold for its options</string>
     <item name="wheel_original_text_size" type="id" />
 </resources>
