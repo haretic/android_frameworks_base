@@ -306,6 +306,26 @@ final class WheelTaskbarApps {
                 : task.baseIntent == null ? null : task.baseIntent.getComponent();
     }
 
+    /**
+     * Every running task but home's, uncapped and each of them, for Close all: the bar loads
+     * only so many apps, one task each, and the rest would come up once those had gone.
+     * Blocks, so off the main thread.
+     */
+    List<Integer> runningTasks(Context userContext, int userId) {
+        final String home = homePackage(userContext.getPackageManager());
+        final List<Integer> ids = new ArrayList<>();
+        for (ActivityManager.RecentTaskInfo task : ActivityTaskManager.getInstance()
+                .getRecentTasks(Integer.MAX_VALUE, ActivityManager.RECENT_IGNORE_UNAVAILABLE,
+                        userId)) {
+            final ComponentName component = componentOf(task);
+            if (task.isRunning && component != null
+                    && !component.getPackageName().equals(home)) {
+                ids.add(task.taskId);
+            }
+        }
+        return ids;
+    }
+
     static String homePackage(PackageManager pm) {
         final ResolveInfo home = pm.resolveActivity(new Intent(Intent.ACTION_MAIN)
                 .addCategory(Intent.CATEGORY_HOME), PackageManager.MATCH_DEFAULT_ONLY);
