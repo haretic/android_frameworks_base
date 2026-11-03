@@ -52,6 +52,7 @@ import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.ViewPropertyAnimator;
@@ -66,6 +67,7 @@ import android.hardware.display.DisplayManager;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.WheelCue;
 
 import androidx.dynamicanimation.animation.DynamicAnimation;
 import androidx.dynamicanimation.animation.SpringAnimation;
@@ -125,8 +127,9 @@ import javax.inject.Inject;
  * the bar with a hint, and a running app's last screen. The side button presses
  * (INPUT_FEATURE_POWER_KEY_SELECTS); holding it on an app, in the bar or in the list of all
  * apps, opens its options: close it (or stop it, in the background), close all apps, pin or
- * unpin it, its app info. Holding it anywhere else goes back. The bar closes on back, on a
- * second double press, on a touch outside, or when left alone for a moment.
+ * unpin it, its app info; on Power, the power options. Holding it anywhere else goes back.
+ * The bar closes on back, on a second double press, on a touch outside, or when left alone for
+ * a moment.
  *
  * <p>With a wheel daemon (config_wheelDaemonSocket) the wheel is in one of its modes, set
  * here for the app in front (Wheel mode, LineageSettings.Secure.WHEEL_APP_MODES, defaults in
@@ -146,6 +149,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private static final int MENU_APP = 3;
     private static final int MENU_POWER = 4;
     private static final int MENU_RESTART = 5;
+    private static final int MENU_QUICK = 6;
 
     /** The wheel daemon's modes (r1-wheeld on the rabbit r1). */
     private static final String MODE_TASKBAR = "taskbar";
@@ -158,6 +162,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private static final String MODE_BRIGHTNESS = "brightness";
     private static final String MODE_MEDIA = "media";
     private static final String MODE_ZOOM = "zoom";
+    /** A camera's zoom keys, the press its camera key: the shutter (r1-wheeld, the policy). */
+    private static final String MODE_CAMERA = "camera";
     /** Two fingers pinching about the middle of the screen, out for a step up (r1-wheeld). */
     private static final String MODE_PINCH = "pinch";
     /** Touch zones: kept as "touch:X1:Y1:X2:Y2", the points the steps tap (r1-wheeld). */
@@ -165,7 +171,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     /** Every mode, in the order the Wheel mode list shows them. */
     private static final List<String> MODES = List.of(MODE_TASKBAR, MODE_APP, MODE_SCROLL,
             MODE_TAB, MODE_ARROWS, MODE_PAGE, MODE_VOLUME, MODE_BRIGHTNESS, MODE_MEDIA,
-            MODE_PINCH, MODE_ZOOM, MODE_TOUCH);
+            MODE_PINCH, MODE_ZOOM, MODE_CAMERA, MODE_TOUCH);
     /** The R1Wheel page that places an app's touch zones over it. */
     private static final ComponentName TOUCH_ZONES = new ComponentName(
             "cat.kenny.r1.wheel.settings", "cat.kenny.r1.wheel.settings.TouchZonesActivity");
@@ -259,8 +265,11 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private View mNotificationsButton;
     private View mModeButton;
     private View mPowerButton;
-    /** How long the highlight rests on Power before its options show in the bar. */
-    private static final long POWER_LINGER_MS = 1000;
+    /**
+     * How long the highlight rests on Power before its options show in the bar, unless the
+     * side button's hold opens them first: long enough that passing by or reading never does.
+     */
+    private static final long POWER_LINGER_MS = 10000;
     /** How long Back waits for the focus to leave the closing bar. */
     private static final long BACK_AFTER_HIDE_MS = 120;
     /** Power's options, the highlight having stayed on it. */
@@ -511,7 +520,10 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             mShadeExpanded = expanded;
             updateMode();
             if (expanded && isEnabled() && !mKeyguardStateController.isShowing()) {
-                mGuide.hint(WheelGuide.HINT_SHADE, R.string.wheel_hint_shade, Gravity.BOTTOM);
+                mGuide.hint(WheelGuide.HINT_SHADE,
+                        new int[] {WheelCue.TURN, WheelCue.PRESS, WheelCue.HOLD},
+                        new int[] {R.string.wheel_hint_shade_turn, R.string.wheel_hint_shade_press,
+                                R.string.wheel_hint_shade_hold}, Gravity.BOTTOM, 0);
             }
         });
         // The user's tuning of the wheel's feel, which the daemon applies
@@ -600,7 +612,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 step = -1;
                 break;
             case KeyEvent.KEYCODE_NAVIGATE_IN:
-                // The side button's double press
+            case KeyEvent.KEYCODE_NAVIGATE_OUT:
+                // The side button's double press or quick actions
                 step = 0;
                 break;
             default:
@@ -608,7 +621,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         }
         if (mRoot != null) {
             if (step == 0) {
-                // A second double press shuts it, as it opened it
+                // A second double press or hold shuts it, as it opened it
                 mFeedback.back();
                 hide();
                 return;
@@ -623,6 +636,9 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             return;
         }
         show();
+        if (key.getKeyCode() == KeyEvent.KEYCODE_NAVIGATE_OUT) {
+            openMenu(MENU_QUICK, null);
+        }
     }
 
     /** The stock look (Settings > System > Taskbar and wheel) has no taskbar. */
@@ -817,9 +833,9 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                     return;
                 }
                 mDrawerApps = loaded;
-                if (menuType() == MENU_DRAWER && targets(mPanelItems).isEmpty()) {
-                    // It opened before they were in
-                    refill(top(), 0);
+                if (menuType() == MENU_DRAWER && targets(mPanelItems).size() <= 1) {
+                    // It opened before they were in: only its Back
+                    refill(top(), -1);
                 }
                 if (mLabelFor != null && mLabelFor == mDrawerButton) {
                     showLabel(mDrawerButton);
@@ -886,6 +902,72 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     /** Whether the bar lies along the top or bottom of the screen, its buttons in a row. */
     private boolean across() {
         return mEdge == WheelTaskbarSettings.EDGE_TOP || mEdge == WheelTaskbarSettings.EDGE_BOTTOM;
+    }
+
+    /** Where a touch went down, and what it went down on, while it may still be a swipe away. */
+    private float mSwipeX;
+    private float mSwipeY;
+    private boolean mSwipeOnPanel;
+    private boolean mSwiping;
+
+    /**
+     * A touch swiped out towards the edge the bar is on: from a list, back out of it; from
+     * the bar, the bar shut. The views under it get a cancel, a list still able to scroll
+     * that way scrolls instead.
+     */
+    private boolean swipedAway(ViewGroup root, MotionEvent event) {
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN: {
+                mSwipeX = event.getX();
+                mSwipeY = event.getY();
+                mSwipeOnPanel = !mMenus.isEmpty() && mPanel != null && isUnder(mPanel, event);
+                mSwiping = !(mSwipeOnPanel && across()
+                        && mPanelScroll.canScrollVertically(-outward()));
+                return false;
+            }
+            case MotionEvent.ACTION_MOVE: {
+                if (!mSwiping) {
+                    return false;
+                }
+                final float out = (across() ? event.getY() - mSwipeY : event.getX() - mSwipeX)
+                        * outward();
+                final float side = Math.abs(across() ? event.getX() - mSwipeX
+                        : event.getY() - mSwipeY);
+                if (out < 0 || side > dp(48)) {
+                    mSwiping = side <= dp(48) && out > -dp(16);
+                    return false;
+                }
+                if (out < dp(40) || side * 2 > out) {
+                    return false;
+                }
+                mSwiping = false;
+                final MotionEvent cancel = MotionEvent.obtain(event);
+                cancel.setAction(MotionEvent.ACTION_CANCEL);
+                root.dispatchTouchEvent(cancel);
+                cancel.recycle();
+                mFeedback.back();
+                if (mSwipeOnPanel) {
+                    closeMenu();
+                } else {
+                    hide();
+                }
+                return true;
+            }
+            default:
+                return false;
+        }
+    }
+
+    private static boolean isUnder(View view, MotionEvent event) {
+        if (!view.isShown()) {
+            return false;
+        }
+        final int[] at = new int[2];
+        view.getLocationOnScreen(at);
+        final float x = event.getRawX();
+        final float y = event.getRawY();
+        return x >= at[0] && x < at[0] + view.getWidth() && y >= at[1]
+                && y < at[1] + view.getHeight();
     }
 
     /** Which way is out of the screen from the app over the bar: 1 right or down, -1 left or up. */
@@ -1087,6 +1169,9 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                     return true;
                 }
                 keepOpen();
+                if (swipedAway(this, event)) {
+                    return true;
+                }
                 return super.dispatchTouchEvent(event);
             }
         };
@@ -1210,7 +1295,12 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             if (hasFocus && mRoot == root && !mMoved) {
                 root.post(() -> {
                     if (mRoot == root && !mMoved) {
-                        focusRemembered();
+                        if (mMenus.isEmpty()) {
+                            focusRemembered();
+                        } else {
+                            focus(mPanelItems, Math.max(0,
+                                    targets(mPanelItems).indexOf(root.findFocus())));
+                        }
                     }
                 });
             }
@@ -1241,7 +1331,10 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             }
         });
         mWindowManager.addView(root, lp);
-        mGuide.hint(WheelGuide.HINT_TASKBAR, R.string.wheel_hint_taskbar, innerGravity());
+        mGuide.hint(WheelGuide.HINT_TASKBAR,
+                new int[] {WheelCue.TURN, WheelCue.PRESS, WheelCue.HOLD},
+                new int[] {R.string.wheel_hint_taskbar_turn, R.string.wheel_hint_taskbar_press,
+                        R.string.wheel_hint_taskbar_hold}, edgeGravity(), barWidth());
         staggerIn();
         // The wheel starts where it was left, the light shows at once
         focusRemembered();
@@ -1381,9 +1474,14 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     /** The pinned and running apps, scrolling between the buttons when they don't fit. */
     private void buildApps() {
         final boolean across = across();
-        final FrameLayout scroll = across ? new WheelTaskbarScroll.Row(mContext)
-                : new WheelTaskbarScroll(mContext);
-        scroll.setFadingEdgeLength(dp(16));
+        final FrameLayout scroll;
+        if (across) {
+            scroll = new WheelTaskbarScroll.Row(mContext);
+        } else {
+            final WheelTaskbarScroll column = new WheelTaskbarScroll(mContext);
+            column.setWholeCells(true);
+            scroll = column;
+        }
         ((WheelTaskbarGlides) scroll).setSpeed(mSettings.animation);
         mAppsColumn = new AppsColumn(mContext);
         mAppsColumn.setOrientation(across ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
@@ -1620,7 +1718,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         }
 
         // The apps came in after the bar opened: the one it was left on, until the wheel moves
-        if (mPlaced && !mMoved && mRememberedKey != null) {
+        if (mPlaced && !mMoved && mRememberedKey != null && mMenus.isEmpty()) {
             focusKey(mRememberedKey);
         }
 
@@ -1689,6 +1787,14 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
 
     /** Closes an app, its button going at once while its task goes off the main thread. */
     private void closeApps(List<WheelTaskbarApps.Entry> apps) {
+        closeApps(apps, false);
+    }
+
+    /**
+     * Closes apps, their buttons going at once while their tasks go off the main thread. With
+     * {@code all}, every running task goes, also those the bar hasn't loaded.
+     */
+    private void closeApps(List<WheelTaskbarApps.Entry> apps, boolean all) {
         final Set<String> closing = new ArraySet<>();
         for (WheelTaskbarApps.Entry app : apps) {
             closing.add(app.packageName);
@@ -1702,7 +1808,17 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             }
         }
         final int userId = mUserTracker.getUserId();
+        final Context user = all ? userContext() : null;
         mBackground.execute(() -> {
+            if (all) {
+                for (int taskId : mAppsModel.runningTasks(user, userId)) {
+                    try {
+                        ActivityManagerWrapper.getInstance().removeTask(taskId);
+                    } catch (RuntimeException e) {
+                        Log.w(TAG, "Couldn't close task " + taskId, e);
+                    }
+                }
+            }
             for (WheelTaskbarApps.Entry app : apps) {
                 try {
                     if (app.taskId >= 0) {
@@ -1772,8 +1888,10 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             if (hasFocus) {
                 if (v == mPowerButton && mSettings.powerLinger) {
                     mHandler.postDelayed(mPowerLinger, POWER_LINGER_MS);
-                    mGuide.hint(WheelGuide.HINT_POWER, R.string.wheel_hint_power,
-                            innerGravity());
+                    mGuide.hint(WheelGuide.HINT_POWER,
+                            new int[] {WheelCue.PRESS, WheelCue.HOLD},
+                            new int[] {R.string.wheel_hint_power_press,
+                                    R.string.wheel_hint_power_hold}, edgeGravity(), barWidth());
                 }
                 magnify(v);
                 if (mMoved) {
@@ -2354,8 +2472,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     }
 
     /**
-     * A hold: on an app its options, as on home; anywhere else back, as everywhere else, out of
-     * a list or the bar.
+     * A hold: on an app its options, as on home, on Power its options; anywhere else back, as
+     * everywhere else, out of a list or the bar.
      */
     private void onLongPress() {
         final View focused = mRoot.findFocus();
@@ -2366,9 +2484,16 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 && focused.getTag() instanceof WheelTaskbarApps.Launchable launchable) {
             app = launchable.packageName();
         }
-        if (app != null && menuType() != MENU_APP) {
+        if (app != null && menuType() != MENU_APP && menuType() != MENU_QUICK) {
             mFeedback.select();
             openMenu(MENU_APP, app);
+            return;
+        }
+        // On Power, its options
+        if (focused != null && focused == mPowerButton && mMenus.isEmpty()) {
+            mHandler.removeCallbacks(mPowerLinger);
+            mFeedback.select();
+            openMenu(MENU_POWER, null);
             return;
         }
         mFeedback.back();
@@ -2599,9 +2724,13 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         }
     }
 
-    /** Back one list: to the list it came from, or to its button in the bar. */
+    /** Back one list, or out of the bar for quick actions. */
     private void closeMenu() {
         if (mMenus.isEmpty()) {
+            return;
+        }
+        if (menuType() == MENU_QUICK) {
+            hide();
             return;
         }
         final Menu closed = mMenus.remove(mMenus.size() - 1);
@@ -2646,6 +2775,14 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         mPanelItems.removeAllViews();
         mPanelHint.setVisibility(menu.type == MENU_MODES ? View.VISIBLE : View.GONE);
         mPanelHighlight.follow(null, 0, 0);
+        // Every list starts with its way back, for a touch or the wheel; the focus starts on
+        // what the list is for, below it
+        addRow(mContext.getDrawable(R.drawable.ic_wheel_taskbar_back),
+                mContext.getString(R.string.wheel_taskbar_back), null, true)
+                .setOnClickListener(v -> {
+                    mFeedback.back();
+                    closeMenu();
+                });
         final int own;
         switch (menu.type) {
             case MENU_DRAWER:
@@ -2664,12 +2801,16 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 mPanelTitle.setText(R.string.wheel_taskbar_power_restart);
                 own = fillRestart();
                 break;
+            case MENU_QUICK:
+                mPanelTitle.setText(R.string.wheel_taskbar_quick);
+                own = fillQuick();
+                break;
             default:
                 own = fillAppMenu(menu.app);
                 break;
         }
         mRefilling = false;
-        focus(mPanelItems, focus < 0 ? own : focus);
+        focus(mPanelItems, focus < 0 ? own + 1 : focus);
     }
 
     /** The panel's rows come in from the side the list came from, or go back to. */
@@ -2798,7 +2939,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                     mContext.getString(R.string.wheel_taskbar_app_close_all), null, true)
                     .setOnClickListener(v -> {
                         closeMenus();
-                        closeApps(running);
+                        closeApps(running, true);
                     });
         }
         final boolean pinned = isPinned(packageName);
@@ -2818,6 +2959,34 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                     startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                             Uri.fromParts("package", packageName, null))
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                });
+        return 0;
+    }
+
+    /** Quick actions for the app under the bar. The focus starts on Back. */
+    private int fillQuick() {
+        addRow(mContext.getDrawable(R.drawable.ic_wheel_taskbar_back),
+                mContext.getString(R.string.wheel_taskbar_back), null, true)
+                .setOnClickListener(v -> goBack());
+        addRow(mContext.getDrawable(R.drawable.ic_more_vert),
+                mContext.getString(R.string.wheel_taskbar_item_options), null, true)
+                .setOnClickListener(v -> itemOptions());
+        addRow(mContext.getDrawable(R.drawable.ic_wheel_taskbar_home),
+                mContext.getString(R.string.wheel_taskbar_home), null, true)
+                .setOnClickListener(v -> goHome());
+        addRow(mContext.getDrawable(R.drawable.ic_wheel_taskbar_screenshot),
+                mContext.getString(R.string.wheel_taskbar_power_screenshot), null, true)
+                .setOnClickListener(v -> afterHide(() -> new ScreenshotHelper(mContext)
+                        .takeScreenshot(WindowManager.ScreenshotSource.SCREENSHOT_GLOBAL_ACTIONS,
+                                mHandler, null)));
+        addRow(mContext.getDrawable(R.drawable.ic_wheel_taskbar_mode),
+                mContext.getString(R.string.wheel_taskbar_mode), null, true)
+                .setOnClickListener(v -> openMenu(MENU_MODES, null));
+        addRow(mContext.getDrawable(R.drawable.ic_media_play_button),
+                mContext.getString(R.string.wheel_taskbar_play_pause), null, true)
+                .setOnClickListener(v -> {
+                    hide();
+                    injectKey(KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE);
                 });
         return 0;
     }
@@ -2898,16 +3067,37 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
      */
     private void goBack() {
         hide();
+        mHandler.postDelayed(() -> injectKey(KeyEvent.KEYCODE_BACK), BACK_AFTER_HIDE_MS);
+    }
+
+    /** A long press in the app, once it has the focus again. */
+    private void itemOptions() {
+        hide();
         mHandler.postDelayed(() -> {
             final long now = SystemClock.uptimeMillis();
-            for (int action : new int[] {KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP}) {
-                InputManagerGlobal.getInstance().injectInputEvent(new KeyEvent(now, now, action,
-                        KeyEvent.KEYCODE_BACK, 0, 0, KeyCharacterMap.VIRTUAL_KEYBOARD, 0,
-                        KeyEvent.FLAG_FROM_SYSTEM | KeyEvent.FLAG_VIRTUAL_HARD_KEY,
-                        InputDevice.SOURCE_KEYBOARD),
-                        InputManager.INJECT_INPUT_EVENT_MODE_ASYNC);
-            }
+            final KeyEvent down = new KeyEvent(now, now, KeyEvent.ACTION_DOWN,
+                    KeyEvent.KEYCODE_DPAD_CENTER, 0, 0, KeyCharacterMap.VIRTUAL_KEYBOARD, 0,
+                    KeyEvent.FLAG_FROM_SYSTEM | KeyEvent.FLAG_VIRTUAL_HARD_KEY,
+                    InputDevice.SOURCE_KEYBOARD);
+            InputManagerGlobal.getInstance().injectInputEvent(down,
+                    InputManager.INJECT_INPUT_EVENT_MODE_ASYNC);
+            mHandler.postDelayed(() -> InputManagerGlobal.getInstance().injectInputEvent(
+                    KeyEvent.changeTimeRepeat(KeyEvent.changeAction(down, KeyEvent.ACTION_UP),
+                            SystemClock.uptimeMillis(), 0),
+                    InputManager.INJECT_INPUT_EVENT_MODE_ASYNC),
+                    ViewConfiguration.getLongPressTimeout() + 100);
         }, BACK_AFTER_HIDE_MS);
+    }
+
+    private void injectKey(int keyCode) {
+        final long now = SystemClock.uptimeMillis();
+        for (int action : new int[] {KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP}) {
+            InputManagerGlobal.getInstance().injectInputEvent(new KeyEvent(now, now, action,
+                    keyCode, 0, 0, KeyCharacterMap.VIRTUAL_KEYBOARD, 0,
+                    KeyEvent.FLAG_FROM_SYSTEM | KeyEvent.FLAG_VIRTUAL_HARD_KEY,
+                    InputDevice.SOURCE_KEYBOARD),
+                    InputManager.INJECT_INPUT_EVENT_MODE_ASYNC);
+        }
     }
 
     /** Where to restart to, as the power menu's advanced restart lists them. */
@@ -3004,6 +3194,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 return mContext.getString(R.string.wheel_taskbar_mode_pinch);
             case MODE_ZOOM:
                 return mContext.getString(R.string.wheel_taskbar_mode_zoom);
+            case MODE_CAMERA:
+                return mContext.getString(R.string.wheel_taskbar_mode_camera);
             case MODE_TOUCH:
                 return mContext.getString(R.string.wheel_taskbar_mode_touch);
             default:
@@ -3037,6 +3229,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 return R.drawable.ic_wheel_taskbar_mode_pinch;
             case MODE_ZOOM:
                 return R.drawable.ic_wheel_taskbar_mode_zoom;
+            case MODE_CAMERA:
+                return R.drawable.ic_wheel_taskbar_mode_camera;
             case MODE_TOUCH:
                 return R.drawable.ic_wheel_taskbar_mode_touch;
             default:
