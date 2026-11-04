@@ -38,6 +38,9 @@
         <item name="android:background">?android:attr/selectableItemBackground</item>
         <item name="android:orientation">vertical</item>
         <item name="android:clipToPadding">false</item>
+        <!-- The learn more link stands out to the start by its focus ring's room, past the text
+             column, which this would cut it to -->
+        <item name="android:clipChildren">false</item>
         <item name="android:layoutDirection">locale</item>
         <item name="android:textDirection">locale</item>
     </style>
@@ -84,6 +87,11 @@
         <item name="android:layout_gravity">start</item>
         <item name="android:textAlignment">viewStart</item>
         <item name="android:paddingTop">@dimen/settingslib_expressive_space_extrasmall5</item>
+        <!-- Room each side for the focus ring, which on the text's own bounds ran over its
+             first and last letters; the margin keeps the text in line with the footer's -->
+        <item name="android:paddingStart">8dp</item>
+        <item name="android:paddingEnd">8dp</item>
+        <item name="android:layout_marginStart">-8dp</item>
         <item name="android:clickable">true</item>
         <item name="android:visibility">gone</item>
         <item name="android:minHeight">32dp</item>>
