@@ -1096,7 +1096,7 @@ class TimePickerClockDelegate extends TimePicker.AbstractTimePickerDelegate {
             field.setPressed(true);
             setCurrentItemShowing(field == mHourView ? HOUR_INDEX : MINUTE_INDEX, true);
             mDelegator.postDelayed(mWheelLetGo, WHEEL_GRAB_TIMEOUT_MS);
-            Toast.makeText(mContext, R.string.wheel_slider_grabbed, Toast.LENGTH_SHORT).show();
+            WheelCue.show(mDelegator, R.string.wheel_cue_set, R.string.wheel_cue_let_go);
         }
     }
 

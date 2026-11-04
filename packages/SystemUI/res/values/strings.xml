@@ -5072,6 +5072,12 @@
     <string name="wheel_taskbar_home">Home</string>
     <!-- The wheel taskbar's button that goes back in the app under it [CHAR LIMIT=20] -->
     <string name="wheel_taskbar_back">Back</string>
+    <!-- Wheel taskbar: the side button's list of quick actions [CHAR LIMIT=24] -->
+    <string name="wheel_taskbar_quick">Quick actions</string>
+    <!-- Wheel taskbar, Quick actions: long press the highlighted item in the app [CHAR LIMIT=24] -->
+    <string name="wheel_taskbar_item_options">Item options</string>
+    <!-- Wheel taskbar, Quick actions: play or pause media [CHAR LIMIT=24] -->
+    <string name="wheel_taskbar_play_pause">Play or pause</string>
     <!-- Wheel taskbar: button and list of all apps, A to Z [CHAR LIMIT=24] -->
     <string name="wheel_taskbar_drawer">All apps</string>
     <!-- Wheel taskbar: label of the app in front [CHAR LIMIT=32] -->
@@ -5108,6 +5114,8 @@
     <string name="wheel_taskbar_mode_pinch">Pinch zoom</string>
     <!-- Wheel taskbar, Wheel mode: the wheel zooms in and out with the keyboard's zoom keys, as a browser takes [CHAR LIMIT=32] -->
     <string name="wheel_taskbar_mode_zoom">Zoom keys</string>
+    <!-- Wheel taskbar, Wheel mode: the wheel zooms a camera, the side button takes the photo [CHAR LIMIT=32] -->
+    <string name="wheel_taskbar_mode_camera">Camera</string>
     <!-- Wheel taskbar, Wheel mode: the wheel taps the screen at two places set over the app [CHAR LIMIT=32] -->
     <string name="wheel_taskbar_mode_touch">Touch zones</string>
     <!-- Wheel taskbar, Wheel mode: summary of the current mode [CHAR LIMIT=32] -->

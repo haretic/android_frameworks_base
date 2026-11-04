@@ -8106,4 +8106,7 @@
          sliders the side button grabs for the wheel to set. Turned on by an overlay SystemUI
          enables with the setting. -->
     <bool name="config_wheelFocus">false</bool>
+    <!-- Where the middle of the wheel is along the edge it is on, in the device's natural
+         orientation, from the top: cues about turning it show level with it -->
+    <item name="config_wheelCentre" format="fraction" type="fraction">50%</item>
 </resources>

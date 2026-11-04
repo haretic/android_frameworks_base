@@ -63,6 +63,7 @@ import static android.view.KeyEvent.KEYCODE_UNKNOWN;
 import static android.view.KeyEvent.KEYCODE_VOLUME_DOWN;
 import static android.view.KeyEvent.KEYCODE_VOLUME_UP;
 import static android.view.WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW;
+import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.FIRST_SUB_WINDOW;
 import static android.view.WindowManager.LayoutParams.FIRST_SYSTEM_WINDOW;
 import static android.view.WindowManager.LayoutParams.LAST_APPLICATION_WINDOW;
@@ -4726,6 +4727,13 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             case LineageSettings.Secure.WHEEL_SIDE_BUTTON_ACTION_SCREENSHOT:
                 takeScreenshot(TAKE_SCREENSHOT_FULLSCREEN, SCREENSHOT_KEY_OTHER);
                 break;
+            case LineageSettings.Secure.WHEEL_SIDE_BUTTON_ACTION_QUICK:
+                if (mDefaultDisplayPolicy.isAwake() && !keyguardOn()) {
+                    final long now = SystemClock.uptimeMillis();
+                    sendSystemKeyToStatusBarAsync(new KeyEvent(now, now,
+                            KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_NAVIGATE_OUT, 0));
+                }
+                break;
             default:
                 break; // Nothing, and any invalid persisted value, have no side effects.
         }
@@ -4782,7 +4790,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     /**
      * A press of the side button in an app as its wheel mode has it (config_wheelAppModeDefaults
      * and LineageSettings.Secure.WHEEL_APP_MODES): Enter where the wheel moves through the app
-     * (app, scroll, tab, arrows, page) or zooms it (zoom: a camera's shutter), play or pause where it skips tracks (media). Sent to
+     * (app, scroll, tab, arrows, page) or zooms it (zoom: a camera's shutter), the camera key where
+     * it zooms a camera (camera), play or pause where it skips tracks (media). Sent to
      * the app, true. Other modes, other windows, the keyguard or the stock look: false, the
      * press does what it always does.
      */
@@ -4817,6 +4826,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 break;
             case "media":
                 keyCode = KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE;
+                break;
+            // A camera's shutter: the key camera apps take a photo on; in a dialog over the
+            // camera, as its first start's, Enter, the dialog's button
+            case "camera":
+                keyCode = type == TYPE_BASE_APPLICATION ? KeyEvent.KEYCODE_CAMERA
+                        : KeyEvent.KEYCODE_ENTER;
                 break;
             default:
                 return false;

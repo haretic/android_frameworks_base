@@ -6636,6 +6636,8 @@
   <java-symbol type="array" name="config_wheelAppModeDefaults" />
   <java-symbol type="bool" name="config_wheelDialogs" />
   <java-symbol type="bool" name="config_wheelFocus" />
+  <java-symbol type="fraction" name="config_wheelCentre" />
   <java-symbol type="id" name="wheel_dialog_buttons" />
-  <java-symbol type="string" name="wheel_slider_grabbed" />
+  <java-symbol type="string" name="wheel_cue_set" />
+  <java-symbol type="string" name="wheel_cue_let_go" />
 </resources>
