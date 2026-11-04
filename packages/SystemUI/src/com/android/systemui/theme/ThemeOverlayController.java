@@ -82,6 +82,7 @@ import com.android.systemui.keyguard.domain.interactor.KeyguardTransitionInterac
 import com.android.systemui.keyguard.shared.model.KeyguardState;
 import com.android.systemui.monet.ColorScheme;
 import com.android.systemui.monet.DynamicColors;
+import com.android.systemui.monet.SchemeHaretic;
 import com.android.systemui.settings.UserTracker;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController.DeviceProvisionedListener;
@@ -732,11 +733,14 @@ public class ThemeOverlayController implements CoreStartable, Dumpable {
             List<Pair<String, DynamicColor>> colors) {
         colors.forEach(p -> {
             String prefix = "android:color/system_" + p.first;
+            // The haretic style puts some roles on others' colors, as its containers in grey
+            final DynamicColor color =
+                    mThemeStyle == ThemeStyle.HARETIC ? SchemeHaretic.role(p.second) : p.second;
 
             overlay.setResourceValue(prefix + "_light", TYPE_INT_COLOR_ARGB8,
-                    p.second.getArgb(mLightColorScheme.getMaterialScheme()), null);
+                    color.getArgb(mLightColorScheme.getMaterialScheme()), null);
             overlay.setResourceValue(prefix + "_dark", TYPE_INT_COLOR_ARGB8,
-                    p.second.getArgb(mDarkColorScheme.getMaterialScheme()), null);
+                    color.getArgb(mDarkColorScheme.getMaterialScheme()), null);
         });
     }
 
