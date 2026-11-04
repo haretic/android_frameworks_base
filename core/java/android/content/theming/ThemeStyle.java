@@ -58,6 +58,7 @@ public final class ThemeStyle {
             CLOCK,
             CLOCK_VIBRANT,
             CMF,
+            HARETIC,
     })
     @Retention(SOURCE)
     @Target({PARAMETER, METHOD, LOCAL_VARIABLE, FIELD})
@@ -108,6 +109,13 @@ public final class ThemeStyle {
      * Represents the CMF style.
      */
     public static final int CMF = 10;
+    /**
+     * Represents the haretic style: the seed itself on the dark theme's accents, as the R1's
+     * orange on its buttons and switches, where the other styles give a pale tone of it.
+     *
+     * @hide
+     */
+    public static final int HARETIC = 11;
 
 
     /**
@@ -132,6 +140,7 @@ public final class ThemeStyle {
             case CLOCK -> "CLOCK";
             case CLOCK_VIBRANT -> "CLOCK_VIBRANT";
             case CMF -> "CMF";
+            case HARETIC -> "HARETIC";
             default -> throw new IllegalArgumentException("Invalid style value: " + style);
         };
     }
@@ -158,6 +167,7 @@ public final class ThemeStyle {
             case "CLOCK" -> CLOCK;
             case "CLOCK_VIBRANT" -> CLOCK_VIBRANT;
             case "CMF" -> CMF;
+            case "HARETIC" -> HARETIC;
             default -> throw new IllegalArgumentException("Invalid style name: " + styleName);
         };
     }
