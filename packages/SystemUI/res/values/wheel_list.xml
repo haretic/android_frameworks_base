@@ -20,8 +20,8 @@
     <string name="wheel_shade_tab_controls">Controls</string>
     <!-- The tab header's action: switch to the tab it names -->
     <string name="wheel_shade_tab_switch">Switch to <xliff:g id="tab" example="Controls">%1$s</xliff:g></string>
-    <!-- The lock screen's Unlock button in the wheel UI, the side button's first stop there -->
-    <string name="wheel_unlock">Press to unlock</string>
+    <!-- The wheel UI lock screen's cue by the side button, beside its press: it unlocks -->
+    <string name="wheel_unlock">Unlock</string>
     <!-- The bouncer's PIN drum in the wheel UI: its words, and the hints below it -->
     <string name="wheel_pin_ok">OK</string>
     <string name="wheel_pin_delete">Delete</string>
@@ -42,26 +42,33 @@
     <!-- The bouncer's button for touch: the number keys in place of the wheel's pad -->
     <string name="wheel_pin_touch_keypad">123</string>
     <string name="wheel_pin_touch_keypad_description">Number keys</string>
-    <!-- The wheel guide's legend (WheelGuide): what a turn, a press and a hold do in the
-         wheel's mode, a line each [CHAR LIMIT=30] -->
-    <string name="wheel_legend_turn_move">Turn - move the highlight</string>
-    <string name="wheel_legend_turn_scroll">Turn - scroll</string>
-    <string name="wheel_legend_turn_tab">Turn - next or previous field</string>
-    <string name="wheel_legend_turn_arrows">Turn - left and right</string>
-    <string name="wheel_legend_turn_page">Turn - page up and down</string>
-    <string name="wheel_legend_turn_volume">Turn - volume</string>
-    <string name="wheel_legend_turn_brightness">Turn - brightness</string>
-    <string name="wheel_legend_turn_media">Turn - previous or next track</string>
-    <string name="wheel_legend_turn_zoom">Turn - zoom</string>
-    <string name="wheel_legend_turn_taskbar">Turn - open the taskbar</string>
-    <string name="wheel_legend_turn_touch">Turn - tap the set spots</string>
-    <string name="wheel_legend_press_select">Press - select</string>
-    <string name="wheel_legend_press_play">Press - play or pause</string>
-    <string name="wheel_legend_hold_options">Hold - options</string>
-    <string name="wheel_legend_double_taskbar">Double press - taskbar</string>
-    <!-- The wheel guide's hints, each shown once, the first time it applies -->
-    <string name="wheel_hint_taskbar">Turn to pick - press to open. Hold an app for its options. Back is at the top.</string>
-    <string name="wheel_hint_power">Rest here a moment for the power options - press for the power menu</string>
-    <string name="wheel_hint_shade">Turn through notifications - press to open one - hold for its options</string>
+    <!-- The wheel guide's legend (WheelGuide): what a turn, a press, a hold and a double press
+         do in the wheel's mode, a word or two beside each drawn gesture [CHAR LIMIT=16] -->
+    <string name="wheel_legend_turn_move">Move</string>
+    <string name="wheel_legend_turn_scroll">Scroll</string>
+    <string name="wheel_legend_turn_tab">Next field</string>
+    <string name="wheel_legend_turn_arrows">Left - right</string>
+    <string name="wheel_legend_turn_page">Page</string>
+    <string name="wheel_legend_turn_volume">Volume</string>
+    <string name="wheel_legend_turn_brightness">Brightness</string>
+    <string name="wheel_legend_turn_media">Track</string>
+    <string name="wheel_legend_turn_zoom">Zoom</string>
+    <string name="wheel_legend_turn_taskbar">Taskbar</string>
+    <string name="wheel_legend_turn_touch">Tap the spots</string>
+    <string name="wheel_legend_press_select">Select</string>
+    <string name="wheel_legend_press_play">Play - pause</string>
+    <string name="wheel_legend_press_photo">Photo</string>
+    <string name="wheel_legend_hold_options">Options</string>
+    <string name="wheel_legend_double_taskbar">Taskbar</string>
+    <!-- The wheel guide's hints, each shown once the first time it applies, in the same way
+         [CHAR LIMIT=16] -->
+    <string name="wheel_hint_taskbar_turn">Pick</string>
+    <string name="wheel_hint_taskbar_press">Open</string>
+    <string name="wheel_hint_taskbar_hold">App options</string>
+    <string name="wheel_hint_power_press">Power menu</string>
+    <string name="wheel_hint_power_hold">Power options</string>
+    <string name="wheel_hint_shade_turn">Browse</string>
+    <string name="wheel_hint_shade_press">Open</string>
+    <string name="wheel_hint_shade_hold">Options</string>
     <item name="wheel_original_text_size" type="id" />
 </resources>

@@ -8,14 +8,15 @@ package com.android.systemui.wheel;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.graphics.PixelFormat;
-import android.graphics.drawable.GradientDrawable;
+import android.graphics.Rect;
 import android.os.Handler;
+import android.os.SystemProperties;
 import android.text.TextUtils;
-import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.Surface;
 import android.view.View;
 import android.view.WindowManager;
-import android.widget.TextView;
+import android.widget.WheelCue;
 
 import com.android.systemui.res.R;
 
@@ -52,7 +53,7 @@ final class WheelGuide {
     private final IntSupplier mUserId;
     private final Runnable mHide = this::hide;
 
-    private TextView mStrip;
+    private View mStrip;
     /** The mode the legend last named, so it shows on a change only. */
     private String mLegendMode;
     /** A hint showing: the legend waits for it. */
@@ -82,11 +83,19 @@ final class WheelGuide {
         if (legend == LEGEND_OFF || mHinting || (legend == LEGEND_ON_CHANGE && !changed)) {
             return;
         }
-        show(legendText(mode), gravity, legend == LEGEND_ALWAYS ? 0 : LEGEND_MS);
+        final List<Integer> gestures = new ArrayList<>();
+        final List<CharSequence> texts = new ArrayList<>();
+        legend(mode, gestures, texts);
+        show(toArray(gestures), texts.toArray(new CharSequence[0]), gravity,
+                legend == LEGEND_ALWAYS ? 0 : LEGEND_MS, 0);
     }
 
-    /** The hint {@code id}'s text, unless it was shown before or hints are off. */
-    void hint(String id, int text, int gravity) {
+    /**
+     * The hint {@code id}: what each of {@code gestures} (WheelCue's) does, {@code texts} a word
+     * or two each, unless it was shown before or hints are off; {@code inset} further in from
+     * the {@code gravity} edge, past the bar.
+     */
+    void hint(String id, int[] gestures, int[] texts, int gravity, int inset) {
         if (getInt(LineageSettings.Secure.WHEEL_GUIDE_HINTS, 1) == 0) {
             return;
         }
@@ -103,13 +112,17 @@ final class WheelGuide {
                 LineageSettings.Secure.WHEEL_GUIDE_HINTS_SEEN, TextUtils.join(",", ids),
                 mUserId.getAsInt());
         mHinting = true;
-        show(mContext.getString(text), gravity, HINT_MS);
+        final CharSequence[] words = new CharSequence[texts.length];
+        for (int i = 0; i < texts.length; i++) {
+            words[i] = mContext.getText(texts[i]);
+        }
+        show(gestures, words, gravity, HINT_MS, inset);
     }
 
     void hide() {
         mHandler.removeCallbacks(mHide);
         mHinting = false;
-        final TextView strip = mStrip;
+        final View strip = mStrip;
         if (strip == null) {
             return;
         }
@@ -118,43 +131,62 @@ final class WheelGuide {
                 .withEndAction(() -> mWindowManager.removeViewImmediate(strip));
     }
 
-    private void show(CharSequence text, int gravity, long forMs) {
+    private void show(int[] gestures, CharSequence[] texts, int gravity, long forMs, int inset) {
         mHandler.removeCallbacks(mHide);
-        if (mStrip == null) {
-            mStrip = makeStrip();
-            mWindowManager.addView(mStrip, layoutParams(gravity));
+        final boolean shown = mStrip != null;
+        if (shown) {
+            mStrip.animate().cancel();
+            mWindowManager.removeViewImmediate(mStrip);
+        }
+        // Pointing at the wheel, or at the bar it is beside
+        final int pointTo = inset > 0 || gravity == wheelEdge() ? gravity : 0;
+        mStrip = WheelCue.card(mContext, gestures, texts, pointTo);
+        mWindowManager.addView(mStrip, layoutParams(gravity, inset));
+        if (!shown) {
             mStrip.setAlpha(0f);
             mStrip.animate().alpha(1f).setDuration(FADE_MS);
-        } else {
-            mWindowManager.updateViewLayout(mStrip, layoutParams(gravity));
         }
-        mStrip.setText(text);
         if (forMs > 0) {
             mHandler.postDelayed(mHide, forMs);
         }
     }
 
-    private TextView makeStrip() {
-        final TextView strip = new TextView(mContext);
-        final float density = mContext.getResources().getDisplayMetrics().density;
-        strip.setTextColor(mContext.getColor(com.android.internal.R.color.materialColorOnSurface));
-        strip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        strip.setLineSpacing(0f, 1.1f);
-        strip.setMaxWidth(Math.round(220 * density));
-        strip.setPadding(Math.round(12 * density), Math.round(8 * density),
-                Math.round(12 * density), Math.round(8 * density));
-        final GradientDrawable pill = new GradientDrawable();
-        pill.setCornerRadius(16 * density);
-        pill.setColor(mContext.getColor(
-                com.android.internal.R.color.materialColorSurfaceContainerHigh));
-        strip.setBackground(pill);
-        strip.setElevation(4 * density);
-        strip.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        return strip;
+    /**
+     * How far the wheel's middle is from the middle of the screen's edge at {@code gravity},
+     * along it, where the wheel is on that edge: the strip goes level with the wheel, not with
+     * the screen's middle. The wheel is on the right in portrait, its middle
+     * config_wheelCentre down (debug.r1.wheel_centre, in thousandths, while tuning it).
+     */
+    private int wheelOffset(int gravity) {
+        final int rotation = mWindowManager.getDefaultDisplay().getRotation();
+        if (gravity != wheelEdge()) {
+            return 0;
+        }
+        final int tuned = SystemProperties.getInt("debug.r1.wheel_centre", 0);
+        float centre = tuned > 0 ? tuned / 1000f : mContext.getResources().getFraction(
+                com.android.internal.R.fraction.config_wheelCentre, 1, 1);
+        // Turned over, the wheel's middle is as far from the other end
+        if (rotation == Surface.ROTATION_180 || rotation == Surface.ROTATION_270) {
+            centre = 1 - centre;
+        }
+        final Rect screen = mWindowManager.getCurrentWindowMetrics().getBounds();
+        final int length = gravity == Gravity.TOP || gravity == Gravity.BOTTOM
+                ? screen.width() : screen.height();
+        return Math.round((centre - 0.5f) * length);
+    }
+
+    /** The screen's edge the wheel is on at its rotation: the right in portrait. */
+    private int wheelEdge() {
+        return switch (mWindowManager.getDefaultDisplay().getRotation()) {
+            case Surface.ROTATION_90 -> Gravity.TOP;
+            case Surface.ROTATION_180 -> Gravity.LEFT;
+            case Surface.ROTATION_270 -> Gravity.BOTTOM;
+            default -> Gravity.RIGHT;
+        };
     }
 
     /** Beside the wheel, over the app, taking no keys or touches. */
-    private WindowManager.LayoutParams layoutParams(int gravity) {
+    private WindowManager.LayoutParams layoutParams(int gravity, int inset) {
         final WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.WRAP_CONTENT,
@@ -165,16 +197,18 @@ final class WheelGuide {
                 PixelFormat.TRANSLUCENT);
         final boolean across = gravity == Gravity.TOP || gravity == Gravity.BOTTOM;
         lp.gravity = gravity | (across ? Gravity.CENTER_HORIZONTAL : Gravity.CENTER_VERTICAL);
-        final int margin = Math.round(8 * mContext.getResources().getDisplayMetrics().density);
-        lp.x = across ? 0 : margin;
-        lp.y = across ? margin : 0;
+        final int margin = inset
+                + Math.round(8 * mContext.getResources().getDisplayMetrics().density);
+        final int along = wheelOffset(gravity);
+        lp.x = across ? along : margin;
+        lp.y = across ? margin : along;
         lp.setTitle("WheelGuide");
         lp.setFitInsetsTypes(0);
         return lp;
     }
 
-    /** What a turn, a press and a hold do in {@code mode}, a line each. */
-    private String legendText(String mode) {
+    /** What a turn, a press, a hold and a double press do in {@code mode}, a row each. */
+    private void legend(String mode, List<Integer> gestures, List<CharSequence> texts) {
         final int turn;
         int press = R.string.wheel_legend_press_select;
         boolean hold = false;
@@ -211,6 +245,10 @@ final class WheelGuide {
                 // The press is Enter, as a camera's shutter
                 turn = R.string.wheel_legend_turn_zoom;
                 break;
+            case "camera":
+                turn = R.string.wheel_legend_turn_zoom;
+                press = R.string.wheel_legend_press_photo;
+                break;
             case "pinch":
                 turn = R.string.wheel_legend_turn_zoom;
                 press = 0;
@@ -225,19 +263,30 @@ final class WheelGuide {
                 press = 0;
                 break;
         }
-        final StringBuilder text = new StringBuilder(mContext.getString(turn));
+        gestures.add(WheelCue.TURN);
+        texts.add(mContext.getText(turn));
         if (press != 0) {
-            text.append('\n').append(mContext.getString(press));
+            gestures.add(WheelCue.PRESS);
+            texts.add(mContext.getText(press));
         }
         if (hold) {
-            text.append('\n').append(mContext.getString(R.string.wheel_legend_hold_options));
+            gestures.add(WheelCue.HOLD);
+            texts.add(mContext.getText(R.string.wheel_legend_hold_options));
         }
-        text.append('\n').append(mContext.getString(R.string.wheel_legend_double_taskbar));
-        return text.toString();
+        gestures.add(WheelCue.DOUBLE);
+        texts.add(mContext.getText(R.string.wheel_legend_double_taskbar));
     }
 
     private int getInt(String name, int def) {
         return LineageSettings.Secure.getIntForUser(mContext.getContentResolver(), name, def,
                 mUserId.getAsInt());
+    }
+
+    private static int[] toArray(List<Integer> list) {
+        final int[] array = new int[list.size()];
+        for (int i = 0; i < array.length; i++) {
+            array[i] = list.get(i);
+        }
+        return array;
     }
 }

@@ -1166,7 +1166,7 @@ public class NumberPicker extends LinearLayout {
         setPressed(grabbed);
         if (grabbed) {
             postDelayed(mWheelLetGo, WHEEL_GRAB_TIMEOUT_MS);
-            Toast.makeText(getContext(), R.string.wheel_slider_grabbed, Toast.LENGTH_SHORT).show();
+            WheelCue.show(this, R.string.wheel_cue_set, R.string.wheel_cue_let_go);
         }
     }
 
