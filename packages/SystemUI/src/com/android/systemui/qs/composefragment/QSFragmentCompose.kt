@@ -1053,16 +1053,15 @@ constructor(
                                             .coerceAtLeast(1))
                                     .toInt()
                                     .coerceIn(0, 100)
-                            val hasAutoButton =
-                                LocalContext.current.resources.getBoolean(
-                                    com.android.internal.R.bool
-                                        .config_automatic_brightness_available
-                                )
+                            // The auto button and the space before it follow the track
+                            val autoButton =
+                                com.android.systemui.brightness.ui.compose
+                                    .rememberShowAutoBrightness()
                             WheelSliderLabel(
                                 stringResource(R.string.wheel_qs_brightness),
                                 percent,
                                 Modifier.align(Alignment.Center),
-                                if (hasAutoButton) 126.dp else 64.dp,
+                                trackEnd = if (autoButton) 62.dp else 0.dp,
                             )
                         }
                     }
@@ -1107,21 +1106,21 @@ constructor(
     }
 
     /**
-     * The wheel shade's label and percentage over a slider. Neither sits under the thumb: the
-     * label goes at the start of the fill where it fits there, the percentage at the end of the
-     * fill, against the thumb, where it fits after the label; what doesn't fit goes past the
-     * thumb, as every slider does alike. Each takes the colour for what it's on.
+     * The wheel shade's label and percentage over a slider, kept off its thumb and its icon. The
+     * icon is at the end of the empty track where it fits there, else at the end of the fill, by
+     * the thumb, as both sliders place it. The label goes at the start of the fill where it fits
+     * there, else past the thumb; the percentage at the end of the fill, against the icon or the
+     * thumb, else past the thumb, else nowhere: it is never drawn over the icon. Each takes the
+     * colour for what it's on. {@code trackEnd} is what follows the track, as a button.
      */
     @Composable
     private fun WheelSliderLabel(
         label: String,
         percent: Int,
         modifier: Modifier = Modifier,
-        endPadding: Dp = 64.dp,
+        trackEnd: Dp = 0.dp,
     ) {
         val colors = com.android.systemui.common.shared.colors.SystemUISliderColors.Defaults
-        val gap = 12.dp
-        val start = 16.dp
         var labelOnFill by remember { mutableStateOf(true) }
         var percentOnFill by remember { mutableStateOf(false) }
         androidx.compose.ui.layout.Layout(
@@ -1147,29 +1146,35 @@ constructor(
             val percentPlaceable = measurables[1].measure(loose)
             val width = constraints.maxWidth
             val height = maxOf(labelPlaceable.height, percentPlaceable.height)
-            // The thumb crosses the track, which runs the slider's width
-            val thumb = (width * percent / 100f).toInt()
-            val gapPx = gap.roundToPx()
-            val startPx = start.roundToPx()
-            val labelFits = thumb - gapPx >= startPx + labelPlaceable.width
-            val labelX = if (labelFits) startPx else thumb + gapPx
-            val labelEnd = labelX + labelPlaceable.width + gapPx
-            val percentFits =
-                labelFits && thumb - gapPx - percentPlaceable.width >= labelEnd
-            // Past the thumb it keeps clear of the button at the slider's end
+            val track = width - trackEnd.roundToPx()
+            val gap = 12.dp.roundToPx()
+            val start = 16.dp.roundToPx()
+            // The thumb's gap to the track each side, and the icon with its padding
+            val thumbGap = 6.dp.roundToPx()
+            val icon = 40.dp.roundToPx()
+            val thumb = (track * percent / 100f).toInt()
+            val iconPastThumb = track - thumb - thumbGap > icon
+            val fillEnd = thumb - thumbGap - (if (iconPastThumb) 0 else icon) - gap
+            val pastStart = thumb + thumbGap + gap
+            val pastEnd = if (iconPastThumb) track - icon - gap else track - start
+            val labelWidth = labelPlaceable.width
+            val percentWidth = percentPlaceable.width
+            val labelFits = start + labelWidth <= fillEnd
+            val labelX = if (labelFits) start else pastStart
+            val labelEnd = labelX + labelWidth + gap
+            val percentFits = labelFits && labelEnd + percentWidth <= fillEnd
             val percentX =
-                if (percentFits) {
-                    thumb - gapPx - percentPlaceable.width
-                } else {
-                    maxOf(if (labelFits) thumb + gapPx else labelEnd, 0).coerceAtMost(
-                        width - endPadding.roundToPx() - percentPlaceable.width
-                    )
+                when {
+                    percentFits -> fillEnd - percentWidth
+                    maxOf(labelEnd, pastStart) + percentWidth <= pastEnd ->
+                        maxOf(labelEnd, pastStart)
+                    else -> null
                 }
             labelOnFill = labelFits
             percentOnFill = percentFits
             layout(width, height) {
                 labelPlaceable.place(labelX, (height - labelPlaceable.height) / 2)
-                percentPlaceable.place(percentX, (height - percentPlaceable.height) / 2)
+                percentX?.let { percentPlaceable.place(it, (height - percentPlaceable.height) / 2) }
             }
         }
     }
