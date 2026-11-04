@@ -897,7 +897,7 @@ public class ThemeOverlayController implements CoreStartable, Dumpable {
                 Arrays.asList(ThemeStyle.EXPRESSIVE,
                         ThemeStyle.SPRITZ, ThemeStyle.TONAL_SPOT, ThemeStyle.FRUIT_SALAD,
                         ThemeStyle.RAINBOW, ThemeStyle.VIBRANT,
-                        ThemeStyle.MONOCHROMATIC));
+                        ThemeStyle.MONOCHROMATIC, ThemeStyle.HARETIC));
 
         @ThemeStyle.Type int style = mThemeStyle;
         final String overlayPackageJson = mSecureSettings.getStringForUser(
