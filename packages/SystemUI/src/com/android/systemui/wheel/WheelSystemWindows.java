@@ -5,8 +5,12 @@
 
 package com.android.systemui.wheel;
 
+import android.content.Context;
+import android.view.Gravity;
 import android.view.View;
 import android.view.Window;
+
+import lineageos.providers.LineageSettings;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,6 +27,28 @@ public final class WheelSystemWindows {
     private static boolean sVolumeShowing;
 
     private WheelSystemWindows() {
+    }
+
+    /**
+     * The side of the screen the wheel is on at {@code rotation}, {@link Gravity#LEFT} or
+     * {@link Gravity#RIGHT}, for the volume panel to go beside it; 0 with the wheel UI off or
+     * the wheel along the top or bottom.
+     */
+    public static int wheelSide(Context context, int userId, int rotation) {
+        if (LineageSettings.Secure.getIntForUser(context.getContentResolver(),
+                LineageSettings.Secure.WHEEL_UI, 1, userId) == 0) {
+            return 0;
+        }
+        final WheelTaskbarSettings settings = new WheelTaskbarSettings(context);
+        settings.read(userId);
+        switch (settings.edge(rotation)) {
+            case WheelTaskbarSettings.EDGE_LEFT:
+                return Gravity.LEFT;
+            case WheelTaskbarSettings.EDGE_RIGHT:
+                return Gravity.RIGHT;
+            default:
+                return 0;
+        }
     }
 
     /** Counts {@code window} as showing while its decor view is attached. */
