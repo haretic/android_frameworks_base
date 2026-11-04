@@ -7,7 +7,7 @@ package com.android.systemui.wheel;
 
 import android.view.KeyEvent;
 import android.view.View;
-import android.widget.Toast;
+import android.widget.WheelCue;
 
 import com.android.systemui.res.R;
 import com.google.android.material.slider.Slider;
@@ -111,10 +111,11 @@ public final class WheelSliderGrab implements View.OnKeyListener, View.OnFocusCh
         mSlider.setPressed(grabbed);
         if (grabbed) {
             mSlider.postDelayed(mLetGo, TIMEOUT_MS);
-            Toast.makeText(mSlider.getContext(), com.android.internal.R.string.wheel_slider_grabbed,
-                    Toast.LENGTH_SHORT).show();
+            WheelCue.show(mSlider, com.android.internal.R.string.wheel_cue_set,
+                    com.android.internal.R.string.wheel_cue_let_go);
             mCallback.onStart();
         } else {
+            WheelCue.hide();
             mCallback.onStop();
         }
     }
