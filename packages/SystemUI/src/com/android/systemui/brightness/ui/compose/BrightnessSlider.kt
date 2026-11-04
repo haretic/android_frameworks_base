@@ -211,30 +211,7 @@ fun BrightnessSlider(
         }
     }
 
-    val cr = context.contentResolver
-    val hasAutoBrightness = context.resources.getBoolean(
-        com.android.internal.R.bool.config_automatic_brightness_available
-    )
-    var showAutoBrightness by remember { mutableStateOf(readShowAutoBrightness(cr)) }
-
-    DisposableEffect(Unit) {
-        val observer = object : ContentObserver(null) {
-            override fun onChange(selfChange: Boolean) {
-                context.mainExecutor.execute {
-                    showAutoBrightness = readShowAutoBrightness(cr)
-                }
-            }
-        }
-
-        cr.registerContentObserver(
-            LineageSettings.Secure.getUriFor(LineageSettings.Secure.QS_SHOW_AUTO_BRIGHTNESS),
-            false, observer, UserHandle.USER_ALL
-        )
-
-        onDispose {
-            cr.unregisterContentObserver(observer)
-        }
-    }
+    val showAutoBrightnessButton = rememberShowAutoBrightness()
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -370,7 +347,7 @@ fun BrightnessSlider(
         },
     )
 
-        if (hasAutoBrightness && showAutoBrightness) {
+        if (showAutoBrightnessButton) {
             Spacer(modifier = Modifier.width(10.dp))
             drawAutoBrightnessButton(autoMode = autoMode, onIconClick = onIconClick)
         }
@@ -400,6 +377,40 @@ private fun Modifier.sliderBackground(
     onDrawBehind {
         drawRoundRect(color = color, topLeft = offset, size = newSize, cornerRadius = cornerRadius)
     }
+}
+
+/**
+ * Whether the slider has its auto-brightness button at its end: where the device has auto
+ * brightness and the user shows the button. The wheel shade's labels keep clear of it.
+ */
+@Composable
+fun rememberShowAutoBrightness(): Boolean {
+    val context = LocalContext.current
+    val cr = context.contentResolver
+    val hasAutoBrightness = context.resources.getBoolean(
+        com.android.internal.R.bool.config_automatic_brightness_available
+    )
+    var showAutoBrightness by remember { mutableStateOf(readShowAutoBrightness(cr)) }
+
+    DisposableEffect(Unit) {
+        val observer = object : ContentObserver(null) {
+            override fun onChange(selfChange: Boolean) {
+                context.mainExecutor.execute {
+                    showAutoBrightness = readShowAutoBrightness(cr)
+                }
+            }
+        }
+
+        cr.registerContentObserver(
+            LineageSettings.Secure.getUriFor(LineageSettings.Secure.QS_SHOW_AUTO_BRIGHTNESS),
+            false, observer, UserHandle.USER_ALL
+        )
+
+        onDispose {
+            cr.unregisterContentObserver(observer)
+        }
+    }
+    return hasAutoBrightness && showAutoBrightness
 }
 
 private fun readShowAutoBrightness(cr: ContentResolver): Boolean =
