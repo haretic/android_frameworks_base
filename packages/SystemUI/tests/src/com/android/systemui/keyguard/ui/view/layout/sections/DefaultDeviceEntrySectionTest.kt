@@ -28,7 +28,6 @@ import com.android.systemui.biometrics.AuthController
 import com.android.systemui.flags.FakeFeatureFlags
 import com.android.systemui.flags.FakeFeatureFlagsClassic
 import com.android.systemui.flags.Flags
-import com.android.systemui.keyguard.domain.interactor.KeyguardBlueprintInteractor
 import com.android.systemui.keyguard.ui.viewmodel.DeviceEntryBackgroundViewModel
 import com.android.systemui.keyguard.ui.viewmodel.DeviceEntryForegroundViewModel
 import com.android.systemui.keyguard.ui.viewmodel.DeviceEntryIconViewModel
@@ -88,7 +87,6 @@ class DefaultDeviceEntrySectionTest : SysuiTestCase() {
                 { falsingManager },
                 { mock(VibratorHelper::class.java) },
                 { msdlPlayer },
-                { mock(KeyguardBlueprintInteractor::class.java) },
                 logcatLogBuffer(),
                 logcatLogBuffer("blueprints"),
             )
