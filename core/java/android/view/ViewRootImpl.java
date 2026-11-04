@@ -6596,6 +6596,30 @@ public final class ViewRootImpl implements ViewParent,
         return !bounds.equals(mWheelFocusRect);
     }
 
+    /**
+     * The part of {@code view} on screen as drawing clips it: to an ancestor's bounds only where
+     * that ancestor's parent clips its children, so a view standing out of its parent, as a link
+     * past its text's start for its ring's room, has its whole ring.
+     */
+    private boolean getWheelVisibleBounds(View view, Rect bounds) {
+        view.getBoundsOnScreen(bounds, false);
+        final Rect clip = mWheelClipRect;
+        View child = view;
+        for (ViewParent parent = view.getParent(); parent instanceof ViewGroup group;
+                parent = group.getParent()) {
+            if (child != view && group.getClipChildren()) {
+                child.getBoundsOnScreen(clip, false);
+                if (!bounds.intersect(clip)) {
+                    return false;
+                }
+            }
+            child = group;
+        }
+        return true;
+    }
+
+    private final Rect mWheelClipRect = new Rect();
+
     private boolean getWheelFocusRect(Rect bounds) {
         // Only the window the wheel is on, not a window under a dialog or the keyboard's
         if (mView == null || mAttachInfo.mInTouchMode || !mAttachInfo.mHasWindowFocus
@@ -6622,7 +6646,9 @@ public final class ViewRootImpl implements ViewParent,
         } else if (isWheelScroller(focused)) {
             return false;
         }
-        focused.getBoundsOnScreen(bounds, true);
+        if (!getWheelVisibleBounds(focused, bounds)) {
+            return false;
+        }
         // Half or more out of the list, as while it scrolls the view in: no sliver of a ring
         if (bounds.height() * 2 < Math.min(focused.getHeight(), mHeight)) {
             return false;
@@ -6641,9 +6667,11 @@ public final class ViewRootImpl implements ViewParent,
         }
         // A ring round the whole window, as for a list that is the window, frames nothing; nor
         // one round the window's content below its bar, as a calendar's day grid or a web page,
-        // which shows its own selection
+        // which shows its own selection. A photo as big as the window is a stop all the same,
+        // as a viewer's that a press grabs to zoom: its ring goes just inside the screen's edge
         if (!bounds.intersect(0, 0, mWidth, mHeight)
-                || bounds.width() >= mWidth && bounds.height() * 3 >= mHeight * 2) {
+                || bounds.width() >= mWidth && bounds.height() * 3 >= mHeight * 2
+                        && !(focused instanceof android.widget.ImageView)) {
             return false;
         }
         final int inset = (int) Math.ceil(
@@ -7100,6 +7128,59 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
+    /**
+     * The next stop in or out of a box that takes the focus with buttons in it, as a search bar
+     * with its voice button: down from the box onto its first button and on along them, up from
+     * them back to the box; null where the step leaves the box or there is none. Not a list's
+     * rows, as a contact's with its photo, which stay one stop each.
+     */
+    private View wheelStepThroughBox(View focused, int direction) {
+        ViewGroup box = null;
+        for (View v = focused; v != null; v = v.getParent() instanceof View p ? p : null) {
+            if (v instanceof ViewGroup group && group.isFocusable() && group.isClickable()
+                    && !isWheelScroller(group) && !isRecyclerView(group)) {
+                box = group;
+                break;
+            }
+        }
+        // A bar, not a screen made clickable to keep touches from what is under it
+        if (box == null || wheelGridItem(box) != null || box.getHeight() * 3 > mView.getHeight()) {
+            return null;
+        }
+        for (ViewParent p = box.getParent(); p instanceof View v; p = v.getParent()) {
+            if (v instanceof android.widget.AdapterView || isRecyclerView(v)) {
+                return null;
+            }
+        }
+        final ViewGroup bar = box;
+        final ArrayList<View> buttons = new ArrayList<>();
+        bar.addFocusables(buttons, View.FOCUS_FORWARD);
+        buttons.removeIf(b -> b == bar || !b.isShown() || !isInSight(b));
+        if (buttons.isEmpty()) {
+            return null;
+        }
+        final boolean rtl = box.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
+        final int[] a = new int[2];
+        final int[] b = new int[2];
+        buttons.sort((x, y) -> {
+            x.getLocationInWindow(a);
+            y.getLocationInWindow(b);
+            if (Math.abs(a[1] - b[1]) > Math.min(x.getHeight(), y.getHeight()) / 2) {
+                return Integer.compare(a[1], b[1]);
+            }
+            return rtl ? Integer.compare(b[0] + y.getWidth(), a[0] + x.getWidth())
+                    : Integer.compare(a[0], b[0]);
+        });
+        final int i = focused == box ? -1 : buttons.indexOf(focused);
+        if (direction == View.FOCUS_DOWN) {
+            return i + 1 < buttons.size() ? buttons.get(i + 1) : null;
+        }
+        if (focused == box) {
+            return null;
+        }
+        return i > 0 ? buttons.get(i - 1) : box;
+    }
+
     private static boolean isInside(View view, View parent) {
         for (View v = view; v != null;
                 v = v.getParent() instanceof View p ? p : null) {
@@ -7246,6 +7327,16 @@ public final class ViewRootImpl implements ViewParent,
      * back to the window's first view. Before the focus moves; one partly in sight is
      * {@link #scrollWheelFocusIntoSight}'s, after.
      */
+    /** Whether {@code view} is still in this window's views, a scroll not having recycled it. */
+    private boolean isWheelDescendant(View view) {
+        View child = view;
+        for (ViewParent parent = view.getParent(); parent instanceof View;
+                parent = parent.getParent()) {
+            child = (View) parent;
+        }
+        return child == mView;
+    }
+
     private static void scrollWheelTargetIntoList(View view) {
         if (view.getGlobalVisibleRect(new Rect())) {
             return;
@@ -7321,7 +7412,7 @@ public final class ViewRootImpl implements ViewParent,
      * where the wheel found no view to move the focus to: text and lists whose rows don't take
      * the focus are read through so.
      */
-    private static boolean scrollForWheel(View focused, int direction) {
+    private boolean scrollForWheel(View focused, int direction) {
         final int sign = direction == View.FOCUS_DOWN ? 1 : -1;
         for (View view = focused; view != null; ) {
             if (view.canScrollVertically(sign)) {
@@ -7331,6 +7422,7 @@ public final class ViewRootImpl implements ViewParent,
                 } else {
                     view.scrollBy(0, by);
                 }
+                keepWheelFocusInSight(focused, view);
                 return true;
             }
             view = view.getParent() instanceof View parent ? parent : null;
@@ -7583,6 +7675,46 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     /**
+     * A wheel step an app's own scroller took, as androidx's NestedScrollView scrolling on with
+     * nothing more to focus: once its smooth scroll is done, a focused view it left mostly out
+     * of sight gives the focus to the scroller (keepWheelFocusInSight).
+     */
+    private void checkWheelFocusAfterAppScroll(KeyEvent event) {
+        final int code = event.getKeyCode();
+        if (event.getAction() != KeyEvent.ACTION_DOWN
+                || (code != KeyEvent.KEYCODE_DPAD_DOWN && code != KeyEvent.KEYCODE_DPAD_UP)
+                || !event.hasNoModifiers() || mAttachInfo.mInTouchMode || mView == null
+                || !isWheelFocusEnabled()) {
+            return;
+        }
+        final View focused = mView.findFocus();
+        if (focused == null) {
+            return;
+        }
+        mHandler.removeCallbacks(mWheelSightCheck);
+        mWheelSightFocused = focused;
+        mHandler.postDelayed(mWheelSightCheck, WHEEL_SIGHT_CHECK_MS);
+    }
+
+    /** Past a smooth scroll's 250 ms. */
+    private static final long WHEEL_SIGHT_CHECK_MS = 320;
+    private View mWheelSightFocused;
+    private final Runnable mWheelSightCheck = () -> {
+        final View focused = mWheelSightFocused;
+        mWheelSightFocused = null;
+        if (focused == null || mView == null || mView.findFocus() != focused) {
+            return;
+        }
+        for (ViewParent p = focused.getParent(); p instanceof ViewGroup group;
+                p = p.getParent()) {
+            if (group.canScrollVertically(1) || group.canScrollVertically(-1)) {
+                keepWheelFocusInSight(focused, group);
+                return;
+            }
+        }
+    };
+
+    /**
      * Whether {@code view} is plain text, focusable only to be read: a stock TextView, no field,
      * link nor selectable text, with nothing to do when pressed.
      */
@@ -7606,7 +7738,7 @@ public final class ViewRootImpl implements ViewParent,
      * {@code focused} that goes that way half its height, as its own arrow keys would, the
      * text coming into sight with the focus left where it is.
      */
-    private static boolean scrollWheelPastText(View focused, int direction) {
+    private boolean scrollWheelPastText(View focused, int direction) {
         final int dir = direction == View.FOCUS_UP ? -1 : direction == View.FOCUS_DOWN ? 1 : 0;
         if (dir == 0) {
             return false;
@@ -7615,10 +7747,54 @@ public final class ViewRootImpl implements ViewParent,
                 p = p.getParent()) {
             if (group.canScrollVertically(dir)) {
                 group.scrollBy(0, dir * group.getHeight() / 2);
+                keepWheelFocusInSight(focused, group);
                 return true;
             }
         }
         return false;
+    }
+
+    /**
+     * Where the wheel scrolled the focused view mostly out of sight, as Notification history's
+     * switch up under its title for the text below: the scroller takes the focus, as its own
+     * arrow keys would have it, so no press goes to what can't be seen. A step back the other
+     * way finds the view again.
+     */
+    private void keepWheelFocusInSight(View focused, View scroller) {
+        if (focused == scroller || !(scroller instanceof ViewGroup group)) {
+            return;
+        }
+        if (focused.getGlobalVisibleRect(mWheelSightRect)
+                && mWheelSightRect.height() * 2 >= focused.getHeight()) {
+            return;
+        }
+        // A list that takes no focus of its own, as Settings' pages, takes it while the wheel
+        // reads on down it, and is as it was once the focus goes on
+        final boolean focusable = group.isFocusable();
+        if (!focusable) {
+            group.setFocusable(true);
+        }
+        final int descendants = group.getDescendantFocusability();
+        group.setDescendantFocusability(ViewGroup.FOCUS_BEFORE_DESCENDANTS);
+        final boolean took = group.requestFocus();
+        group.setDescendantFocusability(descendants);
+        if (focusable) {
+            return;
+        }
+        if (!took) {
+            group.setFocusable(false);
+            return;
+        }
+        final ViewTreeObserver observer = group.getViewTreeObserver();
+        observer.addOnGlobalFocusChangeListener(new ViewTreeObserver.OnGlobalFocusChangeListener() {
+            @Override
+            public void onGlobalFocusChanged(View oldFocus, View newFocus) {
+                if (newFocus != group) {
+                    group.setFocusable(false);
+                    group.getViewTreeObserver().removeOnGlobalFocusChangeListener(this);
+                }
+            }
+        });
     }
 
     private boolean isWheelFocusEnabled() {
@@ -9837,6 +10013,16 @@ public final class ViewRootImpl implements ViewParent,
                     }
                     View v = focused.focusSearch(direction);
                     logWheelFocus("step search from " + focused + " found", v);
+                    if (isWheelFocusEnabled() && !mAttachInfo.mInTouchMode
+                            && (direction == View.FOCUS_DOWN || direction == View.FOCUS_UP)) {
+                        // A box that takes the focus with buttons of its own in it, as a
+                        // search bar with its voice and menu buttons: the wheel goes through
+                        // the box and then its buttons as text reads, not past them
+                        final View inner = wheelStepThroughBox(focused, direction);
+                        if (inner != null) {
+                            v = inner;
+                        }
+                    }
                     if (v != null && v != focused && isWheelFocusEnabled()
                             && !mAttachInfo.mInTouchMode
                             && (direction == View.FOCUS_DOWN || direction == View.FOCUS_UP)) {
@@ -9991,18 +10177,27 @@ public final class ViewRootImpl implements ViewParent,
                             moveFocusToAdjacentWindow(direction);
                         }
 
+                        // The wheel's scroll to the next stop can have recycled the stop left,
+                        // in a rotation's relayout the next one too: no rect to carry from it
+                        final boolean inTree = !isWheelFocusEnabled()
+                                || (isWheelDescendant(focused) && isWheelDescendant(v));
+                        if (!inTree && !isWheelDescendant(v)) {
+                            logWheelFocus("step lost", v);
+                            return true;
+                        }
                         // do the math the get the interesting rect
                         // of previous focused into the coord system of
                         // newly focused view
                         focused.getFocusedRect(mTempRect);
-                        if (mView instanceof ViewGroup) {
+                        if (inTree && mView instanceof ViewGroup) {
                             ((ViewGroup) mView).offsetDescendantRectToMyCoords(
                                     focused, mTempRect);
                             ((ViewGroup) mView).offsetRectIntoDescendantCoords(
                                     v, mTempRect);
                         }
                         logWheelFocus("step to", v);
-                        if (v.requestFocus(direction, mTempRect)) {
+                        if (inTree ? v.requestFocus(direction, mTempRect)
+                                : v.requestFocus(direction)) {
                             if (isWheelFocusEnabled()) {
                                 scrollWheelFocusIntoSight(v);
                                 // Off a text field, as from a search's query to its results:
@@ -10122,6 +10317,7 @@ public final class ViewRootImpl implements ViewParent,
 
             // Deliver the key to the view hierarchy.
             if (mView.dispatchKeyEvent(event)) {
+                checkWheelFocusAfterAppScroll(event);
                 return FINISH_HANDLED;
             }
 
