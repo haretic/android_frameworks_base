@@ -29,6 +29,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.activity.ComponentDialog
+import com.android.systemui.wheel.WheelSystemWindows
 import com.android.app.tracing.coroutines.coroutineScopeTraced
 import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.lifecycle.repeatWhenAttached
@@ -78,11 +79,17 @@ constructor(
 
     private fun applyLayoutAndGravity() {
         val win = window ?: return
-        val side = if (volumePanelOnLeft) Gravity.LEFT else Gravity.RIGHT
+        // Beside the wheel, which is on the left upside down; the setting's side with the wheel
+        // along the top or bottom, or the wheel UI off
+        val wheelSide =
+            WheelSystemWindows.wheelSide(context, UserHandle.USER_CURRENT,
+                context.display?.rotation ?: 0)
+        val onLeft = if (wheelSide != 0) wheelSide == Gravity.LEFT else volumePanelOnLeft
+        val side = if (onLeft) Gravity.LEFT else Gravity.RIGHT
         val dialogView = win.decorView
 
         dialogView.layoutDirection =
-            if (volumePanelOnLeft)
+            if (onLeft)
                 View.LAYOUT_DIRECTION_RTL
             else
                 View.LAYOUT_DIRECTION_LTR
