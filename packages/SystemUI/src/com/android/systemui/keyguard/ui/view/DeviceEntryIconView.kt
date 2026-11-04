@@ -20,10 +20,8 @@ import android.companion.virtualdevice.flags.Flags
 import android.content.Context
 import android.graphics.drawable.AnimatedStateListDrawable
 import android.graphics.drawable.AnimatedVectorDrawable
-import android.graphics.drawable.GradientDrawable
 import android.util.AttributeSet
 import android.util.StateSet
-import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewConfiguration
@@ -31,8 +29,8 @@ import android.view.ViewGroup
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.FrameLayout
 import android.widget.ImageView
-import android.widget.LinearLayout
-import android.widget.TextView
+import android.widget.PopupWindow
+import android.widget.WheelCue
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import com.airbnb.lottie.LottieCompositionFactory
 import com.airbnb.lottie.LottieDrawable
@@ -66,16 +64,8 @@ constructor(
     val aodFpDrawable: LottieDrawable = LottieDrawable()
     var accessibilityHintType: AccessibilityHintType = AccessibilityHintType.NONE
 
-    /** Whether the icon sits in the wheel UI's slot, a row with its label, see setWheelPill. */
-    var wheelLayout = false
-        private set
-
-    /** Whether that row shows as the Unlock pill. */
-    var wheelPill = false
-        private set
-
-    private var wheelRow: LinearLayout? = null
-    private var wheelLabel: TextView? = null
+    /** The wheel UI's cue by the side button, see setWheelCue. */
+    private var wheelCue: PopupWindow? = null
 
     private var animatedIconDrawable: AnimatedStateListDrawable = AnimatedStateListDrawable()
 
@@ -280,78 +270,36 @@ constructor(
     }
 
     /**
-     * The wheel UI's Unlock pill: the icon and an Unlock label on a pill the side button presses,
-     * in place of the bare icon. On AOD, where the pill would burn in, the icon alone keeps the
-     * wheel's slot.
+     * With the wheel UI the side button unlocks: a cue beside it says so while the icon shows,
+     * not on AOD, under the bouncer, or as the icon fades. The icon stays as it is, the touch
+     * target it always was; a pill around it looked like a button to tap.
      */
-    fun setWheelPill(wheel: Boolean, pill: Boolean) {
-        wheelPill = wheel && pill
-        if (wheel != wheelLayout) {
-            wheelLayout = wheel
-            removeView(iconView)
-            if (wheel) {
-                val row = wheelRow ?: createWheelRow().also { wheelRow = it }
-                val iconSize = dp(24f)
-                row.addView(iconView, 0, LinearLayout.LayoutParams(iconSize, iconSize))
-                addView(
-                    row,
-                    indexOfChild(touchHandlingView),
-                    LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                    ),
+    fun setWheelCue(show: Boolean) {
+        wheelCue?.dismiss()
+        wheelCue =
+            if (show) {
+                WheelCue.keep(
+                    this,
+                    intArrayOf(WheelCue.PRESS),
+                    arrayOf(context.getText(R.string.wheel_unlock)),
                 )
-            } else {
-                wheelRow?.let {
-                    it.removeView(iconView)
-                    removeView(it)
-                }
-                addIconImageView(indexOfChild(touchHandlingView))
-            }
-        }
-        wheelLabel?.visibility = if (wheelPill) View.VISIBLE else View.GONE
-        background =
-            if (wheelPill) {
-                GradientDrawable().apply {
-                    cornerRadius = dp(WHEEL_PILL_RADIUS_DP).toFloat()
-                    setColor(
-                        context.getColor(
-                            com.android.internal.R.color.materialColorSurfaceContainerHigh
-                        )
-                    )
-                }
             } else {
                 null
             }
     }
 
-    private fun createWheelRow(): LinearLayout =
-        LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            val label =
-                TextView(context).apply {
-                    setText(R.string.wheel_unlock)
-                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
-                    setTextColor(
-                        context.getColor(com.android.internal.R.color.materialColorOnSurface)
-                    )
-                    importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
-                }
-            addView(
-                label,
-                LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                    )
-                    .apply { marginStart = dp(10f) },
-            )
-            wheelLabel = label
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // Turned, the wheel is on another edge: the cue goes there once the window has turned
+        if (wheelCue != null) {
+            post { if (wheelCue != null) setWheelCue(true) }
         }
+    }
 
-    private fun dp(value: Float): Int =
-        TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, resources.displayMetrics)
-            .toInt()
+    override fun onDetachedFromWindow() {
+        setWheelCue(false)
+        super.onDetachedFromWindow()
+    }
 
     fun getIconState(icon: IconType, aod: Boolean): IntArray {
         val lockIconState = IntArray(2)
@@ -374,10 +322,6 @@ constructor(
         UNLOCK(R.string.accessibility_unlock_button),
         FINGERPRINT(R.string.accessibility_fingerprint_label),
         NONE(-1),
-    }
-
-    private companion object {
-        const val WHEEL_PILL_RADIUS_DP = 24f
     }
 
     enum class AccessibilityHintType {
