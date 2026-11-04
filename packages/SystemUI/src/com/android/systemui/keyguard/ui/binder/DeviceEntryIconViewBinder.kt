@@ -53,6 +53,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DisposableHandle
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import lineageos.providers.LineageSettings
@@ -197,7 +198,7 @@ object DeviceEntryIconViewBinder {
                         }
                     }
                     launch("$TAG#viewModel.accessibilityDelegateHint") {
-                        // The wheel UI's Unlock pill takes the side button's press as a click
+                        // With the wheel UI the side button's press is a click
                         wheelLockscreen(view)
                             .flatMapLatest { wheel ->
                                 if (wheel) {
@@ -263,44 +264,46 @@ object DeviceEntryIconViewBinder {
                     Log.d(TAG, "Initializing device entry fgIconView")
                     fgIconView.setImageState(StateSet.NOTHING, /* merge */ false)
                     launch("$TAG#fpIconView.viewModel") {
-                        combine(fgViewModel.viewModel, wheelLockscreen(view), ::Pair)
-                            .collect { (viewModel, wheel) ->
-                                Log.d(TAG, "Updating device entry icon image state $viewModel")
-                                view.setWheelPill(
-                                    wheel,
-                                    pill =
-                                        !viewModel.useAodVariant &&
-                                            viewModel.type != DeviceEntryIconView.IconType.NONE,
-                                )
-                                if (viewModel.type.contentDescriptionResId != -1) {
-                                    fgIconView.contentDescription =
-                                        fgIconView.resources.getString(
-                                            viewModel.type.contentDescriptionResId
-                                        )
-                                }
-                                val pillColor =
-                                    if (view.wheelPill) {
-                                        view.context.getColor(
-                                            com.android.internal.R.color.materialColorOnSurface
-                                        )
-                                    } else {
-                                        null
-                                    }
-                                fgIconView.imageTintList =
-                                    ColorStateList.valueOf(
-                                        pillColor ?: overrideColor?.toArgb() ?: viewModel.tint
+                        fgViewModel.viewModel.collect { viewModel ->
+                            Log.d(TAG, "Updating device entry icon image state $viewModel")
+                            if (viewModel.type.contentDescriptionResId != -1) {
+                                fgIconView.contentDescription =
+                                    fgIconView.resources.getString(
+                                        viewModel.type.contentDescriptionResId
                                     )
-                                val padding = if (view.wheelLayout) 0 else viewModel.padding
-                                fgIconView.setPadding(padding, padding, padding, padding)
-                                // Set image state at the end after updating other view state. This
-                                // method forces the ImageView to recompute the bounds of the drawable.
-                                fgIconView.setImageState(
-                                    view.getIconState(viewModel.type, viewModel.useAodVariant),
-                                    /* merge */ false,
-                                )
-                                // Invalidate, just in case the padding changes just after icon changes
-                                fgIconView.invalidate()
                             }
+                            fgIconView.imageTintList =
+                                ColorStateList.valueOf(overrideColor?.toArgb() ?: viewModel.tint)
+                            fgIconView.setPadding(
+                                viewModel.padding,
+                                viewModel.padding,
+                                viewModel.padding,
+                                viewModel.padding,
+                            )
+                            // Set image state at the end after updating other view state. This
+                            // method forces the ImageView to recompute the bounds of the drawable.
+                            fgIconView.setImageState(
+                                view.getIconState(viewModel.type, viewModel.useAodVariant),
+                                /* merge */ false,
+                            )
+                            // Invalidate, just in case the padding changes just after icon changes
+                            fgIconView.invalidate()
+                        }
+                    }
+                    launch("$TAG#wheelCue") {
+                        // The wheel UI's cue by the side button goes with the icon
+                        combine(
+                                wheelLockscreen(view),
+                                fgViewModel.viewModel,
+                                viewModel.deviceEntryViewAlpha,
+                            ) { wheel, icon, alpha ->
+                                wheel &&
+                                    !icon.useAodVariant &&
+                                    icon.type != DeviceEntryIconView.IconType.NONE &&
+                                    alpha > 0.5f
+                            }
+                            .distinctUntilChanged()
+                            .collect { view.setWheelCue(it) }
                     }
                 }
             }
@@ -351,6 +354,6 @@ object DeviceEntryIconViewBinder {
     }
 }
 
-/** Whether the lock screen takes the wheel UI's Unlock pill. */
+/** Whether the lock screen takes the wheel UI, the side button unlocking. */
 private fun wheelLockscreen(view: View) =
     wheelLayoutEnabled(view.context, LineageSettings.Secure.WHEEL_LOCKSCREEN)
