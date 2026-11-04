@@ -1457,8 +1457,9 @@ public class ScrollView extends FrameLayout {
         }
 
         if (currentFocused != null && currentFocused.isFocused()
-                && isOffScreen(currentFocused)) {
-            // previously focused item still has focus and is off screen, give
+                && isMostlyOffScreen(currentFocused)) {
+            // previously focused item still has focus and is off screen, or so nearly that
+            // its highlight can't be seen (as a switch bar under a page's title), give
             // it up (take it back to ourselves)
             // (also, need to temporarily force FOCUS_BEFORE_DESCENDANTS so we are
             // sure to
@@ -1477,6 +1478,15 @@ public class ScrollView extends FrameLayout {
      */
     private boolean isOffScreen(View descendant) {
         return !isWithinDeltaOfScreen(descendant, 0, getHeight());
+    }
+
+    /** Less than half of {@code descendant} on screen. */
+    private boolean isMostlyOffScreen(View descendant) {
+        descendant.getDrawingRect(mTempRect);
+        offsetDescendantRectToMyCoords(descendant, mTempRect);
+        final int top = Math.max(mTempRect.top, getScrollY());
+        final int bottom = Math.min(mTempRect.bottom, getScrollY() + getHeight());
+        return (bottom - top) * 2 < mTempRect.height();
     }
 
     /**
