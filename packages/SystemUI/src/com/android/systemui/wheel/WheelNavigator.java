@@ -1150,7 +1150,8 @@ public final class WheelNavigator {
                                     context.getResources().getDisplayMetrics());
             radius = defaultRadius;
             mPaint.setStyle(Paint.Style.STROKE);
-            mPaint.setColor(context.getColor(com.android.internal.R.color.system_accent1_100));
+            // The primary role as the framework's ring, the seed itself in the haretic style
+            mPaint.setColor(context.getColor(com.android.internal.R.color.system_primary_dark));
         }
 
         void setGrabbed(boolean grabbed) {
