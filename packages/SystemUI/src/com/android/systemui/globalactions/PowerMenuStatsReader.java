@@ -190,17 +190,32 @@ final class PowerMenuStatsReader {
                 ? Float.NaN : batteryAmps * batteryVolts;
     }
 
-    /** Used is MemTotal - MemAvailable, like the performance overlay. */
+    /**
+     * The total is the RAM fitted, not MemTotal: the kernel's total leaves out what firmware holds
+     * before Linux starts (the R1's 4 GB shows 3.5 GB, the modem's 256 MB the most of it). Used is
+     * the rest of the fitted RAM after MemAvailable, those reserves counted as in use.
+     */
     void sampleRam(String meminfo) {
         final long total = meminfoKb(meminfo, "MemTotal:");
         final long available = meminfoKb(meminfo, "MemAvailable:");
         if (total > 0 && available >= 0 && available <= total) {
-            ramTotalMb = (int) (total / 1024);
-            ramUsedMb = (int) ((total - available) / 1024);
-            ramPercent = (int) (100 * (total - available) / total);
+            final long fitted = fittedKb(total);
+            ramTotalMb = (int) (fitted / 1024);
+            ramUsedMb = (int) ((fitted - available) / 1024);
+            ramPercent = (int) (100 * (fitted - available) / fitted);
         } else {
             ramTotalMb = ramUsedMb = ramPercent = -1;
         }
+    }
+
+    /** The RAM fitted, from the kernel's total: rounded up to a power of two, as
+     *  FileUtils.roundStorageSize rounds the advertised memory. */
+    static long fittedKb(long totalKb) {
+        long fitted = 512 * 1024;
+        while (fitted < totalKb) {
+            fitted <<= 1;
+        }
+        return fitted;
     }
 
     static long meminfoKb(String meminfo, String key) {
