@@ -69,7 +69,10 @@ data class ThemeConfig(
     fun getDefaultColor(context: Context): Int {
         return when {
             seedColor != null -> seedColor
-            isDarkTheme -> context.resources.getColor(android.R.color.system_accent1_100)
+            // The role, not the palette's tone 90 it matches in stock styles: haretic's dark
+            // palette is shifted, its role the seed itself
+            isDarkTheme ->
+                context.resources.getColor(android.R.color.system_on_primary_container_dark)
             else -> context.resources.getColor(android.R.color.system_accent2_600)
         }
     }
