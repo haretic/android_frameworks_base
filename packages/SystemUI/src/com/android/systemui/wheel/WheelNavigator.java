@@ -590,9 +590,8 @@ public final class WheelNavigator {
             if (virtualId == AccessibilityNodeProvider.HOST_VIEW_ID) {
                 // A view inside Compose (AndroidView), as the media carousel
                 final View child =
-                        host.findViewByAccessibilityIdTraversal(
-                                AccessibilityNodeInfo.getAccessibilityViewId(childId));
-                if (child != null && child != host && sideways(child, x, y)) {
+                        viewInside(host, AccessibilityNodeInfo.getAccessibilityViewId(childId));
+                if (child != null && sideways(child, x, y)) {
                     return true;
                 }
             } else if (sidewaysVirtual(host, provider, virtualId, x, y)) {
@@ -600,6 +599,30 @@ public final class WheelNavigator {
             }
         }
         return false;
+    }
+
+    /**
+     * The view under host with the accessibility id, host itself excluded, found by walking its
+     * children. Not host.findViewByAccessibilityIdTraversal: Compose's AndroidComposeView
+     * overrides it to call View's by reflection, which dispatches back to the override, so it
+     * recurses until the stack runs out, an exception made at every level (SystemUI's ANRs with
+     * the media player in the shade).
+     */
+    private static View viewInside(View host, int accessibilityId) {
+        if (!(host instanceof ViewGroup group)) {
+            return null;
+        }
+        for (int i = 0; i < group.getChildCount(); i++) {
+            final View child = group.getChildAt(i);
+            if (child.getAccessibilityViewId() == accessibilityId) {
+                return child;
+            }
+            final View found = viewInside(child, accessibilityId);
+            if (found != null) {
+                return found;
+            }
+        }
+        return null;
     }
 
     private static boolean takesSideways(AccessibilityNodeInfo node) {
@@ -774,9 +797,8 @@ public final class WheelNavigator {
             if (virtualId == AccessibilityNodeProvider.HOST_VIEW_ID) {
                 // A view inside Compose (AndroidView): walk it as a view
                 final View child =
-                        host.findViewByAccessibilityIdTraversal(
-                                AccessibilityNodeInfo.getAccessibilityViewId(childId));
-                if (child != null && child != host) {
+                        viewInside(host, AccessibilityNodeInfo.getAccessibilityViewId(childId));
+                if (child != null) {
                     collect(child, stops);
                 }
             } else {
