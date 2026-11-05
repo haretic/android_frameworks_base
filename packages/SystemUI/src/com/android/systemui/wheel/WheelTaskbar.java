@@ -641,10 +641,16 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         }
     }
 
-    /** The stock look (Settings > System > Taskbar and wheel) has no taskbar. */
+    /**
+     * The stock look (Settings > System > Taskbar and wheel) has no taskbar, and nor has the setup
+     * wizard: until setup is done the wheel is the wizard's.
+     */
     private boolean isEnabled() {
+        final int user = mUserTracker.getUserId();
         return LineageSettings.Secure.getIntForUser(mContext.getContentResolver(),
-                LineageSettings.Secure.WHEEL_UI, 1, mUserTracker.getUserId()) != 0;
+                LineageSettings.Secure.WHEEL_UI, 1, user) != 0
+                && Settings.Secure.getIntForUser(mContext.getContentResolver(),
+                        Settings.Secure.USER_SETUP_COMPLETE, 0, user) != 0;
     }
 
     // ---- The wheel daemon's mode ----
