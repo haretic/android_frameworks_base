@@ -10,6 +10,7 @@ import android.content.Context;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.os.Handler;
+import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.text.TextUtils;
 import android.view.Gravity;
@@ -46,6 +47,8 @@ final class WheelGuide {
     private static final long LEGEND_MS = 2500;
     private static final long HINT_MS = 5000;
     private static final long FADE_MS = 150;
+    /** At most one legend or hint this often: opening apps one after another changes modes. */
+    private static final long COOLDOWN_MS = 5000;
 
     private final Context mContext;
     private final WindowManager mWindowManager;
@@ -58,6 +61,8 @@ final class WheelGuide {
     private String mLegendMode;
     /** A hint showing: the legend waits for it. */
     private boolean mHinting;
+    /** When the last legend or hint showed, uptime, for the cooldown. */
+    private long mLastShown = -COOLDOWN_MS;
 
     WheelGuide(Context context, WindowManager windowManager, Handler handler, IntSupplier userId) {
         mContext = context;
@@ -83,6 +88,10 @@ final class WheelGuide {
         if (legend == LEGEND_OFF || mHinting || (legend == LEGEND_ON_CHANGE && !changed)) {
             return;
         }
+        // Always shown, it follows the mode; on a change, not so soon after the last
+        if (legend == LEGEND_ON_CHANGE && coolingDown()) {
+            return;
+        }
         final List<Integer> gestures = new ArrayList<>();
         final List<CharSequence> texts = new ArrayList<>();
         legend(mode, gestures, texts);
@@ -104,7 +113,8 @@ final class WheelGuide {
                 LineageSettings.Secure.WHEEL_GUIDE_HINTS_SEEN, mUserId.getAsInt());
         final List<String> ids = TextUtils.isEmpty(seen) ? new ArrayList<>()
                 : new ArrayList<>(Arrays.asList(seen.split(",")));
-        if (ids.contains(id)) {
+        // Not marked seen while cooling down: it shows the next time it applies
+        if (ids.contains(id) || coolingDown()) {
             return;
         }
         ids.add(id);
@@ -117,6 +127,10 @@ final class WheelGuide {
             words[i] = mContext.getText(texts[i]);
         }
         show(gestures, words, gravity, HINT_MS, inset);
+    }
+
+    private boolean coolingDown() {
+        return SystemClock.uptimeMillis() - mLastShown < COOLDOWN_MS;
     }
 
     void hide() {
@@ -133,6 +147,7 @@ final class WheelGuide {
 
     private void show(int[] gestures, CharSequence[] texts, int gravity, long forMs, int inset) {
         mHandler.removeCallbacks(mHide);
+        mLastShown = SystemClock.uptimeMillis();
         final boolean shown = mStrip != null;
         if (shown) {
             mStrip.animate().cancel();
