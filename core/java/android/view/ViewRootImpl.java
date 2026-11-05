@@ -6528,7 +6528,8 @@ public final class ViewRootImpl implements ViewParent,
             mWheelFocusPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
             mWheelFocusPaint.setStyle(Paint.Style.STROKE);
         }
-        mWheelFocusPaint.setColor(mContext.getColor(android.R.color.system_accent1_100));
+        // The accent as the theme's primary is, the seed itself in the haretic style
+        mWheelFocusPaint.setColor(mContext.getColor(android.R.color.system_primary_dark));
         // Twice as thick while the view holds the wheel, as a slider the side button grabbed
         final float width = WHEEL_FOCUS_WIDTH_DP * density
                 * (isWheelGrabbed(mView.findFocus()) ? 2 : 1);
