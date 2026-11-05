@@ -129,9 +129,15 @@ public class PowerMenuStatsTest {
         final PowerMenuStatsReader reader = PowerMenuStatsReader.empty();
         reader.sampleRam("MemTotal:        1000000 kB\nMemFree:          100000 kB\n"
                 + "MemAvailable:     400000 kB\nBuffers: 1 kB\n");
-        assertEquals(976, reader.ramTotalMb);
-        assertEquals(585, reader.ramUsedMb);
-        assertEquals(60, reader.ramPercent);
+        // the RAM fitted, 1 GB, what MemTotal leaves out counted as used
+        assertEquals(1024, reader.ramTotalMb);
+        assertEquals(633, reader.ramUsedMb);
+        assertEquals(61, reader.ramPercent);
+        // the R1: 3.5 GB to the kernel, 4 GB fitted
+        reader.sampleRam("MemTotal:        3670012 kB\nMemAvailable:    1368100 kB\n");
+        assertEquals(4096, reader.ramTotalMb);
+        assertEquals(2759, reader.ramUsedMb);
+        assertEquals(67, reader.ramPercent);
         reader.sampleRam("nothing here");
         assertEquals(-1, reader.ramPercent);
         assertEquals(-1, PowerMenuStatsReader.meminfoKb(null, "MemTotal:"));
