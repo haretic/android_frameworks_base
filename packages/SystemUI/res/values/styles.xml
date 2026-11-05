@@ -456,7 +456,8 @@
         <item name="darkIconTheme">@style/DualToneDarkTheme</item>
         <item name="wallpaperTextColor">@*android:color/primary_text_material_dark</item>
         <item name="wallpaperTextColorSecondary">@*android:color/secondary_text_material_dark</item>
-        <item name="wallpaperTextColorAccent">@color/material_dynamic_primary90</item>
+        <!-- The role matching tone 90 in stock styles, the seed in haretic's -->
+        <item name="wallpaperTextColorAccent">@*android:color/system_on_primary_container_dark</item>
         <item name="android:colorError">@*android:color/error_color_material_dark</item>
         <item name="*android:lockPatternStyle">@style/LockPatternViewStyle</item>
         <item name="lockPatternStyle">@style/LockPatternContainerStyle</item>
