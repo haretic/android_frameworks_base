@@ -256,6 +256,10 @@ final class WheelGuide {
                 turn = R.string.wheel_legend_turn_media;
                 press = R.string.wheel_legend_press_play;
                 break;
+            case "seek":
+                turn = R.string.wheel_legend_turn_seek;
+                press = R.string.wheel_legend_press_play;
+                break;
             case "zoom":
                 // The press is Enter, as a camera's shutter
                 turn = R.string.wheel_legend_turn_zoom;

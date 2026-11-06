@@ -4825,6 +4825,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 keyCode = KeyEvent.KEYCODE_ENTER;
                 break;
             case "media":
+            case "seek":
                 keyCode = KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE;
                 break;
             // A camera's shutter: the key camera apps take a photo on; in a dialog over the

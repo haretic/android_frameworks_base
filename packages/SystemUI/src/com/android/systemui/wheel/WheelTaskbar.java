@@ -161,6 +161,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private static final String MODE_VOLUME = "volume";
     private static final String MODE_BRIGHTNESS = "brightness";
     private static final String MODE_MEDIA = "media";
+    /** Rewind and fast forward inside the track, the press plays and pauses (r1-wheeld, the policy). */
+    private static final String MODE_SEEK = "seek";
     private static final String MODE_ZOOM = "zoom";
     /** A camera's zoom keys, the press its camera key: the shutter (r1-wheeld, the policy). */
     private static final String MODE_CAMERA = "camera";
@@ -171,7 +173,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     /** Every mode, in the order the Wheel mode list shows them. */
     private static final List<String> MODES = List.of(MODE_TASKBAR, MODE_APP, MODE_SCROLL,
             MODE_TAB, MODE_ARROWS, MODE_PAGE, MODE_VOLUME, MODE_BRIGHTNESS, MODE_MEDIA,
-            MODE_PINCH, MODE_ZOOM, MODE_CAMERA, MODE_TOUCH);
+            MODE_SEEK,            MODE_PINCH, MODE_ZOOM, MODE_CAMERA, MODE_TOUCH);
     /** The R1Wheel page that places an app's touch zones over it. */
     private static final ComponentName TOUCH_ZONES = new ComponentName(
             "cat.kenny.r1.wheel.settings", "cat.kenny.r1.wheel.settings.TouchZonesActivity");
@@ -3202,6 +3204,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 return mContext.getString(R.string.wheel_taskbar_mode_brightness);
             case MODE_MEDIA:
                 return mContext.getString(R.string.wheel_taskbar_mode_media);
+            case MODE_SEEK:
+                return mContext.getString(R.string.wheel_taskbar_mode_seek);
             case MODE_PINCH:
                 return mContext.getString(R.string.wheel_taskbar_mode_pinch);
             case MODE_ZOOM:
@@ -3237,6 +3241,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 return R.drawable.ic_wheel_taskbar_mode_brightness;
             case MODE_MEDIA:
                 return R.drawable.ic_wheel_taskbar_mode_media;
+            case MODE_SEEK:
+                return R.drawable.ic_wheel_taskbar_mode_seek;
             case MODE_PINCH:
                 return R.drawable.ic_wheel_taskbar_mode_pinch;
             case MODE_ZOOM:
