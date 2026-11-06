@@ -7283,6 +7283,11 @@ public final class ViewRootImpl implements ViewParent,
         } else if (drawable instanceof android.graphics.drawable.DrawableContainer
                 && drawable.getCurrent() != drawable && drawable.getCurrent() != null) {
             wheelFocusCard(drawable.getCurrent(), content);
+        } else if (drawable instanceof android.graphics.drawable.GradientDrawable line
+                && line.getShape() == android.graphics.drawable.GradientDrawable.LINE) {
+            // A line marks what is above it, as the underline under a time picker's focused
+            // hour: no card, the ring round the line alone was a sliver under the digits
+            return;
         } else {
             content.union(drawable.getBounds());
             if (drawable instanceof android.graphics.drawable.GradientDrawable shape
