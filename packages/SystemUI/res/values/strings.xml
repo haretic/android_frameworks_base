@@ -5110,6 +5110,7 @@
     <string name="wheel_taskbar_mode_brightness">Brightness</string>
     <!-- Wheel taskbar, Wheel mode: the wheel skips tracks, the side button plays and pauses [CHAR LIMIT=32] -->
     <string name="wheel_taskbar_mode_media">Tracks</string>
+    <string name="wheel_taskbar_mode_seek">Seek</string>
     <!-- Wheel taskbar, Wheel mode: the wheel pinches two fingers out and in on the screen, zooming as a pinch does in maps, photos and pages [CHAR LIMIT=32] -->
     <string name="wheel_taskbar_mode_pinch">Pinch zoom</string>
     <!-- Wheel taskbar, Wheel mode: the wheel zooms in and out with the keyboard's zoom keys, as a browser takes [CHAR LIMIT=32] -->

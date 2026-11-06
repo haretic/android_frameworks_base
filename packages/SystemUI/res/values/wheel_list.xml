@@ -52,6 +52,7 @@
     <string name="wheel_legend_turn_volume">Volume</string>
     <string name="wheel_legend_turn_brightness">Brightness</string>
     <string name="wheel_legend_turn_media">Track</string>
+    <string name="wheel_legend_turn_seek">Seek</string>
     <string name="wheel_legend_turn_zoom">Zoom</string>
     <string name="wheel_legend_turn_taskbar">Taskbar</string>
     <string name="wheel_legend_turn_touch">Tap the spots</string>
