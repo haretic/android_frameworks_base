@@ -65,7 +65,8 @@
     <color name="global_actions_stats_cpu">@color/materialColorPrimary</color>
     <color name="global_actions_stats_temp">#FFB870</color>
     <color name="global_actions_stats_bat">#9BE29B</color>
-    <color name="global_actions_stats_ram">#A8C8FF</color>
+    <!-- haretic: a warm mauve as Settings' homepage icons have, not a blue beside the orange -->
+    <color name="global_actions_stats_ram">#ECB8D4</color>
     <!-- Levels: charging, warm or nearly full, hot or nearly empty -->
     <color name="global_actions_stats_good">#69F0AE</color>
     <color name="global_actions_stats_ok">#FFD740</color>
