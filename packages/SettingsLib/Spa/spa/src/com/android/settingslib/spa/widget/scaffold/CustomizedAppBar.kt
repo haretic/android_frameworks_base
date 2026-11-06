@@ -194,7 +194,8 @@ private fun topAppBarColors() =
             scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
             navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
             titleContentColor = MaterialTheme.colorScheme.onSurface,
-            actionIconContentColor = MaterialTheme.colorScheme.primary,
+            // haretic: the actions as the classic pages' toolbar has them, not in the accent
+            actionIconContentColor = MaterialTheme.colorScheme.onSurface,
         )
     } else {
         TopAppBarColors(
