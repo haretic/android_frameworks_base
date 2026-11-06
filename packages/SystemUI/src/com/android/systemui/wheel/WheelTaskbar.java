@@ -1161,8 +1161,14 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             @Override
             public boolean dispatchKeyEvent(KeyEvent event) {
                 // A bar sliding out takes no more keys, as those that came in before it gave up
-                // the focus: its views are no longer the bar's
+                // the focus: its views are no longer the bar's. Where a new bar took its place,
+                // as the screen's turn moves it to the wheel's edge, the steps already on their
+                // way to this one are the new bar's: dropped, a spin up from the end of the bar
+                // stopped short of Back
                 if (this != mRoot) {
+                    if (mRoot != null) {
+                        onKey(event);
+                    }
                     return true;
                 }
                 return onKey(event) || super.dispatchKeyEvent(event);
