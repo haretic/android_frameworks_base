@@ -38,6 +38,9 @@ import com.android.systemui.common.ui.view.TouchHandlingView
 import com.android.systemui.log.TouchHandlingViewLogger
 import com.android.systemui.res.R
 
+/** How long the wheel UI's unlock cue stays as the lock screen comes, see setWheelCue. */
+private const val WHEEL_CUE_MS = 4000L
+
 class DeviceEntryIconView
 @JvmOverloads
 constructor(
@@ -66,6 +69,10 @@ constructor(
 
     /** The wheel UI's cue by the side button, see setWheelCue. */
     private var wheelCue: PopupWindow? = null
+    private val hideWheelCue = Runnable {
+        wheelCue?.dismiss()
+        wheelCue = null
+    }
 
     private var animatedIconDrawable: AnimatedStateListDrawable = AnimatedStateListDrawable()
 
@@ -270,11 +277,14 @@ constructor(
     }
 
     /**
-     * With the wheel UI the side button unlocks: a cue beside it says so while the icon shows,
-     * not on AOD, under the bouncer, or as the icon fades. The icon stays as it is, the touch
-     * target it always was; a pill around it looked like a button to tap.
+     * With the wheel UI the side button unlocks: a cue beside it says so as the icon shows, not
+     * on AOD, under the bouncer, or as the icon fades. The icon stays as it is, the touch target
+     * it always was; a pill around it looked like a button to tap. The cue goes after
+     * WHEEL_CUE_MS: kept, it covered a notification's end beside the wheel, its expand button and
+     * the wheel's ring on it. Each wake brings it back.
      */
     fun setWheelCue(show: Boolean) {
+        removeCallbacks(hideWheelCue)
         wheelCue?.dismiss()
         wheelCue =
             if (show) {
@@ -286,6 +296,9 @@ constructor(
             } else {
                 null
             }
+        if (wheelCue != null) {
+            postDelayed(hideWheelCue, WHEEL_CUE_MS)
+        }
     }
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
