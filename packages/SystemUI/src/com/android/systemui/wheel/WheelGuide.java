@@ -88,8 +88,13 @@ final class WheelGuide {
         if (legend == LEGEND_OFF || mHinting || (legend == LEGEND_ON_CHANGE && !changed)) {
             return;
         }
-        // Always shown, it follows the mode; on a change, not so soon after the last
+        // Always shown, it follows the mode; on a change, not so soon after the last, unless
+        // that one is still up: it would name the mode the wheel has left, as after a
+        // dialog over the app that the app's mode came back from
         if (legend == LEGEND_ON_CHANGE && coolingDown()) {
+            if (mStrip != null) {
+                hide();
+            }
             return;
         }
         final List<Integer> gestures = new ArrayList<>();
