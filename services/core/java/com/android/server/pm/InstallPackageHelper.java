@@ -218,6 +218,9 @@ import java.util.concurrent.TimeUnit;
 
 
 final class InstallPackageHelper {
+    /** Magisk's app, which haretic's rooted builds install and keep at their version */
+    private static final String MAGISK_PACKAGE = "com.topjohnwu.magisk";
+
     // One minute over PM WATCHDOG_TIMEOUT
     private static final long WAKELOCK_TIMEOUT_MS = WATCHDOG_TIMEOUT + 1000 * 60;
     private static final String INSTALLER_WAKE_LOCK_TAG = "installer:packages";
@@ -1785,6 +1788,17 @@ final class InstallPackageHelper {
                     if (DEBUG_INSTALL) Slog.d(TAG, "Replace existing package: " + pkgName);
                 }
                 if (replace) {
+                    // haretic's rooted builds bring their Magisk and update it with the system:
+                    // no app replaces it, not stores and not Magisk's own app, only the rooted
+                    // boot's installer (as root, so as adb) and the system
+                    if (MAGISK_PACKAGE.equals(pkgName)
+                            && (installFlags & PackageManager.INSTALL_FROM_ADB) == 0
+                            && UserHandle.getAppId(request.getInstallerPackageUid())
+                                    != Process.SYSTEM_UID) {
+                        throw new PrepareFailure(PackageManager.INSTALL_FAILED_USER_RESTRICTED,
+                                "Magisk comes with haretic and updates with it, not from "
+                                        + request.getInstallerPackageName());
+                    }
                     // Prevent apps opting out from runtime permissions
                     final int oldTargetSdk = ps.getTargetSdkVersion();
                     final int newTargetSdk = parsedPackage.getTargetSdkVersion();
