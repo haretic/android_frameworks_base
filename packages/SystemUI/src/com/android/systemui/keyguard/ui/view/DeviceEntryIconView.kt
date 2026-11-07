@@ -18,6 +18,7 @@ package com.android.systemui.keyguard.ui.view
 
 import android.companion.virtualdevice.flags.Flags
 import android.content.Context
+import android.graphics.Rect
 import android.graphics.drawable.AnimatedStateListDrawable
 import android.graphics.drawable.AnimatedVectorDrawable
 import android.util.AttributeSet
@@ -26,6 +27,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -281,7 +283,9 @@ constructor(
      * on AOD, under the bouncer, or as the icon fades. The icon stays as it is, the touch target
      * it always was; a pill around it looked like a button to tap. The cue goes after
      * WHEEL_CUE_MS: kept, it covered a notification's end beside the wheel, its expand button and
-     * the wheel's ring on it. Each wake brings it back.
+     * the wheel's ring on it. Each wake brings it back. A card where it goes (a notification,
+     * the media player, whose output chip sits at the side button's height) keeps it away
+     * altogether: the padlock still says where unlocking is.
      */
     fun setWheelCue(show: Boolean) {
         removeCallbacks(hideWheelCue)
@@ -298,7 +302,45 @@ constructor(
             }
         if (wheelCue != null) {
             postDelayed(hideWheelCue, WHEEL_CUE_MS)
+            wheelCue?.contentView?.let { cue ->
+                cue.viewTreeObserver.addOnPreDrawListener(
+                    object : ViewTreeObserver.OnPreDrawListener {
+                        override fun onPreDraw(): Boolean {
+                            cue.viewTreeObserver.removeOnPreDrawListener(this)
+                            if (!coversCard(cue)) {
+                                return true
+                            }
+                            removeCallbacks(hideWheelCue)
+                            post(hideWheelCue)
+                            return false
+                        }
+                    }
+                )
+            }
         }
+    }
+
+    /** Whether a lock screen card, as the notification stack lays them out, is under [cue]. */
+    private fun coversCard(cue: View): Boolean {
+        val stack =
+            rootView.findViewById<ViewGroup>(R.id.notification_stack_scroller) ?: return false
+        if (!stack.isShown) {
+            return false
+        }
+        val at = IntArray(2)
+        cue.getLocationOnScreen(at)
+        val cueRect = Rect(at[0], at[1], at[0] + cue.width, at[1] + cue.height)
+        for (i in 0 until stack.childCount) {
+            val card = stack.getChildAt(i)
+            if (card.visibility != View.VISIBLE || card.alpha < 0.1f || card.height == 0) {
+                continue
+            }
+            card.getLocationOnScreen(at)
+            if (Rect.intersects(cueRect, Rect(at[0], at[1], at[0] + card.width, at[1] + card.height))) {
+                return true
+            }
+        }
+        return false
     }
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
