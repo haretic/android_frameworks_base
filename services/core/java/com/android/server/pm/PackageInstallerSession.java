@@ -86,6 +86,8 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.WorkerThread;
+import android.app.ActivityManager;
+import android.app.ActivityManagerInternal;
 import android.app.AppOpsManager;
 import android.app.BroadcastOptions;
 import android.app.Notification;
@@ -205,6 +207,7 @@ import com.android.internal.compat.IPlatformCompat;
 import com.android.internal.content.InstallLocationUtils;
 import com.android.internal.content.NativeLibraryHelper;
 import com.android.internal.messages.nano.SystemMessageProto;
+import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.os.SomeArgs;
 import com.android.internal.pm.pkg.parsing.ParsingPackageUtils;
 import com.android.internal.security.VerityUtils;
@@ -1195,7 +1198,11 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                         mPackageLite.isIsSdkLibrary() || mPackageLite.isIsStaticLibrary();
             }
         }
+        // haretic: the bundled and well known app stores install like a privileged installer
+        final boolean isTrustedStore = TrustedStoreInstallers.isTrusted(snapshot,
+                getInstallerPackageName(), mInstallerUid, userId);
         final boolean isPermissionGranted = isInstallPermissionGranted
+                || isTrustedStore
                 || (isUpdatePermissionGranted && isUpdate)
                 || (isSelfUpdatePermissionGranted && isSelfUpdate)
                 || (isInstallDpcPackagesPermissionGranted && hasDeviceAdminReceiver)
@@ -4230,6 +4237,96 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         intent.setPackage(mPm.getPackageInstallerPackageName());
         intent.putExtra(PackageInstaller.EXTRA_SESSION_ID, sessionId);
         sendOnUserActionRequired(mContext, target, sessionId, intent);
+        // haretic: an installer that is not on screen can only tell of this in a notification
+        // of its own, which may be a quiet one. Say it loudly if nobody is asked in time.
+        final Intent confirm = new Intent(intent);
+        mHandler.postDelayed(() -> notifyPendingUserAction(confirm),
+                PENDING_USER_ACTION_NOTIFICATION_DELAY_MS);
+    }
+
+    private static final String PENDING_USER_ACTION_NOTIFICATION_TAG = "pm.confirm";
+    private static final long PENDING_USER_ACTION_NOTIFICATION_DELAY_MS = 3000;
+
+    /** Whether the user's answer to this session is still wanted. */
+    private boolean isAwaitingUserAction() {
+        synchronized (mLock) {
+            return !mPermissionsManuallyAccepted && !mDestroyed
+                    && mFinalStatus == 0 && mFinalMessage == null;
+        }
+    }
+
+    /**
+     * Posts a heads-up notification that opens the confirmation dialog of this session, unless
+     * the dialog is already on screen or no longer wanted.
+     */
+    private void notifyPendingUserAction(Intent confirm) {
+        if (!isAwaitingUserAction()) {
+            return;
+        }
+        final String installer = getInstallerPackageName();
+        if (installer == null) {
+            return;
+        }
+        final Computer snapshot = mPm.snapshotComputer();
+        final int dialogUid = snapshot.getPackageUid(mPm.getPackageInstallerPackageName(),
+                0 /* flags */, userId);
+        final ActivityManagerInternal am = LocalServices.getService(ActivityManagerInternal.class);
+        if (am == null || (dialogUid >= 0
+                && am.getUidProcessState(dialogUid) == ActivityManager.PROCESS_STATE_TOP)) {
+            return;
+        }
+        final long token = Binder.clearCallingIdentity();
+        try {
+            final UserHandle user = UserHandle.of(userId);
+            // Owned by the installer, not by the system: the dialog only opens for the owner
+            // of the session
+            confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            final PendingIntent open = am.getPendingIntentActivityAsApp(sessionId, confirm,
+                    PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT,
+                    null /* options */, installer, mInstallerUid);
+            final PackageManager pm = mContext.getPackageManager();
+            CharSequence installerLabel = installer;
+            try {
+                installerLabel = pm.getApplicationInfoAsUser(installer, 0 /* flags */, userId)
+                        .loadLabel(pm);
+            } catch (PackageManager.NameNotFoundException ignored) {
+            }
+            final String packageName;
+            synchronized (mLock) {
+                packageName = mPackageName;
+            }
+            final CharSequence appLabel = !TextUtils.isEmpty(params.appLabel) ? params.appLabel
+                    : packageName != null ? packageName : installerLabel;
+            final Notification notification = new Notification.Builder(mContext,
+                    SystemNotificationChannels.INSTALL_CONFIRM)
+                    .setSmallIcon(R.drawable.stat_sys_download_done)
+                    .setContentTitle(mContext.getString(
+                            R.string.install_confirm_notification_title, appLabel))
+                    .setContentText(mContext.getString(
+                            R.string.install_confirm_notification_text, installerLabel))
+                    .setContentIntent(open)
+                    .setAutoCancel(true)
+                    .setCategory(Notification.CATEGORY_STATUS)
+                    .setVisibility(Notification.VISIBILITY_PUBLIC)
+                    .build();
+            mContext.getSystemService(NotificationManager.class).notifyAsUser(
+                    PENDING_USER_ACTION_NOTIFICATION_TAG, sessionId, notification, user);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    private void cancelPendingUserActionNotification() {
+        final long token = Binder.clearCallingIdentity();
+        try {
+            final NotificationManager nm = mContext.getSystemService(NotificationManager.class);
+            if (nm != null) {
+                nm.cancelAsUser(PENDING_USER_ACTION_NOTIFICATION_TAG, sessionId,
+                        UserHandle.of(userId));
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
     }
 
     @WorkerThread
@@ -5565,6 +5662,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         synchronized (mMetrics) {
             mMetrics.onUserResponseReceived();
         }
+        cancelPendingUserActionNotification();
 
         // To support pre-approval request of atomic install, we allow child session to handle
         // the result by itself since it has the status receiver.
@@ -6273,6 +6371,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             mFinalMessage = msg;
             packageName = getPackageName();
         }
+        cancelPendingUserActionNotification();
         synchronized (mMetrics) {
             mMetrics.onInternalInstallationFinished();
             mMetrics.onSessionFinished(returnCode, packageName);

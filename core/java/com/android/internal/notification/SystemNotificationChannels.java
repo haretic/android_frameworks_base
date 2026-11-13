@@ -46,6 +46,8 @@ public class SystemNotificationChannels {
     public static final String DEVELOPER = "DEVELOPER";
     public static final String DEVELOPER_IMPORTANT = "DEVELOPER_IMPORTANT";
     public static final String UPDATES = "UPDATES";
+    /** haretic: an install that waits for the user to confirm it */
+    public static final String INSTALL_CONFIRM = "INSTALL_CONFIRM";
     public static final String NETWORK_STATUS = "NETWORK_STATUS";
     public static final String NETWORK_ALERTS = "NETWORK_ALERTS";
     public static final String NETWORK_AVAILABLE = "NETWORK_AVAILABLE";
@@ -115,6 +117,13 @@ public class SystemNotificationChannels {
                 NotificationManager.IMPORTANCE_HIGH);
         developer.setBlockable(true);
         channelsList.add(developerImportant);
+
+        final NotificationChannel installConfirm = new NotificationChannel(
+                INSTALL_CONFIRM,
+                context.getString(R.string.notification_channel_install_confirm),
+                NotificationManager.IMPORTANCE_HIGH);
+        installConfirm.setBlockable(true);
+        channelsList.add(installConfirm);
 
         final NotificationChannel updates = new NotificationChannel(
                 UPDATES,

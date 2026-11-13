@@ -916,6 +916,13 @@
     <!-- Text shown when viewing channel settings for high importance notifications related to developers [CHAR LIMIT=60]-->
     <string name="notification_channel_developer_important">Important developer messages</string>
 
+    <!-- haretic: channel of the notification that an install waits for confirmation -->
+    <string name="notification_channel_install_confirm">Installs waiting for you</string>
+    <!-- haretic: title of that notification; the argument is the app or package to install -->
+    <string name="install_confirm_notification_title">Confirm to install <xliff:g id="app" example="Signal">%1$s</xliff:g></string>
+    <!-- haretic: text of that notification; the argument is the store that asks -->
+    <string name="install_confirm_notification_text"><xliff:g id="store" example="Aurora Store">%1$s</xliff:g> is waiting - tap to continue</string>
+
     <!-- Text shown when viewing channel settings for notifications related to system updates -->
     <string name="notification_channel_updates">Updates</string>
 
