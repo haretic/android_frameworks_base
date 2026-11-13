@@ -4250,6 +4250,9 @@
   <java-symbol type="string" name="notification_channel_account" />
   <java-symbol type="string" name="notification_channel_developer" />
   <java-symbol type="string" name="notification_channel_developer_important" />
+  <java-symbol type="string" name="notification_channel_install_confirm" />
+  <java-symbol type="string" name="install_confirm_notification_title" />
+  <java-symbol type="string" name="install_confirm_notification_text" />
   <java-symbol type="string" name="notification_channel_updates" />
   <java-symbol type="string" name="notification_channel_network_status" />
   <java-symbol type="string" name="notification_channel_network_alerts" />
