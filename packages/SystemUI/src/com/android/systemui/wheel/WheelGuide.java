@@ -178,7 +178,8 @@ final class WheelGuide {
      * config_wheelCentre down (debug.r1.wheel_centre, in thousandths, while tuning it).
      */
     private int wheelOffset(int gravity) {
-        final int rotation = mWindowManager.getDefaultDisplay().getRotation();
+        final int rotation = WheelTaskbarSettings.physicalRotation(
+                mWindowManager.getDefaultDisplay().getRotation());
         if (gravity != wheelEdge()) {
             return 0;
         }
@@ -197,7 +198,8 @@ final class WheelGuide {
 
     /** The screen's edge the wheel is on at its rotation: the right in portrait. */
     private int wheelEdge() {
-        return switch (mWindowManager.getDefaultDisplay().getRotation()) {
+        return switch (WheelTaskbarSettings.physicalRotation(
+                mWindowManager.getDefaultDisplay().getRotation())) {
             case Surface.ROTATION_90 -> Gravity.TOP;
             case Surface.ROTATION_180 -> Gravity.LEFT;
             case Surface.ROTATION_270 -> Gravity.BOTTOM;
