@@ -7,6 +7,7 @@ package com.android.systemui.wheel;
 
 import android.content.ContentResolver;
 import android.content.Context;
+import android.os.SystemProperties;
 import android.text.TextUtils;
 
 import lineageos.providers.LineageSettings;
@@ -69,11 +70,19 @@ final class WheelTaskbarSettings {
         mContext = context;
     }
 
+    /** Include the boot-selected offset when locating hardware around the display. */
+    static int physicalRotation(int rotation) {
+        final int offset = SystemProperties.getInt("ro.vendor.display.primary_orientation", 0);
+        return (rotation + ((offset == 90 || offset == 180 || offset == 270)
+                ? offset / 90 : 0)) % 4;
+    }
+
     /**
      * The screen edge the bar is on at {@code rotation}: the wheel's, on the right upright,
      * at the top a quarter turn on, or the one across from it, or one of the sides.
      */
     int edge(int rotation) {
+        rotation = physicalRotation(rotation);
         switch (edgeSetting) {
             case 1:
                 return (rotation + 2) % 4;
@@ -93,6 +102,7 @@ final class WheelTaskbarSettings {
      * start still goes up.
      */
     String daemonTuning(int userId, int rotation) {
+        rotation = physicalRotation(rotation);
         final ContentResolver resolver = mContext.getContentResolver();
         final boolean turned = getInt(resolver, LineageSettings.Secure.WHEEL_TURN_WITH_SCREEN, 1,
                 userId) != 0 && (rotation == 2 || rotation == 3);

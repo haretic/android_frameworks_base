@@ -1490,6 +1490,12 @@ void BootAnimation::initDynamicColors() {
 
 bool BootAnimation::playAnimation(const Animation& animation) {
     ATRACE_CALL();
+    // A boot-selected natural orientation can make a portrait animation taller
+    // than the primary display. Fit it uniformly so its text and artwork remain visible.
+    const int naturalOrientation = android::base::GetIntProperty(
+            "ro.vendor.display.primary_orientation", 0);
+    const bool fitPrimary = naturalOrientation == 90 || naturalOrientation == 180 ||
+            naturalOrientation == 270;
     const size_t numParts = animation.parts.size();
     nsecs_t frameDuration = s2ns(1) / animation.fps;
 
@@ -1598,10 +1604,14 @@ bool BootAnimation::playAnimation(const Animation& animation) {
                 for (const auto& display : mDisplays) {
                     eglMakeCurrent(mEgl, display.eglSurface, display.eglSurface, mEglContext);
 
-                    const double ratioW =
-                            static_cast<double>(display.width) / display.initWidth;
-                    const double ratioH =
-                            static_cast<double>(display.height) / display.initHeight;
+                    double ratioW = static_cast<double>(display.width) / display.initWidth;
+                    double ratioH = static_cast<double>(display.height) / display.initHeight;
+                    if (fitPrimary && &display == &mDisplays.front() && animation.width > 0 &&
+                        animation.height > 0) {
+                        ratioW = ratioH = std::min(
+                                static_cast<double>(display.width) / animation.width,
+                                static_cast<double>(display.height) / animation.height);
+                    }
                     const int animationX = (display.width - animation.width * ratioW) / 2;
                     const int animationY = (display.height - animation.height * ratioH) / 2;
 
