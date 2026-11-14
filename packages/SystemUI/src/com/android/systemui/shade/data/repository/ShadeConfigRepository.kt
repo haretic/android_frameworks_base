@@ -17,6 +17,7 @@
 package com.android.systemui.shade.data.repository
 
 import android.content.Context
+import android.content.res.Configuration
 import android.content.res.Resources
 import android.provider.Settings
 import androidx.annotation.BoolRes
@@ -110,21 +111,21 @@ constructor(
      */
     val legacyUseSplitShade: Flow<Boolean> =
         combine(
-                configurationRepository.onConfigurationChange
-                    .emitOnStart()
-                    .map {
-                        with(resources) {
-                            // Based on the logic in the deprecated `SplitShadeStateController`.
+                configurationRepository.onConfigurationChange.emitOnStart().map {
+                    with(resources) {
+                        // Based on the logic in the deprecated `SplitShadeStateController`.
+                        val stockSplit =
                             getBoolean(R.bool.config_use_split_notification_shade) ||
                                 (featureFlags.isEnabled(Flags.LOCKSCREEN_ENABLE_LANDSCAPE) &&
                                     getBoolean(R.bool.force_config_use_split_notification_shade))
-                        }
-                    },
-                // The wheel's shade is one column in tabs, the wheel walking one list at a
-                // time: never split, turned too
+                        stockSplit to
+                            (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE)
+                    }
+                },
+                // The wheel keeps portrait tabs and uses stock split shade in landscape.
                 wheelLayoutEnabled(context, LineageSettings.Secure.WHEEL_SHADE),
-            ) { split, wheel ->
-                split && !wheel
+            ) { configuration, wheel ->
+                if (wheel) configuration.second else configuration.first
             }
             .distinctUntilChanged()
 

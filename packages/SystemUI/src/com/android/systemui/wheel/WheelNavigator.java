@@ -117,6 +117,43 @@ public final class WheelNavigator {
     private final Runnable mLetGo = this::letGo;
 
     private Stop mStop;
+    private ColumnEntry mColumnEntry;
+
+    /** Enter the next shade column from its start, or its end when walking backwards. */
+    private final class ColumnEntry implements Runnable {
+        private final View qsColumn;
+        private final int column;
+        private final int direction;
+        private int attempts;
+
+        ColumnEntry(View qsColumn, int column, int direction) {
+            this.qsColumn = qsColumn;
+            this.column = column;
+            this.direction = direction;
+        }
+
+        @Override
+        public void run() {
+            if (mColumnEntry != this) return;
+            if (!WheelLayoutSettings.sideBySide(mRoot.getContext())
+                    || !mRoot.isAttachedToWindow()) {
+                mColumnEntry = null;
+                return;
+            }
+            Stop edge = null;
+            for (Stop stop : stops()) {
+                if (shadeColumn(stop, qsColumn) == column && (edge == null || direction < 0)) {
+                    edge = stop;
+                }
+            }
+            if (edge != null && attempts++ < 64 && scrollOn(edge, -direction)) {
+                mRoot.postDelayed(this, SCROLL_SETTLE_MS);
+                return;
+            }
+            mColumnEntry = null;
+            if (edge != null) moveTo(edge);
+        }
+    }
 
     /** Child controls stay with their body, irrespective of overlapping row bounds. */
     private final Map<Stop, List<Stop>> mNotificationControls = new IdentityHashMap<>();
@@ -201,6 +238,8 @@ public final class WheelNavigator {
 
     /** Whether the key was the wheel's or the side button's, and handled. */
     public boolean dispatchKey(KeyEvent event) {
+        // A new gesture takes over from a pending move between the shade's scrollers.
+        if (event.getAction() == KeyEvent.ACTION_DOWN) mColumnEntry = null;
         switch (event.getKeyCode()) {
             case KeyEvent.KEYCODE_NAVIGATE_NEXT:
             case KeyEvent.KEYCODE_DPAD_DOWN:
@@ -239,6 +278,7 @@ public final class WheelNavigator {
 
     /** Forgets the stop and hides the ring, as when the window closes. */
     public void reset() {
+        mColumnEntry = null;
         mNotificationControls.clear();
         mStop = null;
         mPendingStep = null;
@@ -345,7 +385,20 @@ public final class WheelNavigator {
         } else {
             index = Math.floorMod(index + direction, stops.size());
         }
-        moveTo(stops.get(index));
+        final Stop next = stops.get(index);
+        final View qsColumn =
+                WheelLayoutSettings.sideBySide(mRoot.getContext())
+                        ? mRoot.findViewById(R.id.qs_frame)
+                        : null;
+        final boolean changesColumn =
+                qsColumn != null
+                        && mStop != null
+                        && shadeColumn(mStop, qsColumn) != shadeColumn(next, qsColumn);
+        moveTo(next);
+        if (changesColumn) {
+            mColumnEntry = new ColumnEntry(qsColumn, shadeColumn(next, qsColumn), direction);
+            mColumnEntry.run();
+        }
         WheelFeedback.get(mRoot.getContext()).step(direction < 0);
     }
 
@@ -642,7 +695,16 @@ public final class WheelNavigator {
         mScrollers.clear();
         mNotificationControls.clear();
         collect(mRoot, found);
-        found.sort((a, b) -> Integer.compare(a.bounds.top, b.bounds.top));
+        final View qsColumn =
+                WheelLayoutSettings.sideBySide(mRoot.getContext())
+                        ? mRoot.findViewById(R.id.qs_frame)
+                        : null;
+        found.sort(
+                (a, b) -> {
+                    final int column =
+                            Integer.compare(shadeColumn(a, qsColumn), shadeColumn(b, qsColumn));
+                    return column != 0 ? column : Integer.compare(a.bounds.top, b.bounds.top);
+                });
         // Rows: stops that overlap the first of the row up and down are side by side
         final List<Stop> stops = new ArrayList<>(found.size());
         int start = 0;
@@ -650,6 +712,8 @@ public final class WheelNavigator {
             final Rect first = found.get(start).bounds;
             int end = start + 1;
             while (end < found.size()
+                    && shadeColumn(found.get(start), qsColumn)
+                            == shadeColumn(found.get(end), qsColumn)
                     && found.get(end).bounds.top < first.top + first.height() / 2) {
                 end++;
             }
@@ -663,6 +727,17 @@ public final class WheelNavigator {
             start = end;
         }
         return stops;
+    }
+
+    /** Compose virtual nodes share their host's column; notification actions follow their row. */
+    private static int shadeColumn(Stop stop, View qsColumn) {
+        if (qsColumn == null) return 0;
+        for (View view = stop.host;
+                view != null;
+                view = view.getParent() instanceof View parent ? parent : null) {
+            if (view == qsColumn) return 0;
+        }
+        return 1;
     }
 
     private void collect(View view, List<Stop> stops) {

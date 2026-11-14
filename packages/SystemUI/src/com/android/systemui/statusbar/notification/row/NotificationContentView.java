@@ -283,7 +283,10 @@ public class NotificationContentView extends FrameLayout implements Notification
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         if (getResources().getBoolean(R.bool.config_r1CompactQs)) {
             boolean enabled = WheelLayoutSettings.shade(getContext());
-            int columns = WheelLayoutSettings.columns(getContext());
+            int columns =
+                    WheelLayoutSettings.sideBySide(getContext())
+                            ? 1
+                            : WheelLayoutSettings.columns(getContext());
             if (!(mContractedWrapper instanceof NotificationCustomViewWrapper))
                 WheelNotificationLayout.apply(mContractedChild, enabled, columns);
             if (!(mExpandedWrapper instanceof NotificationCustomViewWrapper))

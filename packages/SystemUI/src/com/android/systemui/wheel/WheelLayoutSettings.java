@@ -3,6 +3,7 @@ package com.android.systemui.wheel;
 
 import android.app.ActivityManager;
 import android.content.Context;
+import android.content.res.Configuration;
 
 import com.android.systemui.res.R;
 
@@ -25,6 +26,13 @@ public final class WheelLayoutSettings {
     /** Whether the shade takes the wheel UI's revised layout, its tabs and list tiles. */
     public static boolean shade(Context context) {
         return component(context, LineageSettings.Secure.WHEEL_SHADE);
+    }
+
+    /** The wheel shade uses the stock split containers only while the display is landscape. */
+    public static boolean sideBySide(Context context) {
+        return shade(context)
+                && context.getResources().getConfiguration().orientation
+                        == Configuration.ORIENTATION_LANDSCAPE;
     }
 
     /** Whether the lock screen takes the wheel UI's revised layout, its Unlock button and PIN. */

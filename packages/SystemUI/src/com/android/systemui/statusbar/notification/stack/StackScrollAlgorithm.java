@@ -703,6 +703,19 @@ public class StackScrollAlgorithm {
                 viewEnd, /* hunMax */ ambientState.getMaxHeadsUpTranslation()
         );
         if (view instanceof FooterView) {
+            if (!SceneContainerFlag.isEnabled()
+                    && com.android.systemui.wheel.WheelLayoutSettings.sideBySide(view.getContext())
+                    && ambientState.isShadeExpanded()
+                    && !ambientState.isOnKeyguard()
+                    && !ambientState.isExpansionChanging()) {
+                // With a short list the footer rests at the column bottom. With a long list it
+                // remains after the notifications and becomes visible when that column scrolls.
+                viewState.setYTranslation(
+                        Math.max(
+                                viewState.getYTranslation(),
+                                ambientState.getStackEndHeight() - view.getIntrinsicHeight()),
+                        "StackScrollAlgorithm.updateChild.wheelFooter");
+            }
             if (SceneContainerFlag.isEnabled()) {
                 if (!ambientState.isExpansionChanging()) {
                     final float footerEnd =

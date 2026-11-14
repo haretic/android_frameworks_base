@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.Configuration
 import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
@@ -17,6 +18,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import com.android.systemui.res.R
 import kotlinx.coroutines.channels.awaitClose
@@ -30,6 +32,7 @@ data class WheelLayout(
     val enabled: Boolean = false,
     val columns: Int = 1,
     val full: Boolean = false,
+    val sideBySide: Boolean = false,
 )
 
 val LocalWheelLayout = staticCompositionLocalOf { WheelLayout() }
@@ -38,21 +41,25 @@ val LocalWheelLayout = staticCompositionLocalOf { WheelLayout() }
 fun rememberWheelLayout(full: Boolean): WheelLayout {
     val context = LocalContext.current
     val resolver = context.contentResolver
+    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     fun read(): WheelLayout =
         WheelLayout(
             enabled = WheelLayoutSettings.shade(context),
             columns =
-                LineageSettings.Secure.getIntForUser(
-                        resolver,
-                        LineageSettings.Secure.WHEEL_BUTTON_COLUMNS,
-                        1,
-                        ActivityManager.getCurrentUser(),
-                    )
-                    .coerceIn(1, 2),
+                if (landscape) 2
+                else
+                    LineageSettings.Secure.getIntForUser(
+                            resolver,
+                            LineageSettings.Secure.WHEEL_BUTTON_COLUMNS,
+                            1,
+                            ActivityManager.getCurrentUser(),
+                        )
+                        .coerceIn(1, 2),
             full = full,
+            sideBySide = landscape && WheelLayoutSettings.shade(context),
         )
-    var layout by remember(context, full) { mutableStateOf(read()) }
-    DisposableEffect(resolver, full) {
+    var layout by remember(context, full, landscape) { mutableStateOf(read()) }
+    DisposableEffect(resolver, full, landscape) {
         val observer =
             object : ContentObserver(Handler(Looper.getMainLooper())) {
                 override fun onChange(selfChange: Boolean) {

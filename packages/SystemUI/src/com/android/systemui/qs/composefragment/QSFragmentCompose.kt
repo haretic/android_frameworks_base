@@ -86,6 +86,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
@@ -120,6 +121,7 @@ import com.android.systemui.Dumpable
 import com.android.systemui.Flags
 import com.android.systemui.Flags.notificationShadeBlur
 import com.android.systemui.brightness.ui.compose.BrightnessSliderContainer
+import com.android.systemui.brightness.ui.compose.BrightnessSliderDimensions
 import com.android.systemui.brightness.ui.compose.ContainerColors
 import com.android.systemui.compose.modifiers.sysUiResTagContainer
 import com.android.systemui.compose.modifiers.sysuiResTag
@@ -171,6 +173,7 @@ import com.android.systemui.util.printSection
 import com.android.systemui.util.println
 import com.android.systemui.volume.panel.component.volume.slider.ui.viewmodel.AudioStreamSliderViewModel
 import com.android.systemui.volume.panel.component.volume.ui.composable.VolumeSlider
+import com.android.systemui.volume.panel.component.volume.ui.composable.VolumeSliderDimensions
 import com.android.systemui.wheel.LocalWheelLayout
 import com.android.systemui.wheel.WheelShadeTabs
 import com.android.systemui.wheel.rememberWheelLayout
@@ -795,19 +798,21 @@ constructor(
                     }
                 }
                 if (viewModel.isQsEnabled && LocalWheelLayout.current.enabled) {
-                    // The Notifications tab: the tab header, media, then the notifications below
-                    Column(
-                        modifier = Modifier.padding(horizontal = qsHorizontalMargin()),
-                        verticalArrangement = spacedBy(8.dp),
-                    ) {
-                        Element(WheelShadeTabsKey, Modifier) {
-                            WheelShadeTabs(
-                                controls = false,
-                                onSwitch = wheelSwitchTab(),
-                                shown = viewModel.wheelTabsShown,
-                            )
+                    // Split shade keeps controls and media in the full QS column.
+                    if (!LocalWheelLayout.current.sideBySide) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = qsHorizontalMargin()),
+                            verticalArrangement = spacedBy(8.dp),
+                        ) {
+                            Element(WheelShadeTabsKey, Modifier) {
+                                WheelShadeTabs(
+                                    controls = false,
+                                    onSwitch = wheelSwitchTab(),
+                                    shown = viewModel.wheelTabsShown,
+                                )
+                            }
+                            Media()
                         }
-                        Media()
                     }
                 } else if (viewModel.isQsEnabled) {
                     Box(
@@ -836,6 +841,7 @@ constructor(
     private fun ContentScope.QuickSettingsElement(modifier: Modifier = Modifier) {
         val qqsPadding = viewModel.qqsHeaderHeight
         val wheel = LocalWheelLayout.current.enabled
+        val sideBySide = LocalWheelLayout.current.sideBySide
         // The header grows with the full panel; the wheel's stays compact, its tabs where they were
         val qsExtraPadding = if (wheel) 0.dp else dimensionResource(R.dimen.qs_panel_padding_top)
         Column(
@@ -847,16 +853,17 @@ constructor(
             if (viewModel.isQsEnabled && wheel) {
                 // The Controls tab: its header stays put over the list that scrolls
                 Spacer(modifier = Modifier.height { qqsPadding + qsExtraPadding.roundToPx() })
-                Element(
-                    WheelShadeTabsKey,
-                    Modifier.padding(horizontal = qsHorizontalMargin()).padding(bottom = 8.dp),
-                ) {
-                    WheelShadeTabs(
-                        controls = true,
-                        onSwitch = wheelSwitchTab(),
-                        shown = viewModel.wheelTabsShown,
-                    )
-                }
+                if (!sideBySide)
+                    Element(
+                        WheelShadeTabsKey,
+                        Modifier.padding(horizontal = qsHorizontalMargin()).padding(bottom = 8.dp),
+                    ) {
+                        WheelShadeTabs(
+                            controls = true,
+                            onSwitch = wheelSwitchTab(),
+                            shown = viewModel.wheelTabsShown,
+                        )
+                    }
             }
             if (viewModel.isQsEnabled) {
                 Element(Elements.QuickSettingsContent, modifier = Modifier.weight(1f)) {
@@ -942,7 +949,9 @@ constructor(
                                     MediaObject(
                                         mediaHost = viewModel.qsMediaHost,
                                         mediaViewModelFactory = viewModel.mediaViewModelFactory,
-                                        mediaPresentationStyle = MediaPresentationStyle.Default,
+                                        mediaPresentationStyle =
+                                            if (sideBySide) MediaPresentationStyle.Compressed
+                                            else MediaPresentationStyle.Default,
                                         onSwipeToDismiss = viewModel::onMediaSwipeToDismiss,
                                         behavior = viewModel.qsMediaUiBehavior,
                                         visible = isListening,
@@ -956,7 +965,9 @@ constructor(
                                 Modifier.fillMaxWidth()
                                     .sysuiResTag(ResIdTags.quickSettingsPanel)
                                     .padding(
-                                        top = QuickSettingsShade.Dimensions.VerticalPadding,
+                                        top =
+                                            if (sideBySide) 4.dp
+                                            else QuickSettingsShade.Dimensions.VerticalPadding,
                                         start = qsHorizontalMargin(),
                                         end = qsHorizontalMargin(),
                                     )
@@ -970,7 +981,7 @@ constructor(
                                     },
                                 tiles = TileGrid,
                                 media = Media,
-                                mediaInRow = viewModel.qsMediaInRow,
+                                mediaInRow = !sideBySide && viewModel.qsMediaInRow,
                             )
                         }
                         if (wheel) {
@@ -1030,39 +1041,52 @@ constructor(
             AlwaysDarkMode {
                 Column(
                     verticalArrangement =
-                        spacedBy(dimensionResource(R.dimen.qs_tile_margin_vertical))
+                        spacedBy(
+                            if (LocalWheelLayout.current.sideBySide) 4.dp
+                            else dimensionResource(R.dimen.qs_tile_margin_vertical)
+                        )
                 ) {
                     val wheel = LocalWheelLayout.current
                     val brightness = viewModel.containerViewModel.brightnessSliderViewModel
-                    Box {
-                        BrightnessSliderContainer(
-                            viewModel = brightness,
-                            containerColors =
-                                ContainerColors(
-                                    Color.Transparent,
-                                    ContainerColors.defaultContainerColor,
-                                ),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        if (wheel.enabled && wheel.full) {
-                            val percent =
-                                ((brightness.currentBrightness.value -
-                                        brightness.minBrightness.value) * 100f /
-                                        (brightness.maxBrightness.value -
-                                                brightness.minBrightness.value)
-                                            .coerceAtLeast(1))
-                                    .toInt()
-                                    .coerceIn(0, 100)
-                            // The auto button and the space before it follow the track
-                            val autoButton =
-                                com.android.systemui.brightness.ui.compose
-                                    .rememberShowAutoBrightness()
-                            WheelSliderLabel(
-                                stringResource(R.string.wheel_qs_brightness),
-                                percent,
-                                Modifier.align(Alignment.Center),
-                                trackEnd = if (autoButton) 62.dp else 0.dp,
+                    val percent =
+                        ((brightness.currentBrightness.value - brightness.minBrightness.value) *
+                                100f /
+                                (brightness.maxBrightness.value - brightness.minBrightness.value)
+                                    .coerceAtLeast(1))
+                            .toInt()
+                            .coerceIn(0, 100)
+                    WheelLabeledSlider(stringResource(R.string.wheel_qs_brightness), percent) {
+                        Box {
+                            BrightnessSliderContainer(
+                                viewModel = brightness,
+                                containerColors =
+                                    ContainerColors(
+                                        Color.Transparent,
+                                        ContainerColors.defaultContainerColor,
+                                    ),
+                                dimensions =
+                                    if (wheel.sideBySide)
+                                        BrightnessSliderDimensions.Default.copy(
+                                            iconSize = DpSize(20.dp, 20.dp),
+                                            thumbHeight = 40.dp,
+                                            trackHeight = 32.dp,
+                                            verticalPadding = 4.dp,
+                                        )
+                                    else BrightnessSliderDimensions.Default,
+                                modifier = Modifier.fillMaxWidth(),
                             )
+                            if (wheel.enabled && wheel.full && !wheel.sideBySide) {
+                                // The auto button and the space before it follow the track
+                                val autoButton =
+                                    com.android.systemui.brightness.ui.compose
+                                        .rememberShowAutoBrightness()
+                                WheelSliderLabel(
+                                    stringResource(R.string.wheel_qs_brightness),
+                                    percent,
+                                    Modifier.align(Alignment.Center),
+                                    trackEnd = if (autoButton) 62.dp else 0.dp,
+                                )
+                            }
                         }
                     }
                     viewModel.containerViewModel.mediaVolumeSliderViewModel?.let {
@@ -1077,31 +1101,78 @@ constructor(
     @Composable
     private fun MediaVolumeSlider(viewModel: AudioStreamSliderViewModel) {
         val state by viewModel.slider.collectAsStateWithLifecycle()
-        Box {
-            VolumeSlider(
-                state = state,
-                onValueChange = { newValue -> viewModel.onValueChanged(state, newValue) },
-                onValueChangeFinished = { viewModel.onValueChangeFinished() },
-                onIconTapped = { viewModel.toggleMuted(state) },
-                sliderColors = PlatformSliderDefaults.defaultPlatformSliderColors(),
-                hapticsViewModelFactory = viewModel.getSliderHapticsViewModelFactory(),
-                showLabel = false,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            if (LocalWheelLayout.current.let { it.enabled && it.full }) {
-                val percent =
-                    ((state.value - state.valueRange.start) * 100f /
-                            (state.valueRange.endInclusive - state.valueRange.start).coerceAtLeast(
-                                1f
-                            ))
-                        .toInt()
-                        .coerceIn(0, 100)
-                WheelSliderLabel(
-                    stringResource(R.string.wheel_qs_volume),
-                    percent,
-                    Modifier.align(Alignment.Center),
+        val sideBySide = LocalWheelLayout.current.sideBySide
+        val percent =
+            ((state.value - state.valueRange.start) * 100f /
+                    (state.valueRange.endInclusive - state.valueRange.start).coerceAtLeast(1f))
+                .toInt()
+                .coerceIn(0, 100)
+        WheelLabeledSlider(stringResource(R.string.wheel_qs_volume), percent) {
+            Box {
+                VolumeSlider(
+                    state = state,
+                    onValueChange = { newValue -> viewModel.onValueChanged(state, newValue) },
+                    onValueChangeFinished = { viewModel.onValueChangeFinished() },
+                    onIconTapped = { viewModel.toggleMuted(state) },
+                    sliderColors = PlatformSliderDefaults.defaultPlatformSliderColors(),
+                    hapticsViewModelFactory = viewModel.getSliderHapticsViewModelFactory(),
+                    showLabel = false,
+                    dimensions =
+                        if (sideBySide)
+                            VolumeSliderDimensions.Defaults.copy(
+                                iconSize = 20.dp,
+                                thumbHeight = 40.dp,
+                                trackHeight = 32.dp,
+                                verticalPadding = 4.dp,
+                            )
+                        else VolumeSliderDimensions.Defaults,
+                    modifier = Modifier.fillMaxWidth(),
                 )
+                if (LocalWheelLayout.current.let { it.enabled && it.full && !it.sideBySide }) {
+                    WheelSliderLabel(
+                        stringResource(R.string.wheel_qs_volume),
+                        percent,
+                        Modifier.align(Alignment.Center),
+                    )
+                }
             }
+        }
+    }
+
+    /** Keep each landscape heading close to its slider, with one gap between the pairs. */
+    @Composable
+    private fun WheelLabeledSlider(label: String, percent: Int, content: @Composable () -> Unit) {
+        if (LocalWheelLayout.current.sideBySide) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = spacedBy(2.dp)) {
+                WheelSliderHeading(label, percent)
+                content()
+            }
+        } else {
+            content()
+        }
+    }
+
+    /** Narrow columns keep labels outside the moving thumb and auto-brightness target. */
+    @Composable
+    private fun WheelSliderHeading(label: String, percent: Int) {
+        Row(
+            Modifier.fillMaxWidth().clearAndSetSemantics {},
+            horizontalArrangement = spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                label,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 16.sp,
+                lineHeight = 20.sp,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                java.text.NumberFormat.getPercentInstance().format(percent / 100f),
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+            )
         }
     }
 
@@ -1703,8 +1774,9 @@ fun QuickSettingsLayout(
     mediaInRow: Boolean,
 ) {
     val brightnessSettings = rememberQsBrightnessSettings()
-    val sliderAtTop = brightnessSettings.sliderAtTop
-    val showSlider = brightnessSettings.showSlider
+    val sideBySide = LocalWheelLayout.current.sideBySide
+    val sliderAtTop = sideBySide || brightnessSettings.sliderAtTop
+    val showSlider = if (sideBySide) 1 else brightnessSettings.showSlider
 
     Column(
         verticalArrangement = spacedBy(dimensionResource(R.dimen.qs_tile_margin_vertical)),
@@ -1742,7 +1814,10 @@ private object ResIdTags {
     const val qsFooterActions = "qs_footer_actions"
 }
 
-@Composable private fun qsHorizontalMargin() = dimensionResource(id = R.dimen.qs_horizontal_margin)
+@Composable
+private fun qsHorizontalMargin() =
+    if (LocalWheelLayout.current.sideBySide) 8.dp
+    else dimensionResource(id = R.dimen.qs_horizontal_margin)
 
 @Composable
 private fun interactionsConfig() =

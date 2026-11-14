@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -67,6 +68,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.trace
 import com.android.app.tracing.coroutines.launchTraced as launch
 import com.android.compose.animation.Expandable
@@ -394,7 +396,10 @@ fun TileContainer(
     Box(
         modifier =
             modifier
-                .height(TileHeight)
+                .then(
+                    if (LocalWheelLayout.current.sideBySide) Modifier.heightIn(min = 80.dp)
+                    else Modifier.height(TileHeight)
+                )
                 .fillMaxWidth()
                 .tileCombinedClickable(
                     onClick = onClick ?: {},
