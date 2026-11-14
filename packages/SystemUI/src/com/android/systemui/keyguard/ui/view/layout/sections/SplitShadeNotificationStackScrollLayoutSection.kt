@@ -29,6 +29,7 @@ import com.android.systemui.shade.ShadeDisplayAware
 import com.android.systemui.statusbar.notification.stack.ui.view.SharedNotificationContainer
 import com.android.systemui.statusbar.notification.stack.ui.viewbinder.SharedNotificationContainerBinder
 import com.android.systemui.statusbar.notification.stack.ui.viewmodel.SharedNotificationContainerViewModel
+import com.android.systemui.wheel.WheelLandscapeLockscreen
 import javax.inject.Inject
 
 /** Large-screen format for notifications, shown as two columns on the device */
@@ -40,6 +41,8 @@ constructor(
     sharedNotificationContainer: SharedNotificationContainer,
     sharedNotificationContainerViewModel: SharedNotificationContainerViewModel,
     sharedNotificationContainerBinder: SharedNotificationContainerBinder,
+    private val smartspaceViewModel:
+        com.android.systemui.keyguard.ui.viewmodel.KeyguardSmartspaceViewModel,
 ) :
     NotificationStackScrollLayoutSection(
         context,
@@ -49,6 +52,40 @@ constructor(
         sharedNotificationContainerBinder,
     ) {
     override fun applyConstraints(constraintSet: ConstraintSet) {
+        if (WheelLandscapeLockscreen.enabled(context)) {
+            WheelLandscapeLockscreen.guideline(constraintSet)
+            constraintSet.apply {
+                clear(R.id.nssl_placeholder, TOP)
+                clear(R.id.nssl_placeholder, ConstraintSet.BOTTOM)
+                if (smartspaceViewModel.isSmartspaceEnabled) {
+                    connect(
+                        R.id.nssl_placeholder,
+                        TOP,
+                        com.android.systemui.shared.R.id.bc_smartspace_view,
+                        ConstraintSet.BOTTOM,
+                        WheelLandscapeLockscreen.px(context, 8),
+                    )
+                } else {
+                    connect(
+                        R.id.nssl_placeholder,
+                        TOP,
+                        PARENT_ID,
+                        TOP,
+                        WheelLandscapeLockscreen.top(context),
+                    )
+                }
+                connect(R.id.nssl_placeholder, START, R.id.split_shade_guideline, END)
+                connect(R.id.nssl_placeholder, END, PARENT_ID, END)
+                connect(
+                    R.id.nssl_placeholder,
+                    ConstraintSet.BOTTOM,
+                    PARENT_ID,
+                    ConstraintSet.BOTTOM,
+                    WheelLandscapeLockscreen.bottom(context),
+                )
+            }
+            return
+        }
         constraintSet.apply {
             connect(
                 R.id.nssl_placeholder,

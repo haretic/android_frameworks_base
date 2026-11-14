@@ -17,6 +17,7 @@
 
 package com.android.systemui.keyguard.ui.view.layout.sections
 
+import android.content.Context
 import android.content.res.Resources
 import android.view.WindowInsets
 import androidx.constraintlayout.widget.ConstraintLayout
@@ -34,9 +35,9 @@ import com.android.systemui.keyguard.ui.binder.KeyguardQuickAffordanceViewBinder
 import com.android.systemui.keyguard.ui.view.layout.blueprints.transitions.IntraBlueprintTransition
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardQuickAffordancesCombinedViewModel
 import com.android.systemui.keyguard.ui.viewmodel.KeyguardQuickAffordancesCombinedViewModelModule.Companion.LOCKSCREEN_INSTANCE
-import com.android.systemui.keyguard.ui.viewmodel.KeyguardRootViewModel
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.KeyguardIndicationController
+import com.android.systemui.wheel.WheelLandscapeLockscreen
 import dagger.Lazy
 import javax.inject.Inject
 import javax.inject.Named
@@ -45,6 +46,7 @@ class DefaultShortcutsSection
 @Inject
 constructor(
     @Main private val resources: Resources,
+    @com.android.systemui.shade.ShadeDisplayAware private val context: Context,
     @Named(LOCKSCREEN_INSTANCE)
     private val keyguardQuickAffordancesCombinedViewModel:
         KeyguardQuickAffordancesCombinedViewModel,
@@ -56,6 +58,7 @@ constructor(
 
     // Amount to increase the bottom margin by to avoid colliding with inset
     private var safeInsetBottom = 0
+    private var usedLandscapeConstraints = false
 
     override fun addViews(constraintLayout: ConstraintLayout) {
         addLeftShortcut(constraintLayout)
@@ -131,6 +134,47 @@ constructor(
             // ignore so the view's own initial visibility (invisible) is used
             setVisibilityMode(R.id.start_button, VISIBILITY_MODE_IGNORE)
             setVisibilityMode(R.id.end_button, VISIBILITY_MODE_IGNORE)
+        }
+
+        if (WheelLandscapeLockscreen.enabled(context)) {
+            usedLandscapeConstraints = true
+            WheelLandscapeLockscreen.guideline(constraintSet)
+            constraintSet.apply {
+                for (id in intArrayOf(R.id.start_button, R.id.end_button)) {
+                    clear(id, LEFT)
+                    clear(id, RIGHT)
+                    connect(
+                        id,
+                        BOTTOM,
+                        R.id.keyguard_indication_area,
+                        ConstraintSet.TOP,
+                        WheelLandscapeLockscreen.px(context, 8),
+                    )
+                }
+                connect(
+                    R.id.start_button,
+                    ConstraintSet.START,
+                    PARENT_ID,
+                    ConstraintSet.START,
+                    WheelLandscapeLockscreen.startInset(context) +
+                        WheelLandscapeLockscreen.px(context, 16),
+                )
+                connect(
+                    R.id.end_button,
+                    ConstraintSet.END,
+                    R.id.split_shade_guideline,
+                    ConstraintSet.START,
+                    WheelLandscapeLockscreen.px(context, 16),
+                )
+            }
+        }
+
+        if (usedLandscapeConstraints && !WheelLandscapeLockscreen.enabled(context)) {
+            for (id in intArrayOf(R.id.start_button, R.id.end_button)) {
+                constraintSet.clear(id, ConstraintSet.START)
+                constraintSet.clear(id, ConstraintSet.END)
+            }
+            usedLandscapeConstraints = false
         }
 
         val shortcutAbsoluteTopInScreen =

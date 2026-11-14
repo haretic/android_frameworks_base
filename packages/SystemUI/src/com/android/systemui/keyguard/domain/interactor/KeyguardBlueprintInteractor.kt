@@ -17,6 +17,8 @@
 
 package com.android.systemui.keyguard.domain.interactor
 
+import android.content.Context
+import android.content.res.Configuration
 import com.android.app.tracing.coroutines.launchTraced as launch
 import com.android.systemui.CoreStartable
 import com.android.systemui.biometrics.domain.interactor.FingerprintPropertyInteractor
@@ -34,11 +36,14 @@ import com.android.systemui.scene.shared.flag.SceneContainerFlag
 import com.android.systemui.shade.ShadeDisplayAware
 import com.android.systemui.shade.domain.interactor.ShadeModeInteractor
 import com.android.systemui.shade.shared.model.ShadeMode
+import com.android.systemui.wheel.wheelLayoutEnabled
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
+import lineageos.providers.LineageSettings
 
 @SysUISingleton
 class KeyguardBlueprintInteractor
@@ -47,6 +52,7 @@ constructor(
     private val keyguardBlueprintRepository: KeyguardBlueprintRepository,
     @Application private val applicationScope: CoroutineScope,
     shadeModeInteractor: ShadeModeInteractor,
+    @ShadeDisplayAware private val context: Context,
     @ShadeDisplayAware private val configurationInteractor: ConfigurationInteractor,
     private val fingerprintPropertyInteractor: FingerprintPropertyInteractor,
     private val smartspaceSection: SmartspaceSection,
@@ -62,16 +68,24 @@ constructor(
 
     /** Current BlueprintId */
     val blueprintId =
-        shadeModeInteractor.shadeMode.map { shadeMode ->
+        combine(
+            shadeModeInteractor.shadeMode,
+            wheelLayoutEnabled(context, LineageSettings.Secure.WHEEL_LOCKSCREEN),
+            configurationInteractor.onAnyConfigurationChange.onStart { emit(Unit) },
+        ) { shadeMode, wheel, _ ->
+            val wheelLandscape =
+                wheel &&
+                    context.resources.configuration.orientation ==
+                        Configuration.ORIENTATION_LANDSCAPE
             when {
-                shadeMode is ShadeMode.Split && !SceneContainerFlag.isEnabled ->
+                (wheelLandscape || shadeMode is ShadeMode.Split) && !SceneContainerFlag.isEnabled ->
                     SplitShadeKeyguardBlueprint.ID
                 else -> DefaultKeyguardBlueprint.DEFAULT
             }
         }
 
     override fun start() {
-        applicationScope.launch { blueprintId.collect { transitionToBlueprint(it) } }
+        applicationScope.launch { blueprintId.collect { transitionOrRefreshBlueprint(it) } }
         applicationScope.launch {
             fingerprintPropertyInteractor.propertiesInitialized
                 .filter { it }

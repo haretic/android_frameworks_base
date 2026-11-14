@@ -71,7 +71,6 @@ import android.os.Trace;
 import android.util.IndentingPrintWriter;
 import android.util.Log;
 import android.util.MathUtils;
-import android.view.Display;
 import android.view.GestureDetector;
 import android.view.HapticFeedbackConstants;
 import android.view.InputDevice;
@@ -1207,6 +1206,9 @@ public final class NotificationPanelViewController implements
     }
 
     private ClockSize computeDesiredClockSize() {
+        if (com.android.systemui.wheel.WheelLandscapeLockscreen.enabled(mView.getContext())) {
+            return ClockSize.LARGE;
+        }
         if (mSplitShadeEnabled) {
             return computeDesiredClockSizeForSplitShade();
         }

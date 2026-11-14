@@ -162,7 +162,9 @@ public final class WheelCue {
     private static PopupWindow popup(View anchor, int[] gestures, CharSequence[] texts) {
         final Context context = anchor.getContext();
         final float density = context.getResources().getDisplayMetrics().density;
-        final int rotation = anchor.getDisplay().getRotation();
+        final int rotation =
+                (anchor.getDisplay().getRotation() + anchor.getDisplay().getInstallOrientation())
+                        % 4;
         // The wheel's edge at the screen's rotation: right in portrait
         final int edge = switch (rotation) {
             case Surface.ROTATION_90 -> Gravity.TOP;

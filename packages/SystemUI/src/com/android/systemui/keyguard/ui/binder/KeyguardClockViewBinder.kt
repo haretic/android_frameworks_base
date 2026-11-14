@@ -163,6 +163,15 @@ object KeyguardClockViewBinder {
                         }
                     }
 
+                    launch {
+                        viewModel.smallClockTextSize.collect { fontSizePx ->
+                            viewModel.currentClock.value
+                                ?.smallClock
+                                ?.events
+                                ?.onFontSettingChanged(fontSizePx = fontSizePx.toFloat())
+                        }
+                    }
+
                     launch("$TAG#clockViewModel.shouldDateWeatherBeBelowSmallClock") {
                         viewModel.shouldDateWeatherBeBelowSmallClock.collect {
                             blueprintInteractor.refreshBlueprint(

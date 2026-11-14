@@ -49,6 +49,7 @@ import com.android.systemui.res.R
 import com.android.systemui.shade.NotificationPanelView
 import com.android.systemui.shade.ShadeDisplayAware
 import com.android.systemui.statusbar.VibratorHelper
+import com.android.systemui.wheel.WheelLandscapeLockscreen
 import com.android.systemui.window.domain.interactor.WindowRootViewBlurInteractor
 import com.google.android.msdl.domain.MSDLPlayer
 import dagger.Lazy
@@ -81,6 +82,7 @@ constructor(
     private val blueprintLogger = Logger(blueprintLogBuffer, TAG)
     private val deviceEntryIconViewId = R.id.device_entry_icon_view
     private var disposableHandle: DisposableHandle? = null
+    private var usedLandscapeConstraints = false
 
     override fun addViews(constraintLayout: ConstraintLayout) {
         val view =
@@ -117,6 +119,43 @@ constructor(
         val isUdfpsSupported = deviceEntryIconViewModel.get().isUdfpsSupported.value
         blueprintLogger.d({ "isUdfpsSupported=$bool1" }) { bool1 = isUdfpsSupported }
 
+        if (!isUdfpsSupported && WheelLandscapeLockscreen.enabled(context)) {
+            usedLandscapeConstraints = true
+            WheelLandscapeLockscreen.guideline(constraintSet)
+            constraintSet.apply {
+                clear(deviceEntryIconViewId, ConstraintSet.TOP)
+                clear(deviceEntryIconViewId, ConstraintSet.START)
+                clear(deviceEntryIconViewId, ConstraintSet.END)
+                constrainWidth(deviceEntryIconViewId, WheelLandscapeLockscreen.px(context, 72))
+                constrainHeight(deviceEntryIconViewId, WheelLandscapeLockscreen.px(context, 72))
+                connect(
+                    deviceEntryIconViewId,
+                    ConstraintSet.BOTTOM,
+                    R.id.keyguard_indication_area,
+                    ConstraintSet.TOP,
+                    WheelLandscapeLockscreen.px(context, 8),
+                )
+                connect(
+                    deviceEntryIconViewId,
+                    ConstraintSet.START,
+                    ConstraintSet.PARENT_ID,
+                    ConstraintSet.START,
+                )
+                connect(
+                    deviceEntryIconViewId,
+                    ConstraintSet.END,
+                    R.id.split_shade_guideline,
+                    ConstraintSet.START,
+                )
+                setHorizontalBias(deviceEntryIconViewId, 0.5f)
+            }
+            return
+        }
+        if (usedLandscapeConstraints) {
+            constraintSet.clear(deviceEntryIconViewId, ConstraintSet.BOTTOM)
+            constraintSet.clear(deviceEntryIconViewId, ConstraintSet.END)
+            usedLandscapeConstraints = false
+        }
         val scaleFactor: Float = authController.scaleFactor
         val mBottomPaddingPx =
             context.resources.getDimensionPixelSize(clocksR.dimen.lock_icon_margin_bottom)
@@ -150,8 +189,7 @@ constructor(
                 // Window bounds already reflect rotation; recover the natural dimensions.
                 val naturalWidth = if (isLandscape) bounds.height() else bounds.width()
                 val naturalHeight = if (isLandscape) bounds.width() else bounds.height()
-                val center =
-                    Point(udfpsLocation.centerX.toInt(), udfpsLocation.centerY.toInt())
+                val center = Point(udfpsLocation.centerX.toInt(), udfpsLocation.centerY.toInt())
                 RotationUtils.rotatePoint(center, rotation, naturalWidth, naturalHeight)
 
                 centerIcon(center, udfpsLocation.radius, constraintSet)

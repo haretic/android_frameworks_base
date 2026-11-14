@@ -41,6 +41,7 @@ import com.android.systemui.settings.DisplayTracker
 import com.android.systemui.shade.ShadeDisplayAware
 import com.android.systemui.statusbar.lockscreen.LockscreenSmartspaceController
 import com.android.systemui.statusbar.policy.ConfigurationController
+import com.android.systemui.wheel.WheelLandscapeLockscreen
 import javax.inject.Inject
 import kotlinx.coroutines.DisposableHandle
 
@@ -60,15 +61,18 @@ constructor(
     val powerInteractor: PowerInteractor,
     val aodBurnInViewModel: AodBurnInViewModel,
     val keyguardSmartspaceViewModel: KeyguardSmartspaceViewModel,
+    private val clockViewModel: com.android.systemui.keyguard.ui.viewmodel.KeyguardClockViewModel,
 ) : KeyguardSection() {
     private lateinit var sliceView: KeyguardSliceView
     private var disposableHandle: DisposableHandle? = null
+    private var originalSliceWidth: Int? = null
 
     override fun addViews(constraintLayout: ConstraintLayout) {
         if (smartspaceController.isEnabled) return
         sliceView =
             layoutInflater.inflate(R.layout.keyguard_slice_view, null, false) as KeyguardSliceView
         constraintLayout.addView(sliceView)
+        originalSliceWidth = sliceView.layoutParams.width
     }
 
     override fun bindData(constraintLayout: ConstraintLayout) {
@@ -100,6 +104,7 @@ constructor(
 
     override fun applyConstraints(constraintSet: ConstraintSet) {
         if (smartspaceController.isEnabled) return
+        originalSliceWidth?.let { constraintSet.constrainWidth(R.id.keyguard_slice_view, it) }
         val dateWeatherPaddingStart = KeyguardSmartspaceViewModel.getDateWeatherStartMargin(context)
         constraintSet.apply {
             connect(
@@ -134,6 +139,37 @@ constructor(
                 0,
                 *intArrayOf(R.id.keyguard_slice_view),
             )
+        }
+        if (WheelLandscapeLockscreen.enabled(context)) {
+            WheelLandscapeLockscreen.guideline(constraintSet)
+            constraintSet.apply {
+                connect(
+                    R.id.keyguard_slice_view,
+                    ConstraintSet.START,
+                    ConstraintSet.PARENT_ID,
+                    ConstraintSet.START,
+                    WheelLandscapeLockscreen.startInset(context) +
+                        WheelLandscapeLockscreen.px(context, 16),
+                )
+                clear(R.id.keyguard_slice_view, ConstraintSet.TOP)
+                constrainWidth(R.id.keyguard_slice_view, ConstraintSet.MATCH_CONSTRAINT)
+                connect(
+                    R.id.keyguard_slice_view,
+                    ConstraintSet.TOP,
+                    if (clockViewModel.isLargeClockVisible.value)
+                        ClockViewIds.LOCKSCREEN_CLOCK_VIEW_LARGE
+                    else ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL,
+                    ConstraintSet.BOTTOM,
+                    WheelLandscapeLockscreen.px(context, 4),
+                )
+                connect(
+                    R.id.keyguard_slice_view,
+                    ConstraintSet.END,
+                    R.id.split_shade_guideline,
+                    ConstraintSet.START,
+                    WheelLandscapeLockscreen.px(context, 16),
+                )
+            }
         }
     }
 
