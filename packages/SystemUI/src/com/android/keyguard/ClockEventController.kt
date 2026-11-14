@@ -21,7 +21,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.res.Resources
 import android.icu.util.TimeZone as IcuTimeZone
 import android.os.Trace
 import android.provider.Settings.Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS
@@ -78,6 +77,7 @@ import com.android.systemui.statusbar.policy.ZenModeController
 import com.android.systemui.statusbar.policy.domain.interactor.ZenModeInteractor
 import com.android.systemui.util.annotations.DeprecatedSysuiVisibleForTesting
 import com.android.systemui.util.concurrency.DelayableExecutor
+import com.android.systemui.wheel.WheelLandscapeLockscreen
 import dagger.Lazy
 import java.util.Locale
 import java.util.TimeZone
@@ -575,7 +575,12 @@ constructor(
     }
 
     private fun getSmallClockSizePx(): Float {
-        return resources.getDimensionPixelSize(clocksR.dimen.small_clock_text_size).toFloat()
+        return WheelLandscapeLockscreen.clockTextSize(
+                context,
+                resources.getDimensionPixelSize(clocksR.dimen.small_clock_text_size),
+                false,
+            )
+            .toFloat()
     }
 
     private fun getLargeClockSizePx(): Float {
@@ -587,7 +592,12 @@ constructor(
                 .getDimensionPixelSize(clocksR.dimen.presentation_clock_text_size)
                 .toFloat()
         } else {
-            resources.getDimensionPixelSize(clocksR.dimen.large_clock_text_size).toFloat()
+            WheelLandscapeLockscreen.clockTextSize(
+                    context,
+                    resources.getDimensionPixelSize(clocksR.dimen.large_clock_text_size),
+                    true,
+                )
+                .toFloat()
         }
     }
 

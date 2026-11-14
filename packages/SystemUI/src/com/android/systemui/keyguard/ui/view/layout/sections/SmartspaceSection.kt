@@ -39,6 +39,7 @@ import com.android.systemui.res.R as R
 import com.android.systemui.shade.ShadeDisplayAware
 import com.android.systemui.shared.R as sharedR
 import com.android.systemui.statusbar.lockscreen.LockscreenSmartspaceController
+import com.android.systemui.wheel.WheelLandscapeLockscreen
 import dagger.Lazy
 import javax.inject.Inject
 import kotlinx.coroutines.DisposableHandle
@@ -70,6 +71,7 @@ constructor(
     }
 
     private var pastVisibility: Int = -1
+    private var usedLandscapeConstraints = false
     private var disposableHandle: DisposableHandle? = null
 
     override fun onRebuildBegin() {
@@ -128,6 +130,10 @@ constructor(
 
     override fun applyConstraints(constraintSet: ConstraintSet) {
         if (!keyguardSmartspaceViewModel.isSmartspaceEnabled) return
+        if (usedLandscapeConstraints && !WheelLandscapeLockscreen.enabled(context)) {
+            constraintSet.clear(sharedR.id.date_smartspace_view, ConstraintSet.END)
+            usedLandscapeConstraints = false
+        }
         val dateWeatherPaddingStart = KeyguardSmartspaceViewModel.getDateWeatherStartMargin(context)
         val smartspaceHorizontalPadding =
             KeyguardSmartspaceViewModel.getSmartspaceHorizontalMargin(context)
@@ -311,6 +317,11 @@ constructor(
             }
         }
         updateVisibility(constraintSet, isLargeClockVisible)
+        if (WheelLandscapeLockscreen.enabled(context)) {
+            usedLandscapeConstraints = true
+            WheelLandscapeLockscreen.clockAndDate(context, constraintSet)
+            WheelLandscapeLockscreen.cards(context, constraintSet)
+        }
     }
 
     override fun removeViews(constraintLayout: ConstraintLayout) {

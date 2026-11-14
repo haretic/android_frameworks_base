@@ -38,7 +38,10 @@ import com.airbnb.lottie.LottieCompositionFactory
 import com.airbnb.lottie.LottieDrawable
 import com.android.systemui.common.ui.view.TouchHandlingView
 import com.android.systemui.log.TouchHandlingViewLogger
+import com.android.systemui.plugins.keyguard.ui.clocks.ClockViewIds
 import com.android.systemui.res.R
+import com.android.systemui.shared.R as sharedR
+import com.android.systemui.wheel.WheelLandscapeLockscreen
 
 /** How long the wheel UI's unlock cue stays as the lock screen comes, see setWheelCue. */
 private const val WHEEL_CUE_MS = 4000L
@@ -279,13 +282,13 @@ constructor(
     }
 
     /**
-     * With the wheel UI the side button unlocks: a cue beside it says so as the icon shows, not
-     * on AOD, under the bouncer, or as the icon fades. The icon stays as it is, the touch target
-     * it always was; a pill around it looked like a button to tap. The cue goes after
-     * WHEEL_CUE_MS: kept, it covered a notification's end beside the wheel, its expand button and
-     * the wheel's ring on it. Each wake brings it back. A card where it goes (a notification,
-     * the media player, whose output chip sits at the side button's height) keeps it away
-     * altogether: the padlock still says where unlocking is.
+     * With the wheel UI the side button unlocks: a cue beside it says so as the icon shows, not on
+     * AOD, under the bouncer, or as the icon fades. The icon stays as it is, the touch target it
+     * always was; a pill around it looked like a button to tap. The cue goes after WHEEL_CUE_MS:
+     * kept, it covered a notification's end beside the wheel, its expand button and the wheel's
+     * ring on it. Each wake brings it back. A card where it goes (a notification, the media player,
+     * whose output chip sits at the side button's height) keeps it away altogether: the padlock
+     * still says where unlocking is.
      */
     fun setWheelCue(show: Boolean) {
         removeCallbacks(hideWheelCue)
@@ -322,6 +325,7 @@ constructor(
 
     /** Whether a lock screen card, as the notification stack lays them out, is under [cue]. */
     private fun coversCard(cue: View): Boolean {
+        if (WheelLandscapeLockscreen.enabled(context) && coversLandscapeContent(cue)) return true
         val stack =
             rootView.findViewById<ViewGroup>(R.id.notification_stack_scroller) ?: return false
         if (!stack.isShown) {
@@ -336,9 +340,42 @@ constructor(
                 continue
             }
             card.getLocationOnScreen(at)
-            if (Rect.intersects(cueRect, Rect(at[0], at[1], at[0] + card.width, at[1] + card.height))) {
+            if (
+                Rect.intersects(
+                    cueRect,
+                    Rect(at[0], at[1], at[0] + card.width, at[1] + card.height),
+                )
+            ) {
                 return true
             }
+        }
+        return false
+    }
+
+    /** The top-edge cue also keeps clear of the landscape clock, date and standalone hints. */
+    private fun coversLandscapeContent(cue: View): Boolean {
+        val at = IntArray(2)
+        cue.getLocationOnScreen(at)
+        val cueRect = Rect(at[0], at[1], at[0] + cue.width, at[1] + cue.height)
+        for (id in
+            intArrayOf(
+                ClockViewIds.LOCKSCREEN_CLOCK_VIEW_LARGE,
+                ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL,
+                sharedR.id.bc_smartspace_view,
+                sharedR.id.date_smartspace_view,
+                sharedR.id.date_smartspace_view_large,
+                R.id.keyguard_indication_area,
+            )) {
+            val content = rootView.findViewById<View>(id) ?: continue
+            if (!content.isShown || content.alpha < 0.1f || content.height == 0) continue
+            content.getLocationOnScreen(at)
+            if (
+                Rect.intersects(
+                    cueRect,
+                    Rect(at[0], at[1], at[0] + content.width, at[1] + content.height),
+                )
+            )
+                return true
         }
         return false
     }

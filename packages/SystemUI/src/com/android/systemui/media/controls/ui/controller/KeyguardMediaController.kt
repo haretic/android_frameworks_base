@@ -70,6 +70,8 @@ import com.android.systemui.util.println
 import com.android.systemui.util.settings.SecureSettings
 import com.android.systemui.util.settings.SettingsProxyExt.observerFlow
 import com.android.systemui.util.withIncreasedIndent
+import com.android.systemui.wheel.WheelLandscapeLockscreen
+import com.android.systemui.wheel.wheelLayoutEnabled
 import java.io.PrintWriter
 import javax.inject.Inject
 import javax.inject.Named
@@ -84,6 +86,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import lineageos.providers.LineageSettings
 
 /**
  * Controls the media notifications on the lock screen, handles its visibility and placement -
@@ -109,6 +112,7 @@ constructor(
     private val secureSettings: SecureSettings,
 ) : Dumpable {
     private var lastUsedStatusBarState = -1
+    private var landscapeLayout by mutableStateOf(false)
 
     /** Is the media player visible? */
     var visible by mutableStateOf(false)
@@ -189,6 +193,11 @@ constructor(
                 }
             }
         )
+        applicationScope.launch {
+            wheelLayoutEnabled(context, LineageSettings.Secure.WHEEL_LOCKSCREEN).collect {
+                updateResources()
+            }
+        }
         updateResources()
     }
 
@@ -202,7 +211,9 @@ constructor(
             }
             Media(
                 viewModelFactory = mediaViewModelFactory,
-                presentationStyle = MediaPresentationStyle.Default,
+                presentationStyle =
+                    if (landscapeLayout) MediaPresentationStyle.Compressed
+                    else MediaPresentationStyle.Default,
                 behavior =
                     MediaUiBehavior(
                         carouselVisibility = MediaCarouselVisibility.WhenAnyCardIsActive,
@@ -246,20 +257,28 @@ constructor(
     }
 
     private fun updateResources() {
+        landscapeLayout = WheelLandscapeLockscreen.enabled(context)
         distanceForFullShadeTransition =
             context.resources.getDimensionPixelSize(
                 R.dimen.lockscreen_shade_media_transition_distance
             )
+        if (!MediaControlsInComposeFlag.isEnabled) {
+            mediaHost.expansion =
+                if (WheelLandscapeLockscreen.enabled(context)) MediaHostState.COLLAPSED
+                else MediaHostState.EXPANDED
+        }
         useSplitShade = splitShadeStateController.shouldUseSplitNotificationShade(context.resources)
     }
 
     @VisibleForTesting
     var useSplitShade = false
         set(value) {
-            if (field == value) {
+            // The stack's existing media row shares its height budget with right-column cards.
+            val split = value && !WheelLandscapeLockscreen.enabled(context)
+            if (field == split) {
                 return
             }
-            field = value
+            field = split
             reattachHostView()
             refreshMediaPosition(reason = "useSplitShade changed")
         }

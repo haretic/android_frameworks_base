@@ -28,6 +28,7 @@ import com.android.systemui.keyguard.ui.viewmodel.KeyguardIndicationAreaViewMode
 import com.android.systemui.res.R
 import com.android.systemui.shade.ShadeDisplayAware
 import com.android.systemui.statusbar.KeyguardIndicationController
+import com.android.systemui.wheel.WheelLandscapeLockscreen
 import javax.inject.Inject
 import kotlinx.coroutines.DisposableHandle
 
@@ -56,6 +57,36 @@ constructor(
     }
 
     override fun applyConstraints(constraintSet: ConstraintSet) {
+        if (WheelLandscapeLockscreen.enabled(context)) {
+            WheelLandscapeLockscreen.guideline(constraintSet)
+            constraintSet.apply {
+                constrainWidth(indicationAreaViewId, ConstraintSet.MATCH_CONSTRAINT)
+                constrainHeight(indicationAreaViewId, ViewGroup.LayoutParams.WRAP_CONTENT)
+                connect(
+                    indicationAreaViewId,
+                    ConstraintSet.BOTTOM,
+                    ConstraintSet.PARENT_ID,
+                    ConstraintSet.BOTTOM,
+                    WheelLandscapeLockscreen.bottom(context),
+                )
+                connect(
+                    indicationAreaViewId,
+                    ConstraintSet.START,
+                    ConstraintSet.PARENT_ID,
+                    ConstraintSet.START,
+                    WheelLandscapeLockscreen.startInset(context) +
+                        WheelLandscapeLockscreen.px(context, 8),
+                )
+                connect(
+                    indicationAreaViewId,
+                    ConstraintSet.END,
+                    R.id.split_shade_guideline,
+                    ConstraintSet.START,
+                    WheelLandscapeLockscreen.px(context, 8),
+                )
+            }
+            return
+        }
         constraintSet.apply {
             constrainWidth(indicationAreaViewId, ViewGroup.LayoutParams.MATCH_PARENT)
             constrainHeight(indicationAreaViewId, ViewGroup.LayoutParams.WRAP_CONTENT)
@@ -64,19 +95,19 @@ constructor(
                 ConstraintSet.BOTTOM,
                 ConstraintSet.PARENT_ID,
                 ConstraintSet.BOTTOM,
-                context.resources.getDimensionPixelSize(R.dimen.keyguard_indication_margin_bottom)
+                context.resources.getDimensionPixelSize(R.dimen.keyguard_indication_margin_bottom),
             )
             connect(
                 indicationAreaViewId,
                 ConstraintSet.START,
                 ConstraintSet.PARENT_ID,
-                ConstraintSet.START
+                ConstraintSet.START,
             )
             connect(
                 indicationAreaViewId,
                 ConstraintSet.END,
                 ConstraintSet.PARENT_ID,
-                ConstraintSet.END
+                ConstraintSet.END,
             )
         }
     }

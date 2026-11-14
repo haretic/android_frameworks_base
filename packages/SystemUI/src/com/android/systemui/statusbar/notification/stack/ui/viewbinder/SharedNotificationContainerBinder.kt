@@ -36,8 +36,11 @@ import com.android.systemui.statusbar.notification.stack.NotificationStackScroll
 import com.android.systemui.statusbar.notification.stack.NotificationStackSizeCalculator
 import com.android.systemui.statusbar.notification.stack.ui.view.SharedNotificationContainer
 import com.android.systemui.statusbar.notification.stack.ui.viewmodel.SharedNotificationContainerViewModel
+import com.android.systemui.statusbar.notification.stack.ui.viewmodel.SharedNotificationContainerViewModel.HorizontalPosition
 import com.android.systemui.util.kotlin.DisposableHandles
 import com.android.systemui.util.kotlin.buildDisposableHandle
+import com.android.systemui.wheel.WheelLandscapeLockscreen
+import com.android.systemui.wheel.wheelLayoutEnabled
 import javax.inject.Inject
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CoroutineDispatcher
@@ -45,6 +48,7 @@ import kotlinx.coroutines.DisposableHandle
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import lineageos.providers.LineageSettings
 
 /** Binds the shared notification container to its view-model. */
 @SysUISingleton
@@ -62,10 +66,17 @@ constructor(
 
     private val calculateMaxNotifications: (Float, Boolean) -> Int = { space, extraShelfSpace ->
         val shelfHeight = controller.getShelfHeight().toFloat()
+        val landscape =
+            !SceneContainerFlag.isEnabled &&
+                WheelLandscapeLockscreen.enabled(controller.view.context)
+        // Bounds subtract the stack's top offset only from their top. Remove that height credit
+        // when the right column reaches the safe screen bottom, with no padlock area for a shelf.
+        val availableSpace =
+            if (landscape) (space - controller.view.top).coerceAtLeast(0f) else space
         notificationStackSizeCalculator.computeMaxKeyguardNotifications(
             controller.view,
-            space,
-            if (extraShelfSpace) shelfHeight else 0f,
+            availableSpace,
+            if (extraShelfSpace && !landscape) shelfHeight else 0f,
             shelfHeight,
         )
     }
@@ -79,19 +90,43 @@ constructor(
             view.repeatWhenAttached {
                 repeatOnLifecycle(Lifecycle.State.CREATED) {
                     launch {
-                        viewModel.configurationBasedDimensions.collect {
-                            view.updateConstraints(
-                                horizontalPosition = it.horizontalPosition,
-                                marginStart = it.marginStart,
-                                marginTop = it.marginTop,
-                                marginEnd = it.marginEnd,
-                                marginBottom = it.marginBottom,
-                                nsslAlpha = controller.alpha,
-                            )
+                        combine(
+                                viewModel.configurationBasedDimensions,
+                                viewModel.isOnLockscreenWithoutShade,
+                                wheelLayoutEnabled(
+                                    view.context,
+                                    LineageSettings.Secure.WHEEL_LOCKSCREEN,
+                                ),
+                            ) { dimensions, locked, wheel ->
+                                if (
+                                    wheel &&
+                                        locked &&
+                                        WheelLandscapeLockscreen.enabled(view.context)
+                                ) {
+                                    dimensions.copy(
+                                        horizontalPosition = HorizontalPosition.MiddleToEdge(),
+                                        marginStart = 0,
+                                        marginEnd =
+                                            maxOf(
+                                                dimensions.marginEnd,
+                                                WheelLandscapeLockscreen.endInset(view.context),
+                                            ),
+                                    )
+                                } else dimensions
+                            }
+                            .collect {
+                                view.updateConstraints(
+                                    horizontalPosition = it.horizontalPosition,
+                                    marginStart = it.marginStart,
+                                    marginTop = it.marginTop,
+                                    marginEnd = it.marginEnd,
+                                    marginBottom = it.marginBottom,
+                                    nsslAlpha = controller.alpha,
+                                )
 
-                            controller.setOverExpansion(0f)
-                            controller.setOverScrollAmount(0)
-                        }
+                                controller.setOverExpansion(0f)
+                                controller.setOverScrollAmount(0)
+                            }
                     }
                 }
             }

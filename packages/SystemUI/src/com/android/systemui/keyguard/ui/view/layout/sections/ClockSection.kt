@@ -47,6 +47,7 @@ import com.android.systemui.shade.LargeScreenHeaderHelper
 import com.android.systemui.shade.ShadeDisplayAware
 import com.android.systemui.shared.R as sharedR
 import com.android.systemui.util.ui.value
+import com.android.systemui.wheel.WheelLandscapeLockscreen
 import dagger.Lazy
 import javax.inject.Inject
 import kotlinx.coroutines.DisposableHandle
@@ -72,10 +73,13 @@ constructor(
     @ShadeDisplayAware private val context: Context,
     val blueprintInteractor: Lazy<KeyguardBlueprintInteractor>,
     private val rootViewModel: KeyguardRootViewModel,
+    private val smartspaceViewModel:
+        com.android.systemui.keyguard.ui.viewmodel.KeyguardSmartspaceViewModel,
     private val aodBurnInViewModel: AodBurnInViewModel,
     private val largeScreenHeaderHelperLazy: Lazy<LargeScreenHeaderHelper>,
 ) : KeyguardSection() {
     private var disposableHandle: DisposableHandle? = null
+    private var usedLandscapeConstraints = false
 
     override fun addViews(constraintLayout: ConstraintLayout) {}
 
@@ -147,6 +151,19 @@ constructor(
                     )
                 }
             }
+            if (WheelLandscapeLockscreen.enabled(context)) {
+                usedLandscapeConstraints = true
+                WheelLandscapeLockscreen.clockAndDate(
+                    context,
+                    this,
+                    smartspaceViewModel.isSmartspaceEnabled,
+                )
+                if (smartspaceViewModel.isSmartspaceEnabled)
+                    WheelLandscapeLockscreen.cards(context, this)
+                clockInteractor.setNotificationStackDefaultTop(
+                    WheelLandscapeLockscreen.top(context).toFloat()
+                )
+            }
         }
     }
 
@@ -191,6 +208,16 @@ constructor(
     }
 
     fun applyDefaultConstraints(constraints: ConstraintSet) {
+        if (usedLandscapeConstraints && !WheelLandscapeLockscreen.enabled(context)) {
+            constraints.apply {
+                constrainMaxWidth(ClockViewIds.LOCKSCREEN_CLOCK_VIEW_LARGE, 0)
+                constrainMaxWidth(ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL, 0)
+                clear(ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL, END)
+                setHorizontalBias(ClockViewIds.LOCKSCREEN_CLOCK_VIEW_LARGE, 0.5f)
+                setHorizontalBias(ClockViewIds.LOCKSCREEN_CLOCK_VIEW_SMALL, 0.5f)
+            }
+            usedLandscapeConstraints = false
+        }
         val guideline =
             if (keyguardClockViewModel.clockShouldBeCentered.value) PARENT_ID
             else R.id.split_shade_guideline

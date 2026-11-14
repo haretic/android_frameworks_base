@@ -42,6 +42,8 @@ import com.android.systemui.shade.domain.interactor.ShadeModeInteractor
 import com.android.systemui.statusbar.notification.icon.ui.viewmodel.NotificationIconContainerAlwaysOnDisplayViewModel
 import com.android.systemui.statusbar.policy.domain.interactor.ZenModeInteractor
 import com.android.systemui.statusbar.ui.SystemBarUtilsProxy
+import com.android.systemui.wheel.WheelLandscapeLockscreen
+import com.android.systemui.wheel.wheelLayoutEnabled
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -50,6 +52,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import lineageos.providers.LineageSettings
 
 @SysUISingleton
 class KeyguardClockViewModel
@@ -198,7 +201,20 @@ constructor(
     }
 
     val largeClockTextSize: Flow<Int> =
-        configurationInteractor.dimensionPixelSize(clocksR.dimen.large_clock_text_size)
+        combine(
+            configurationInteractor.dimensionPixelSize(clocksR.dimen.large_clock_text_size),
+            wheelLayoutEnabled(context, LineageSettings.Secure.WHEEL_LOCKSCREEN),
+        ) { size, _ ->
+            WheelLandscapeLockscreen.clockTextSize(context, size, true)
+        }
+
+    val smallClockTextSize: Flow<Int> =
+        combine(
+            configurationInteractor.dimensionPixelSize(clocksR.dimen.small_clock_text_size),
+            wheelLayoutEnabled(context, LineageSettings.Secure.WHEEL_LOCKSCREEN),
+        ) { size, _ ->
+            WheelLandscapeLockscreen.clockTextSize(context, size, false)
+        }
 
     val shouldDateWeatherBeBelowLargeClock: StateFlow<Boolean> =
         combine(
