@@ -86,9 +86,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.android.compose.modifiers.size
 import com.android.compose.modifiers.thenIf
 import com.android.compose.ui.graphics.painter.rememberDrawablePainter
@@ -133,6 +135,65 @@ fun LargeTileContent(
     toggleClick: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
 ) {
+    if (LocalWheelLayout.current.sideBySide) {
+        Column(
+            modifier = modifier.padding(vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            val animatedBackground by animateColorAsState(colors.iconBackground)
+            val longPressLabel = longPressLabelSettings().takeIf { onLongClick != null }
+            Box(
+                Modifier.size(32.dp).thenIf(toggleClick != null) {
+                    Modifier.clip(iconShape)
+                        .drawBehind { drawRect(animatedBackground) }
+                        .combinedClickable(
+                            onClick = { toggleClick?.invoke() },
+                            onLongClick = onLongClick,
+                            onLongClickLabel = longPressLabel,
+                            hapticFeedbackEnabled = false,
+                        )
+                        .thenIf(accessibilityUiState != null) {
+                            Modifier.semantics {
+                                    accessibilityUiState?.let {
+                                        contentDescription = it.contentDescription
+                                        stateDescription = it.stateDescription
+                                        it.toggleableState?.let { value -> toggleableState = value }
+                                        role = Role.Switch
+                                    }
+                                }
+                                .sysuiResTag(TEST_TAG_TOGGLE)
+                        }
+                },
+                contentAlignment = Alignment.Center,
+            ) {
+                SmallTileContent(iconProvider, colors.icon, size = { 20.dp })
+            }
+            // Use the entire tile width for names. Let long names and larger fonts grow the row.
+            BasicText(
+                text = label,
+                style =
+                    MaterialTheme.typography.titleSmallEmphasized.copy(
+                        fontSize = 16.sp,
+                        textAlign = TextAlign.Center,
+                    ),
+                color = { colors.label },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            val secondary =
+                secondaryLabel?.takeIf { it.isNotBlank() }
+                    ?: accessibilityUiState?.stateDescription?.trim()?.trimStart(',', ' ')
+            if (!secondary.isNullOrBlank()) {
+                BasicText(
+                    text = secondary,
+                    style = MaterialTheme.typography.labelMedium.copy(textAlign = TextAlign.Center),
+                    color = { colors.secondaryLabel },
+                    modifier = Modifier.fillMaxWidth().clearAndSetSemantics {},
+                )
+            }
+        }
+        return
+    }
     val isDualTarget = toggleClick != null
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -390,6 +451,7 @@ fun Modifier.tileTestTag(iconOnly: Boolean): Modifier {
  */
 @Composable
 fun Modifier.largeTilePadding(isDualTarget: Boolean = false): Modifier {
+    if (LocalWheelLayout.current.sideBySide) return padding(horizontal = 6.dp)
     return padding(
         start = CommonTileDefaults.StartPadding,
         end = if (isDualTarget) CommonTileDefaults.DualTargetEndPadding else TileEndPadding,

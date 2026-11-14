@@ -69,6 +69,7 @@ public final class WheelShadeTabSwipe {
                 mDownY = event.getRawY();
                 mTracking =
                         WheelLayoutSettings.shade(mContext)
+                                && !WheelLayoutSettings.sideBySide(mContext)
                                 && mHost.showsTabs()
                                 && !mHost.takesSidewaysDrag(mDownX, mDownY);
                 return false;

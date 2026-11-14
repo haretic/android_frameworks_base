@@ -16,6 +16,7 @@
 package com.android.systemui.statusbar.policy
 
 import android.content.Context
+import android.content.res.Configuration
 import android.content.res.Resources
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Application
@@ -46,10 +47,12 @@ constructor(
             ),
     )
     override fun shouldUseSplitNotificationShade(resources: Resources): Boolean {
-        // The wheel's shade is one column in tabs, turned too, see ShadeConfigRepository
+        // Preserve the wheel's portrait tabs; landscape uses the stock split containers.
+        if (WheelLayoutSettings.shade(context)) {
+            return resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        }
         return (resources.getBoolean(R.bool.config_use_split_notification_shade) ||
             (featureFlags.isEnabled(Flags.LOCKSCREEN_ENABLE_LANDSCAPE) &&
-                resources.getBoolean(R.bool.force_config_use_split_notification_shade))) &&
-            !WheelLayoutSettings.shade(context)
+                resources.getBoolean(R.bool.force_config_use_split_notification_shade)))
     }
 }

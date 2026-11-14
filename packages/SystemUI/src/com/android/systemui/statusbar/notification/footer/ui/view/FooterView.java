@@ -70,6 +70,7 @@ public class FooterView extends StackScrollerDecorView {
     private ConstraintLayout mButtonLayout;
     private ConstraintSet mStockButtonConstraints;
     private int mButtonColumns;
+    private boolean mSideBySide;
     private int mStockButtonGravity = -1;
     private int mStockButtonPaddingStart;
     private int mStockButtonDrawablePadding;
@@ -298,15 +299,30 @@ public class FooterView extends StackScrollerDecorView {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        final boolean sideBySide = WheelLayoutSettings.sideBySide(getContext());
         int columns =
-                WheelLayoutSettings.shade(getContext())
-                        ? WheelLayoutSettings.columns(getContext())
-                        : 0;
-        if (mStockButtonConstraints != null && columns != mButtonColumns) {
+                sideBySide
+                        ? 2
+                        : WheelLayoutSettings.shade(getContext())
+                                ? WheelLayoutSettings.columns(getContext())
+                                : 0;
+        if (mStockButtonConstraints != null
+                && (columns != mButtonColumns || sideBySide != mSideBySide)) {
             ConstraintSet layout = new ConstraintSet();
             layout.clone(mStockButtonConstraints);
-            int[] ids = {R.id.history_button, R.id.dismiss_text, R.id.settings_button};
-            View[] buttons = {mHistoryButton, mClearAllButton, mSettingsButton};
+            // Keep Clear all last and full-width in the notification column.
+            int[] ids =
+                    sideBySide
+                            ? new int[] {
+                                R.id.history_button, R.id.settings_button, R.id.dismiss_text
+                            }
+                            : new int[] {
+                                R.id.history_button, R.id.dismiss_text, R.id.settings_button
+                            };
+            View[] buttons =
+                    sideBySide
+                            ? new View[] {mHistoryButton, mSettingsButton, mClearAllButton}
+                            : new View[] {mHistoryButton, mClearAllButton, mSettingsButton};
             int gap = Math.round(8 * getResources().getDisplayMetrics().density);
             for (int i = 0; i < ids.length; i++) {
                 int id = ids[i];
@@ -378,6 +394,7 @@ public class FooterView extends StackScrollerDecorView {
             }
             layout.applyTo(mButtonLayout);
             mButtonColumns = columns;
+            mSideBySide = sideBySide;
         }
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
     }
