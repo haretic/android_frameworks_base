@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 package com.android.systemui.wheel
 
+import android.graphics.Typeface
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -25,7 +26,11 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.sp
 import com.android.compose.modifiers.thenIf
 import com.android.systemui.compose.modifiers.sysuiResTag
 import com.android.systemui.res.R
@@ -78,6 +83,9 @@ fun WheelShadeTabs(
     }
 }
 
+/** haretic's display face where the device has one, the default face where not */
+private val TabFace = FontFamily(Typeface.create("haretic-display", Typeface.NORMAL))
+
 @Composable
 private fun RowScope.Tab(label: String, selected: Boolean) {
     val colors = MaterialTheme.colorScheme
@@ -90,7 +98,14 @@ private fun RowScope.Tab(label: String, selected: Boolean) {
     ) {
         Text(
             label,
-            style = MaterialTheme.typography.titleMedium,
+            // haretic's display face, as on the home screen's tabs
+            style =
+                MaterialTheme.typography.titleMedium.copy(
+                    fontFamily = TabFace,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 11.5.sp,
+                    letterSpacing = 0.02.em,
+                ),
             color = if (selected) colors.onPrimary else colors.onSurface,
             maxLines = 1,
         )
