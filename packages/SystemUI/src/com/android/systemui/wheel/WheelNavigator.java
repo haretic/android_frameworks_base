@@ -327,6 +327,7 @@ public final class WheelNavigator {
             return;
         }
         int index = indexOf(stops, mStop);
+        boolean wrapped = false;
         if (index >= 0 && leavesScroller(stops, index, direction) && scrollOn(mStop, direction)) {
             // More beyond the edge: once it scrolled in, the first stop it brought
             final Stop from = mStop;
@@ -383,6 +384,7 @@ public final class WheelNavigator {
             mOnBackOut.run();
             return;
         } else {
+            wrapped = stops.size() > 1 && (index + direction < 0 || index + direction >= stops.size());
             index = Math.floorMod(index + direction, stops.size());
         }
         final Stop next = stops.get(index);
@@ -399,7 +401,11 @@ public final class WheelNavigator {
             mColumnEntry = new ColumnEntry(qsColumn, shadeColumn(next, qsColumn), direction);
             mColumnEntry.run();
         }
-        WheelFeedback.get(mRoot.getContext()).step(direction < 0);
+        if (wrapped) {
+            WheelFeedback.get(mRoot.getContext()).wrap();
+        } else {
+            WheelFeedback.get(mRoot.getContext()).step(direction < 0);
+        }
     }
 
     private static Stop afterRemovedNotification(List<Stop> stops, int top) {
@@ -497,19 +503,24 @@ public final class WheelNavigator {
         final WheelFeedback feedback = WheelFeedback.get(mRoot.getContext());
         if (mGrabbed) {
             letGo();
-            feedback.select();
+            feedback.release();
             return;
         }
         if (isSlider(node)) {
             mGrabbed = true;
             mRing.setGrabbed(true);
             mRoot.postDelayed(mLetGo, GRAB_TIMEOUT_MS);
-            feedback.select();
+            feedback.grab();
             return;
         }
         // A tile toggles from its checkable part, anything else clicks itself
         final Stop toggle = checkableIn(mStop);
-        feedback.select();
+        final AccessibilityNodeInfo checkable = toggle != null ? node(toggle) : node;
+        if (checkable != null && checkable.isCheckable()) {
+            feedback.toggle(!checkable.isChecked());
+        } else {
+            feedback.select();
+        }
         performAction(toggle != null ? toggle : mStop, AccessibilityNodeInfo.ACTION_CLICK, null);
         if (isShadeTabs(node)) {
             // The other tab: its first stop past the header, once it's laid out
@@ -577,6 +588,8 @@ public final class WheelNavigator {
                         range.getMin(),
                         Math.min(range.getMax(), range.getCurrent() + direction * step));
         if (value == range.getCurrent()) {
+            // Against its end
+            WheelFeedback.get(mRoot.getContext()).end();
             return;
         }
         final Bundle args = new Bundle();

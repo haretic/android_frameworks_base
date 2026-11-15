@@ -102,6 +102,10 @@ final class WheelGuide {
         legend(mode, gestures, texts);
         show(toArray(gestures), texts.toArray(new CharSequence[0]), gravity,
                 legend == LEGEND_ALWAYS ? 0 : LEGEND_MS, 0);
+        if (changed) {
+            // Heard and felt with the legend that names it, and no more often
+            WheelFeedback.get(mContext).mode();
+        }
     }
 
     /**
