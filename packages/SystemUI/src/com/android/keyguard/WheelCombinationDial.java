@@ -24,6 +24,7 @@ import android.view.animation.DecelerateInterpolator;
 import android.view.animation.OvershootInterpolator;
 
 import com.android.systemui.res.R;
+import com.android.systemui.wheel.WheelFeedback;
 import com.android.systemui.wheel.WheelNavigator;
 
 /**
@@ -254,6 +255,7 @@ public final class WheelCombinationDial extends View implements WheelNavigator.D
 
     /** A shake side to side, settling, as a lock's handle tried while still locked. */
     public void shake() {
+        WheelFeedback.get(getContext()).error();
         if (mShakeAnimator != null) {
             mShakeAnimator.cancel();
         }

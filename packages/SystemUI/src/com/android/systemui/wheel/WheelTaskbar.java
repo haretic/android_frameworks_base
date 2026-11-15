@@ -1156,6 +1156,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private void show() {
         removeClosing();
         mSettings.read(mUserTracker.getUserId());
+        mFeedback.open();
         mEdge = mSettings.edge(rotation());
         mThumbnails.clear();
         mDrawerApps = null;
@@ -2278,6 +2279,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         mRoot = null;
         mMenus.clear();
         hideLabel();
+        mFeedback.close();
         // No more keys or touches while it slides out
         final WindowManager.LayoutParams lp =
                 (WindowManager.LayoutParams) closing.getLayoutParams();
@@ -2390,6 +2392,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 final int end = next < 0 ? 0 : targets.size() - 1;
                 if (end != current) {
                     focusAndTick(targets.get(end));
+                } else {
+                    mFeedback.end();
                 }
                 return;
             }
@@ -2407,7 +2411,13 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
             }
         }
         // Round at the ends, as a click wheel does
-        focusAndTick(targets.get(Math.floorMod(next, targets.size())));
+        final View target = targets.get(Math.floorMod(next, targets.size()));
+        if ((next < 0 || next >= targets.size()) && targets.size() > 1) {
+            target.requestFocusFromTouch();
+            mFeedback.wrap();
+        } else {
+            focusAndTick(target);
+        }
     }
 
     /**

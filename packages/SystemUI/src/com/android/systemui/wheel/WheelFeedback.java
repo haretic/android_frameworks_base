@@ -21,10 +21,13 @@ import lineageos.providers.LineageSettings;
 
 /**
  * How the wheel feels and sounds, as a click wheel does: a crisp tick for every step, a firmer
- * click when the side button picks something and a softer one going back. The ticks follow
- * WHEEL_TASKBAR_HAPTICS and the system's touch feedback; the quiet clicks play in SystemUI's
- * wheel windows only (the taskbar, its lists, the power menu) and follow WHEEL_TASKBAR_SOUNDS
- * and the system's touch sounds. Main thread only.
+ * click when the side button picks something and a softer one going back, and a sound and a
+ * feel of its own for what else the wheel meets: a list's end, the turn round it, a switch
+ * going on or off, a slider taken hold of and let go, a window sliding in or out, the wheel's
+ * mode changing, a refusal. Rising is on, open, towards; falling is off, closed, away. The
+ * ticks follow WHEEL_TASKBAR_HAPTICS and the system's touch feedback; the quiet sounds play in
+ * SystemUI's wheel windows only (the taskbar, its lists, the shade, the power menu) and follow
+ * WHEEL_TASKBAR_SOUNDS and the system's touch sounds. Main thread only.
  */
 public final class WheelFeedback {
 
@@ -35,6 +38,13 @@ public final class WheelFeedback {
     private static final float BACK_SCALE = 0.7f;
     private static final float TICK_VOLUME = 0.45f;
     private static final float PRESS_VOLUME = 0.6f;
+    /** Steps closer than this are a spin, whose ticks are shorter and softer. */
+    private static final long SPIN_STEP_MS = 70;
+    /** A window sliding in or out right after a press or a back has been heard already. */
+    private static final long SAID_MS = 200;
+    private static final int LIGHT = 110;
+    private static final int FIRM = 180;
+    private static final int STRONG = 255;
     /** A step down sounds a touch lower than one up. */
     private static final float DOWN_RATE = 0.94f;
 
@@ -51,8 +61,28 @@ public final class WheelFeedback {
     private final int mTickSound;
     private final int mSelectSound;
     private final int mBackSound;
+    private final int mSpinSound;
+    private final int mEndSound;
+    private final int mWrapSound;
+    private final int mOpenSound;
+    private final int mCloseSound;
+    private final int mOnSound;
+    private final int mOffSound;
+    private final int mGrabSound;
+    private final int mReleaseSound;
+    private final int mModeSound;
+    private final int mErrorSound;
+    /** Two bumps, the second the softer: a wall. */
+    private final VibrationEffect mEnd = waveform(new long[] {28, 38, 18}, STRONG, FIRM);
+    /** Two light ticks: over the edge and on. */
+    private final VibrationEffect mWrap = waveform(new long[] {15, 24, 15}, LIGHT, LIGHT);
+    private final VibrationEffect mGrab = waveform(new long[] {35}, STRONG);
+    private final VibrationEffect mRelease = waveform(new long[] {15}, FIRM);
+    private final VibrationEffect mMode = waveform(new long[] {15, 18, 15, 18, 24}, LIGHT, LIGHT, FIRM);
     private long mLastTick;
     private long mLastSound;
+    private long mLastStep;
+    private long mLastPress;
 
     /** The one instance for {@code context}'s application. */
     public static WheelFeedback get(Context context) {
@@ -81,6 +111,29 @@ public final class WheelFeedback {
         mTickSound = mSounds.load(context, R.raw.wheel_tick, 1);
         mSelectSound = mSounds.load(context, R.raw.wheel_select, 1);
         mBackSound = mSounds.load(context, R.raw.wheel_back, 1);
+        mSpinSound = mSounds.load(context, R.raw.wheel_tick_fast, 1);
+        mEndSound = mSounds.load(context, R.raw.wheel_list_end, 1);
+        mWrapSound = mSounds.load(context, R.raw.wheel_list_wrap, 1);
+        mOpenSound = mSounds.load(context, R.raw.wheel_open, 1);
+        mCloseSound = mSounds.load(context, R.raw.wheel_close, 1);
+        mOnSound = mSounds.load(context, R.raw.wheel_toggle_on, 1);
+        mOffSound = mSounds.load(context, R.raw.wheel_toggle_off, 1);
+        mGrabSound = mSounds.load(context, R.raw.wheel_grab, 1);
+        mReleaseSound = mSounds.load(context, R.raw.wheel_release, 1);
+        mModeSound = mSounds.load(context, R.raw.wheel_mode, 1);
+        mErrorSound = mSounds.load(context, R.raw.wheel_error, 1);
+    }
+
+    /**
+     * Pulses with pauses between them: {@code timings} is on, off, on and so on in milliseconds,
+     * {@code strengths} one for each pulse.
+     */
+    private static VibrationEffect waveform(long[] timings, int... strengths) {
+        final int[] amplitudes = new int[timings.length];
+        for (int i = 0; i < timings.length; i += 2) {
+            amplitudes[i] = strengths[i / 2];
+        }
+        return VibrationEffect.createWaveform(timings, amplitudes, -1);
     }
 
     /** A primitive where the vibrator has it, the predefined effect where it doesn't. */
@@ -94,7 +147,10 @@ public final class WheelFeedback {
     /** A step of the wheel through a SystemUI window: a tick and a click. */
     public void step(boolean up) {
         tick();
-        play(mTickSound, TICK_VOLUME, up ? 1f : DOWN_RATE);
+        final long now = SystemClock.uptimeMillis();
+        final boolean spinning = now - mLastStep < SPIN_STEP_MS;
+        mLastStep = now;
+        play(spinning ? mSpinSound : mTickSound, TICK_VOLUME, up ? 1f : DOWN_RATE);
     }
 
     /** A step of the wheel in an app, which hears the app's own sounds: only the tick. */
@@ -111,12 +167,72 @@ public final class WheelFeedback {
     public void select() {
         vibrate(mSelect);
         play(mSelectSound, PRESS_VOLUME, 1f);
+        mLastPress = SystemClock.uptimeMillis();
     }
 
     /** Back a list, or the window closing. */
     public void back() {
         vibrate(mBack);
         play(mBackSound, PRESS_VOLUME, 1f);
+        mLastPress = SystemClock.uptimeMillis();
+    }
+
+    /** A step against the end of a list or of a slider, which goes no further: two bumps. */
+    public void end() {
+        vibrate(mEnd);
+        play(mEndSound, PRESS_VOLUME, 1f);
+    }
+
+    /** A step over the end of a list round to its other end. */
+    public void wrap() {
+        vibrate(mWrap);
+        play(mWrapSound, PRESS_VOLUME, 1f);
+    }
+
+    /** The side button put a switch on or off. */
+    public void toggle(boolean on) {
+        vibrate(mSelect);
+        play(on ? mOnSound : mOffSound, PRESS_VOLUME, 1f);
+        mLastPress = SystemClock.uptimeMillis();
+    }
+
+    /** The wheel took hold of a slider: its steps move the slider now. */
+    public void grab() {
+        vibrate(mGrab);
+        play(mGrabSound, PRESS_VOLUME, 1f);
+        mLastPress = SystemClock.uptimeMillis();
+    }
+
+    /** The wheel let the slider go. */
+    public void release() {
+        vibrate(mRelease);
+        play(mReleaseSound, PRESS_VOLUME, 1f);
+        mLastPress = SystemClock.uptimeMillis();
+    }
+
+    /** A wheel window sliding in. Only heard: the press that opened it was felt. */
+    public void open() {
+        if (SystemClock.uptimeMillis() - mLastPress > SAID_MS) {
+            play(mOpenSound, PRESS_VOLUME, 1f);
+        }
+    }
+
+    /** A wheel window sliding out, unless a press or a back just said so. */
+    public void close() {
+        if (SystemClock.uptimeMillis() - mLastPress > SAID_MS) {
+            play(mCloseSound, PRESS_VOLUME, 1f);
+        }
+    }
+
+    /** The wheel does something else from here on: scrolls, sets the volume, seeks, zooms. */
+    public void mode() {
+        vibrate(mMode);
+        play(mModeSound, PRESS_VOLUME, 1f);
+    }
+
+    /** Refused, as a wrong PIN is. Only heard: what refuses shakes and buzzes its own way. */
+    public void error() {
+        play(mErrorSound, PRESS_VOLUME, 1f);
     }
 
     private void vibrate(VibrationEffect effect) {
@@ -138,7 +254,7 @@ public final class WheelFeedback {
         }
         // A fast spin's clicks blur into a buzz; a few fewer keep them clicks
         final long now = SystemClock.uptimeMillis();
-        if (sound == mTickSound && now - mLastSound < 2 * MIN_GAP_MS) {
+        if ((sound == mTickSound || sound == mSpinSound) && now - mLastSound < 2 * MIN_GAP_MS) {
             return;
         }
         mLastSound = now;
