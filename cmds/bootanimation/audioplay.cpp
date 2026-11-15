@@ -319,19 +319,35 @@ public:
           mExampleAudioData(exampleAudioData),
           mExampleAudioLength(exampleAudioLength) {}
 
+    // Whether the playback engine is there or being made, and join() ends soon. Until the
+    // audio service is up there is none: its stream volumes are not set, and a clip would
+    // play at whatever level the mixer starts with.
+    bool underWay() const { return mUnderWay; }
+
 private:
     virtual bool threadLoop() {
         if (defaultServiceManager()->checkService(String16("audio")) == nullptr) {
-            ALOGW("Audio service is not ready yet, ignore creating playback engine");
-            return false;
+            // Not up when a boot's animation begins. Wait for it: a part that plays late, as
+            // one that closes the animation does, still gets its clip
+            if (!mWaiting) {
+                ALOGD("Audio service is not ready yet, waiting to create playback engine");
+                mWaiting = true;
+            }
+            usleep(AUDIO_SERVICE_POLL_US);
+            return true;
         }
+        mUnderWay = true;
         audioplay::create(mExampleAudioData, mExampleAudioLength);
         // Exit immediately
         return false;
     }
 
+    static constexpr useconds_t AUDIO_SERVICE_POLL_US = 200 * 1000;
+
     uint8_t* mExampleAudioData;
     int mExampleAudioLength;
+    bool mWaiting = false;
+    std::atomic<bool> mUnderWay = false;
 };
 
 // Typedef to aid readability.
@@ -372,16 +388,22 @@ public:
         if (playNumber == 0 && part.audioData && playSoundsAllowed()) {
             ALOGD("playing clip for part%d, size=%d",
                   partNumber, part.audioLength);
-            // Block until the audio engine is finished initializing.
-            if (initAudioThread != nullptr) {
-                initAudioThread->join();
+            if (initAudioThread == nullptr || !initAudioThread->underWay()) {
+                ALOGW("no playback engine yet for the clip of part%d, not played", partNumber);
+                return;
             }
+            // Block until the audio engine is finished initializing.
+            initAudioThread->join();
             audioplay::playClip(part.audioData, part.audioLength);
         }
     };
 
     void shutdown() override {
         // we've finally played everything we're going to play
+        if (initAudioThread != nullptr) {
+            // It may still wait for the audio service, or be making the engine
+            initAudioThread->requestExitAndWait();
+        }
         audioplay::setPlaying(false);
         audioplay::destroy();
     };
