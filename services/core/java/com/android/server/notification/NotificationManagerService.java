@@ -3687,6 +3687,57 @@ public class NotificationManagerService extends SystemService {
         }
     }
 
+    // The notification sound haretic shipped as its default before it had its own
+    private static final String PREVIOUS_DEFAULT_SOUND_TITLE = "Argon";
+    private static final String DEFAULT_SOUND_FOLLOWED = "haretic_default_sound_followed";
+
+    /**
+     * An install set up before the default notification sound changed keeps the old default,
+     * which nobody there chose. Once, while it is still on that sound, it moves to the default
+     * a clean install gets. Any other sound was picked by somebody and stays.
+     */
+    private void followDefaultNotificationSound() {
+        final Context context = getContext();
+        final ContentResolver resolver = context.getContentResolver();
+        try {
+            if (Settings.Secure.getInt(resolver, DEFAULT_SOUND_FOLLOWED, 0) != 0) {
+                return;
+            }
+            final String file = SystemProperties.get("ro.config.notification_sound");
+            final Uri current = android.media.RingtoneManager.getActualDefaultRingtoneUri(
+                    context, android.media.RingtoneManager.TYPE_NOTIFICATION);
+            if (current != null && !file.isEmpty()
+                    && PREVIOUS_DEFAULT_SOUND_TITLE.equals(current.getQueryParameter("title"))
+                    && !file.startsWith(PREVIOUS_DEFAULT_SOUND_TITLE + ".")) {
+                Uri sound = null;
+                try (android.database.Cursor cursor = resolver.query(
+                        android.provider.MediaStore.Audio.Media.INTERNAL_CONTENT_URI,
+                        new String[] {"_id", "title"},
+                        "_display_name=? AND is_notification=1", new String[] {file}, null)) {
+                    if (cursor != null && cursor.moveToFirst()) {
+                        sound = android.content.ContentUris.withAppendedId(
+                                        android.provider.MediaStore.Audio.Media.INTERNAL_CONTENT_URI,
+                                        cursor.getLong(0))
+                                .buildUpon()
+                                .appendQueryParameter("title", cursor.getString(1))
+                                .appendQueryParameter("canonical", "1")
+                                .build();
+                    }
+                }
+                if (sound == null) {
+                    Slog.i(TAG, "Default notification sound " + file + " is not listed yet");
+                    return;
+                }
+                android.media.RingtoneManager.setActualDefaultRingtoneUri(
+                        context, android.media.RingtoneManager.TYPE_NOTIFICATION, sound);
+                Slog.i(TAG, "Default notification sound followed to " + sound);
+            }
+            Settings.Secure.putInt(resolver, DEFAULT_SOUND_FOLLOWED, 1);
+        } catch (RuntimeException e) {
+            Slog.w(TAG, "Could not follow the default notification sound", e);
+        }
+    }
+
     @Override
     public void onBootPhase(int phase) {
         onBootPhase(phase, Looper.getMainLooper());
@@ -3787,6 +3838,11 @@ public class NotificationManagerService extends SystemService {
 
     @Override
     public void onUserUnlocked(@NonNull TargetUser user) {
+        if (user.getUserIdentifier() == UserHandle.USER_SYSTEM) {
+            // The sounds are listed by the media provider, which starts with the unlock
+            com.android.internal.os.BackgroundThread.getHandler()
+                    .post(this::followDefaultNotificationSound);
+        }
         mHandler.post(() -> {
             Trace.traceBegin(Trace.TRACE_TAG_SYSTEM_SERVER, "notifHistoryUnlockUser");
             try {

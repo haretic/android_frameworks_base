@@ -199,6 +199,20 @@ public class WallpaperDataParser {
                                 + "); now " + wallpaper.wallpaperId);
                     }
                 }
+                // An install where no wallpaper was ever set shows the default image through
+                // the image wallpaper, and stayed on it when an update made a live wallpaper
+                // the default. Nothing was chosen there: it gets the default component, as a
+                // clean install does. An image somebody set has its file and is left alone.
+                final ComponentName byDefault =
+                        WallpaperManager.getCmfDefaultWallpaperComponent(mContext);
+                if (byDefault != null && !byDefault.equals(mImageWallpaper)
+                        && lockWallpaper == null
+                        && mImageWallpaper.equals(wallpaper.getComponent())
+                        && !wallpaper.sourceExists()) {
+                    Slog.i(TAG, "No wallpaper was set: following the default " + byDefault);
+                    wallpaper.setDescription(wallpaper.getDescription().toBuilder()
+                            .setComponent(byDefault).build());
+                }
             }
             ensureSaneWallpaperData(wallpaper);
             wallpaper.mWhich = lockWallpaper != null ? FLAG_SYSTEM : FLAG_SYSTEM | FLAG_LOCK;
