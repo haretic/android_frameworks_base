@@ -467,6 +467,21 @@ public abstract class AppsFilterBase implements AppsFilterSnapshot {
                 Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
             }
 
+            // haretic: a package the system keeps at its version is not there for an app that
+            // installs packages, whatever else that app may query, so it has no update to offer
+            if (PinnedPackages.isPinned(targetPkgSetting.getPackageName())) {
+                boolean installer = PinnedPackages.installsPackages(callingPkgSetting);
+                for (int i = callingSharedPkgSettings.size() - 1; !installer && i >= 0; i--) {
+                    installer = PinnedPackages.installsPackages(callingSharedPkgSettings.valueAt(i));
+                }
+                if (installer) {
+                    if (DEBUG_LOGGING) {
+                        log(callingSetting, targetPkgSetting, "pinned, caller installs packages");
+                    }
+                    return true;
+                }
+            }
+
             if (callingPkgSetting != null) {
                 if (callingPkgSetting.getPkg() != null
                         && !mFeatureConfig.packageIsEnabled(callingPkgSetting.getPkg())) {
