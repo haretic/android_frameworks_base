@@ -90,7 +90,8 @@ public class SystemActionsTest extends SysuiTestCase {
                 mShadeController,
                 () -> mPanelExpansionInteractor,
                 mRecentsOptional,
-                mDisplayTracker);
+                mDisplayTracker,
+                Runnable::run);
     }
 
     @Test
