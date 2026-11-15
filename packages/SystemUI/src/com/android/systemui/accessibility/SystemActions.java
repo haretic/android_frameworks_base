@@ -49,6 +49,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ScreenshotHelper;
 import com.android.systemui.CoreStartable;
 import com.android.systemui.dagger.SysUISingleton;
+import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.scene.shared.flag.SceneContainerFlag;
 import com.android.systemui.settings.DisplayTracker;
@@ -66,6 +67,7 @@ import dagger.Lazy;
 
 import java.util.Locale;
 import java.util.Optional;
+import java.util.concurrent.Executor;
 
 import javax.inject.Inject;
 
@@ -206,6 +208,7 @@ public class SystemActions implements CoreStartable, ConfigurationController.Con
     private final Lazy<PanelExpansionInteractor> mPanelExpansionInteractor;
     private final StatusBarWindowCallback mNotificationShadeCallback;
     private final ScreenshotHelper mScreenshotHelper;
+    private final Executor mBackgroundExecutor;
     private boolean mDismissNotificationShadeActionRegistered;
 
     @Inject
@@ -216,7 +219,8 @@ public class SystemActions implements CoreStartable, ConfigurationController.Con
             ShadeController shadeController,
             Lazy<PanelExpansionInteractor> panelExpansionInteractor,
             Optional<Recents> recentsOptional,
-            DisplayTracker displayTracker) {
+            DisplayTracker displayTracker,
+            @Background Executor backgroundExecutor) {
         mContext = context;
         mUserTracker = userTracker;
         mKeyguardStateController = keyguardStateController;
@@ -224,6 +228,7 @@ public class SystemActions implements CoreStartable, ConfigurationController.Con
         mPanelExpansionInteractor = panelExpansionInteractor;
         mRecentsOptional = recentsOptional;
         mDisplayTracker = displayTracker;
+        mBackgroundExecutor = backgroundExecutor;
         mReceiver = new SystemActionsBroadcastReceiver();
         mLocale = mContext.getResources().getConfiguration().getLocales().get(0);
         mA11yManager = (AccessibilityManager) mContext.getSystemService(
@@ -260,6 +265,15 @@ public class SystemActions implements CoreStartable, ConfigurationController.Con
     }
 
     private void registerActions() {
+        // Each registration is a blocking call into system_server, and at boot there are about
+        // twenty of them while system_server is at its busiest. Nothing waits for them, so
+        // they stay off the main thread, which has the lock screen to build.
+        final boolean shadeEnabled = mShadeController.isShadeEnabled();
+        mBackgroundExecutor.execute(() -> registerStaticActions(shadeEnabled));
+        registerOrUnregisterDismissNotificationShadeAction();
+    }
+
+    private void registerStaticActions(boolean shadeEnabled) {
         RemoteAction actionBack = createRemoteAction(
                 R.string.accessibility_system_action_back_label,
                 SystemActionsBroadcastReceiver.INTENT_ACTION_BACK);
@@ -331,7 +345,7 @@ public class SystemActions implements CoreStartable, ConfigurationController.Con
         mA11yManager.registerSystemAction(actionBack, SYSTEM_ACTION_ID_BACK);
         mA11yManager.registerSystemAction(actionHome, SYSTEM_ACTION_ID_HOME);
         mA11yManager.registerSystemAction(actionRecents, SYSTEM_ACTION_ID_RECENTS);
-        if (mShadeController.isShadeEnabled()) {
+        if (shadeEnabled) {
             // These two actions require the shade to be enabled.
             mA11yManager.registerSystemAction(actionNotifications, SYSTEM_ACTION_ID_NOTIFICATIONS);
             mA11yManager.registerSystemAction(actionQuickSettings, SYSTEM_ACTION_ID_QUICK_SETTINGS);
@@ -349,7 +363,6 @@ public class SystemActions implements CoreStartable, ConfigurationController.Con
         mA11yManager.registerSystemAction(actionDpadCenter, SYSTEM_ACTION_ID_DPAD_CENTER);
         mA11yManager.registerSystemAction(actionMenu, SYSTEM_ACTION_ID_MENU);
         mA11yManager.registerSystemAction(actionMediaPlayPause, SYSTEM_ACTION_ID_MEDIA_PLAY_PAUSE);
-        registerOrUnregisterDismissNotificationShadeAction();
     }
 
     private void registerOrUnregisterDismissNotificationShadeAction() {
