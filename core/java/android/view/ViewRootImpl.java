@@ -6621,9 +6621,8 @@ public final class ViewRootImpl implements ViewParent,
                 // A process that may not read settings has the ring as it always was
             }
             mWheelMotion = motion < 0 || motion >= WHEEL_MOTIONS.length ? 0 : motion;
-            // From where the ring was a moment ago, not from one of another page long gone
-            if (mWheelMotion != 0 && before != null && mWheelRingShownValid
-                    && now - mWheelRingShownAt < WHEEL_RING_FROM_NS) {
+            // From where the ring is on screen: the last one drawn, however long ago that was
+            if (mWheelMotion != 0 && before != null && mWheelRingShownValid) {
                 final float sinceMs = (now - mWheelRingChangedAt) / 1e6f;
                 // Stops a second as the wheel is going, none for a single step
                 final float speed = sinceMs < 400 ? Math.min(30, 1000 / Math.max(sinceMs, 16)) : 0;
@@ -6692,7 +6691,6 @@ public final class ViewRootImpl implements ViewParent,
     /** Stiffness, damping (under 1 overshoots) and how much of the wheel's speed is kept. */
     private static final float[][] WHEEL_MOTIONS = {
             {0, 1, 0}, {170, 1f, 0.6f}, {430, 0.86f, 0.9f}, {300, 0.52f, 1.3f}};
-    private static final long WHEEL_RING_FROM_NS = 300_000_000L;
     private int mWheelMotion;
     private View mWheelRingTarget;
     private WeakReference<View> mWheelRingOf;
