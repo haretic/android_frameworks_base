@@ -517,7 +517,16 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
             }
 
             // Don't animate anything that isn't independent.
-            if (!TransitionInfo.isIndependent(change, info)) continue;
+            if (!TransitionInfo.isIndependent(change, info)) {
+                if (!isRevealOfWholeTask(change)) {
+                    continue;
+                }
+                if (TransitionUtil.isOpeningType(mode)) {
+                    // Unseen until the reveal's first frame, as an independent opening change
+                    // is: shown whole at the start, the page flashed up before it grew
+                    startTransaction.setAlpha(change.getLeash(), 0f);
+                }
+            }
 
             final int type = getTransitionTypeFromInfo(info);
             Animation a = loadAnimation(type, info, change, wallpaperTransit, isDreamTransition);
@@ -993,6 +1002,18 @@ public class DefaultTransitionHandler implements Transitions.TransitionHandler {
     @Override
     public void setAnimScaleSetting(float scale) {
         mTransitionAnimationScaleSetting = scale;
+    }
+
+    /**
+     * A page revealed out of the row the wheel pressed, where pages are embedded containers that
+     * fill their task, as Settings' are: left to its task it would cut in, the task itself
+     * having nothing to show for it.
+     */
+    private static boolean isRevealOfWholeTask(@NonNull TransitionInfo.Change change) {
+        final TransitionInfo.AnimationOptions options = change.getAnimationOptions();
+        return options != null && options.getType() == ANIM_CLIP_REVEAL
+                && change.getMode() != TRANSIT_CHANGE
+                && change.hasAllFlags(FLAG_IN_TASK_WITH_EMBEDDED_ACTIVITY | FLAG_FILLS_TASK);
     }
 
     @Nullable

@@ -18,6 +18,7 @@ package com.android.server.wm;
 
 import static android.app.ActivityOptions.ANIM_CUSTOM;
 import static android.app.ActivityOptions.ANIM_OPEN_CROSS_PROFILE_APPS;
+import static android.app.ActivityOptions.ANIM_CLIP_REVEAL;
 import static android.app.ActivityOptions.ANIM_SCENE_TRANSITION;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
@@ -2386,9 +2387,11 @@ class Transition implements BLASTSyncEngine.TransactionReadyListener {
             return false;
         }
         // Apply AnimationOptions to TaskFragment if it fills parent and the animation is a scene
-        // transition.
+        // transition, or the reveal out of the row the wheel pressed: Settings' pages open in
+        // such a fragment, and it is the page that is revealed.
         return change.hasFlags(FLAG_FILLS_TASK)
-                && mOverrideOptions.getType() == ANIM_SCENE_TRANSITION;
+                && (mOverrideOptions.getType() == ANIM_SCENE_TRANSITION
+                || mOverrideOptions.getType() == ANIM_CLIP_REVEAL);
     }
 
     private boolean shouldApplyAnimOptionsToEmbeddedTf(@Nullable TaskFragment taskFragment) {
