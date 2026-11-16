@@ -9256,6 +9256,15 @@ public final class Settings {
         public static final String USE_GOOGLE_MAIL = Global.USE_GOOGLE_MAIL;
 
         /**
+         * How the wheel's focus ring moves from stop to stop, for every app's windows to read:
+         * 0 jumps, 1 soft, 2 snappy, 3 bouncy. SystemUI keeps it the same as LineageSettings'
+         * wheel_motion, which is the setting.
+         * @hide
+         */
+        @Readable
+        public static final String WHEEL_MOTION = "wheel_motion";
+
+        /**
          * If accessibility is enabled.
          */
         @Readable

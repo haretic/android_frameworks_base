@@ -71,7 +71,8 @@ public class WheelOverlays implements CoreStartable {
         for (String setting : new String[] {
                 LineageSettings.Secure.WHEEL_UI,
                 LineageSettings.Secure.WHEEL_DIALOGS,
-                LineageSettings.Secure.WHEEL_SETTINGS}) {
+                LineageSettings.Secure.WHEEL_SETTINGS,
+                LineageSettings.Secure.WHEEL_MOTION}) {
             mContext.getContentResolver().registerContentObserver(
                     LineageSettings.Secure.getUriFor(setting), false, observer,
                     UserHandle.USER_ALL);
@@ -91,7 +92,13 @@ public class WheelOverlays implements CoreStartable {
         final boolean focus =
                 WheelLayoutSettings.component(mContext, LineageSettings.Secure.WHEEL_SETTINGS);
         final UserHandle user = mUserTracker.getUserHandle();
+        // The ring is drawn in each app's own process, which reads Settings and not Lineage's
+        final int motion = LineageSettings.Secure.getIntForUser(mContext.getContentResolver(),
+                LineageSettings.Secure.WHEEL_MOTION, 1, user.getIdentifier());
         mBackground.execute(() -> {
+            android.provider.Settings.Secure.putIntForUser(mContext.getContentResolver(),
+                    android.provider.Settings.Secure.WHEEL_MOTION, motion,
+                    user.getIdentifier());
             setEnabled(DIALOGS, dialogs, user);
             setEnabled(FOCUS, focus, user);
         });
