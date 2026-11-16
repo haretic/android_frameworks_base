@@ -6521,6 +6521,8 @@ public final class ViewRootImpl implements ViewParent,
     private void drawWheelFocusRingIfNeeded(Canvas canvas) {
         if (!getWheelFocusRect(mWheelFocusRect)) {
             mWheelFocusRect.setEmpty();
+            mWheelRingShownValid = false;
+            mWheelRingMoving = false;
             return;
         }
         final float density = mContext.getResources().getDisplayMetrics().density;
@@ -6538,6 +6540,7 @@ public final class ViewRootImpl implements ViewParent,
         final float out = width / 2;
         final RectF ring = new RectF(mWheelFocusRect);
         ring.inset(-out, -out);
+        moveWheelRing(ring);
         // The card's own corners where they are rounder, the ring's stroke being inside its
         // edge; a card with tighter ones, as a grouped list's middle rows, still has the ring
         // its first and last rows have, not a square one between them
@@ -6594,8 +6597,112 @@ public final class ViewRootImpl implements ViewParent,
         if (!getWheelFocusRect(bounds)) {
             bounds.setEmpty();
         }
-        return !bounds.equals(mWheelFocusRect);
+        return mWheelRingMoving || !bounds.equals(mWheelFocusRect);
     }
+
+    /**
+     * The ring's travel from the stop it left to the one it is on (wheel_motion): a spring that
+     * carries the wheel's speed. Only the ring's picture trails; the focus is on the new stop at
+     * once, and the ring rides that stop as its list scrolls.
+     */
+    private void moveWheelRing(RectF ring) {
+        final long now = System.nanoTime();
+        final View of = mWheelRingTarget;
+        final View before = mWheelRingOf == null ? null : mWheelRingOf.get();
+        final float[] off = mWheelRingOff;
+        final float[] vel = mWheelRingVel;
+        if (of != before) {
+            mWheelRingOf = of == null ? null : new WeakReference<>(of);
+            int motion = 0;
+            try {
+                motion = android.provider.Settings.Secure.getInt(mContext.getContentResolver(),
+                        android.provider.Settings.Secure.WHEEL_MOTION, 0);
+            } catch (RuntimeException e) {
+                // A process that may not read settings has the ring as it always was
+            }
+            mWheelMotion = motion < 0 || motion >= WHEEL_MOTIONS.length ? 0 : motion;
+            // From where the ring was a moment ago, not from one of another page long gone
+            if (mWheelMotion != 0 && before != null && mWheelRingShownValid
+                    && now - mWheelRingShownAt < WHEEL_RING_FROM_NS) {
+                final float sinceMs = (now - mWheelRingChangedAt) / 1e6f;
+                // Stops a second as the wheel is going, none for a single step
+                final float speed = sinceMs < 400 ? Math.min(30, 1000 / Math.max(sinceMs, 16)) : 0;
+                final float carry = WHEEL_MOTIONS[mWheelMotion][2] * speed * 0.55f;
+                final float[] shown = {mWheelRingShown.left, mWheelRingShown.top,
+                        mWheelRingShown.right, mWheelRingShown.bottom};
+                final float[] to = {ring.left, ring.top, ring.right, ring.bottom};
+                for (int i = 0; i < 4; i++) {
+                    off[i] = shown[i] - to[i];
+                    vel[i] -= off[i] * carry;
+                }
+            } else {
+                java.util.Arrays.fill(off, 0);
+                java.util.Arrays.fill(vel, 0);
+            }
+            mWheelRingChangedAt = now;
+        }
+        boolean moving = false;
+        if (mWheelMotion != 0) {
+            final float stiffness = WHEEL_MOTIONS[mWheelMotion][0];
+            final float damping = WHEEL_MOTIONS[mWheelMotion][1];
+            final float dt = mWheelRingShownValid
+                    ? Math.min(0.032f, (now - mWheelRingShownAt) / 1e9f) / 4 : 0;
+            final float row = Math.max(1, ring.height());
+            for (int i = 0; i < 4; i++) {
+                for (int n = 0; n < 4 && dt > 0; n++) {
+                    // More than a stop behind a fast wheel it pulls harder: the ring is never
+                    // far from the stop a press would act on
+                    final float behind = Math.max(0, Math.abs(off[i]) / row - 1);
+                    final float k = stiffness * (1 + Math.min(8, 4 * behind * behind));
+                    vel[i] += (-k * off[i] - 2 * damping * (float) Math.sqrt(k) * vel[i]) * dt;
+                    off[i] += vel[i] * dt;
+                }
+                moving |= Math.abs(off[i]) > 0.5f || Math.abs(vel[i]) > 8;
+            }
+        }
+        if (!moving) {
+            java.util.Arrays.fill(off, 0);
+            java.util.Arrays.fill(vel, 0);
+        }
+        ring.left += off[0];
+        ring.top += off[1];
+        ring.right += off[2];
+        ring.bottom += off[3];
+        // A bounce never turns the ring inside out
+        if (ring.right < ring.left + 1) {
+            ring.right = ring.left + 1;
+        }
+        if (ring.bottom < ring.top + 1) {
+            ring.bottom = ring.top + 1;
+        }
+        mWheelRingShown.set(ring);
+        mWheelRingShownValid = true;
+        mWheelRingShownAt = now;
+        if (moving && !mWheelRingMoving) {
+            mWheelRingMoving = true;
+        } else if (!moving) {
+            mWheelRingMoving = false;
+        }
+        if (moving) {
+            mChoreographer.postCallback(Choreographer.CALLBACK_ANIMATION, mWheelRingFrame, null);
+        }
+    }
+
+    private final Runnable mWheelRingFrame = this::invalidate;
+    /** Stiffness, damping (under 1 overshoots) and how much of the wheel's speed is kept. */
+    private static final float[][] WHEEL_MOTIONS = {
+            {0, 1, 0}, {170, 1f, 0.6f}, {430, 0.86f, 0.9f}, {300, 0.52f, 1.3f}};
+    private static final long WHEEL_RING_FROM_NS = 300_000_000L;
+    private int mWheelMotion;
+    private View mWheelRingTarget;
+    private WeakReference<View> mWheelRingOf;
+    private final RectF mWheelRingShown = new RectF();
+    private boolean mWheelRingShownValid;
+    private boolean mWheelRingMoving;
+    private long mWheelRingShownAt;
+    private long mWheelRingChangedAt;
+    private final float[] mWheelRingOff = new float[4];
+    private final float[] mWheelRingVel = new float[4];
 
     /**
      * The part of {@code view} on screen as drawing clips it: to an ancestor's bounds only where
@@ -6632,6 +6739,7 @@ public final class ViewRootImpl implements ViewParent,
             return false;
         }
         if (isComposeHost(focused)) {
+            mWheelRingTarget = focused;
             return getComposeWheelFocusRect(focused, bounds);
         }
         // A container an app focused, as a whole window: no ring round it all, the wheel's
@@ -6647,6 +6755,7 @@ public final class ViewRootImpl implements ViewParent,
         } else if (isWheelScroller(focused)) {
             return false;
         }
+        mWheelRingTarget = focused;
         if (!getWheelVisibleBounds(focused, bounds)) {
             return false;
         }
