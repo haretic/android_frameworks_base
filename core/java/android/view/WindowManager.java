@@ -4739,6 +4739,18 @@ public interface WindowManager extends ViewManager {
         public static final int INPUT_FEATURE_POWER_KEY_SELECTS = 1 << 6;
 
         /**
+         * Input feature flag for a window that needs to know how long the wheel device's side
+         * button is held, not only that it was (push to talk): while the window has input focus
+         * and the screen is on, the button's own {@link KeyEvent#KEYCODE_POWER} down and up are
+         * passed to it as they happen, and the system makes no press, hold or double press of
+         * them. Only honored where the side button is the select key, for windows of an app
+         * holding {@link android.Manifest.permission#INTERNAL_SYSTEM_WINDOW}.
+         *
+         * @hide
+         */
+        public static final int INPUT_FEATURE_POWER_KEY_HELD = 1 << 7;
+
+        /**
          * An internal annotation for flags that can be specified to {@link #inputFeatures}.
          *
          * NOTE: These are not the same as {@link android.os.InputConfig} flags.
@@ -4753,7 +4765,8 @@ public interface WindowManager extends ViewManager {
                 INPUT_FEATURE_SENSITIVE_FOR_PRIVACY,
                 INPUT_FEATURE_DISPLAY_TOPOLOGY_AWARE,
                 INPUT_FEATURE_CAPTURE_KEYBOARD,
-                INPUT_FEATURE_POWER_KEY_SELECTS
+                INPUT_FEATURE_POWER_KEY_SELECTS,
+                INPUT_FEATURE_POWER_KEY_HELD
         })
         public @interface InputFeatureFlags {
         }
@@ -6483,6 +6496,10 @@ public interface WindowManager extends ViewManager {
             if ((inputFeatures & INPUT_FEATURE_POWER_KEY_SELECTS) != 0) {
                 inputFeatures &= ~INPUT_FEATURE_POWER_KEY_SELECTS;
                 features.add("INPUT_FEATURE_POWER_KEY_SELECTS");
+            }
+            if ((inputFeatures & INPUT_FEATURE_POWER_KEY_HELD) != 0) {
+                inputFeatures &= ~INPUT_FEATURE_POWER_KEY_HELD;
+                features.add("INPUT_FEATURE_POWER_KEY_HELD");
             }
             if (inputFeatures != 0) {
                 features.add(Integer.toHexString(inputFeatures));
