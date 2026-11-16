@@ -550,6 +550,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private volatile WindowState mDefaultDisplayFocus;
     // The power key press in progress goes to the focused window, input reader thread only
     private boolean mPowerKeyToFocusedWindow;
+    // The side button press in progress goes to the focused window as it is, input reader
+    // thread only
+    private boolean mPowerKeyHeldByFocusedWindow;
     /** Touch mode set for a taskbar-mode app, with no touch since. */
     private volatile boolean mWheelTouchModeForced;
     /** The down time of the side button press that last woke the device. */
@@ -5027,6 +5030,29 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         return toWindow;
     }
 
+    /**
+     * Whether the wheel device's side button goes to the focused window as it goes down and
+     * up, see INPUT_FEATURE_POWER_KEY_HELD. Decided on the first down, with the screen on and
+     * unlocked: a press that wakes the device only wakes it. Input reader thread.
+     */
+    private boolean powerKeyHeldByFocusedWindow(KeyEvent event, boolean interactive) {
+        if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            if (event.getRepeatCount() == 0) {
+                final WindowState focus = mDefaultDisplayFocus;
+                mPowerKeyHeldByFocusedWindow = interactive
+                        && mDefaultDisplay.getState() == Display.STATE_ON
+                        && focus != null
+                        && focus.canAddInternalSystemWindow()
+                        && (focus.getInputFeatures()
+                                & WindowManager.LayoutParams.INPUT_FEATURE_POWER_KEY_HELD) != 0;
+            }
+            return mPowerKeyHeldByFocusedWindow;
+        }
+        final boolean toWindow = mPowerKeyHeldByFocusedWindow;
+        mPowerKeyHeldByFocusedWindow = false;
+        return toWindow;
+    }
+
     @Override
     public void registerShortcutKey(long shortcutCode, IShortcutService shortcutService)
             throws RemoteException {
@@ -5557,6 +5583,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             if (isWakeKey && down) {
                 mPendingWakeKey = keyCode;
             }
+        }
+
+        if (keyCode == KeyEvent.KEYCODE_POWER
+                && isWheelSideButtonInput()
+                && !isKeyGestureTriggered
+                && powerKeyHeldByFocusedWindow(event, interactive && !keyguardActive)) {
+            // The window tells presses from holds itself, by when the button comes up
+            mSingleKeyGestureDetector.reset();
+            return ACTION_PASS_TO_USER;
         }
 
         if (keyCode == KeyEvent.KEYCODE_POWER
