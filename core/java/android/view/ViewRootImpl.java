@@ -6687,6 +6687,29 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
+    /**
+     * A step with nowhere to go, at a list's or a page's end: the ring is pushed the way the
+     * wheel turned and its spring brings it back, a few pixels with the calm motions, a
+     * visible knock with the loose one. Without a spring (wheel_motion 0) nothing moves.
+     */
+    private void kickWheelRing(int direction) {
+        if (mWheelMotion == 0 || !mWheelRingShownValid || mWheelFocusRect.isEmpty()) {
+            return;
+        }
+        final float push = direction * WHEEL_RING_KICK * Math.max(WHEEL_MOTIONS[mWheelMotion][2],
+                0.35f) * mContext.getResources().getDisplayMetrics().density;
+        mWheelRingVel[1] += push;
+        mWheelRingVel[3] += push;
+        if (!mWheelRingMoving) {
+            mWheelRingMoving = true;
+            // The spring's first step is from now, not from the ring's last drawing
+            mWheelRingShownAt = System.nanoTime();
+            invalidate();
+        }
+    }
+
+    /** The ring's speed off a list's end, in dp a second, at a kept share of 1. */
+    private static final float WHEEL_RING_KICK = 180;
     private final Runnable mWheelRingFrame = this::invalidate;
     /** Stiffness, damping (under 1 overshoots) and how much of the wheel's speed is kept. */
     private static final float[][] WHEEL_MOTIONS = {
@@ -7450,7 +7473,7 @@ public final class ViewRootImpl implements ViewParent,
         return child == mView;
     }
 
-    private static void scrollWheelTargetIntoList(View view) {
+    private void scrollWheelTargetIntoList(View view) {
         if (view.getGlobalVisibleRect(new Rect())) {
             return;
         }
@@ -7458,6 +7481,13 @@ public final class ViewRootImpl implements ViewParent,
             if (isRecyclerView(list)) {
                 final Rect rect = new Rect(0, 0, view.getWidth(), view.getHeight());
                 list.offsetDescendantRectToMyCoords(view, rect);
+                // With a spring the list travels to the row; without, it is there at once
+                if (mWheelMotion != 0) {
+                    mWheelListRow = Math.max(1, item.getHeight());
+                    if (scrollWheelTargetIntoSight(list, item, new Rect(rect), true)) {
+                        return;
+                    }
+                }
                 list.offsetRectIntoDescendantCoords(item, rect);
                 list.requestChildRectangleOnScreen(item, rect, true);
                 return;
@@ -7471,12 +7501,13 @@ public final class ViewRootImpl implements ViewParent,
      * on gaining it is for only its part in sight, and the list's smooth scroll to that, the
      * last asked for, would stop with the rest still hidden.
      */
-    private static void scrollWheelFocusIntoSight(View view) {
+    private void scrollWheelFocusIntoSight(View view) {
         for (View item = view; item.getParent() instanceof ViewGroup list; item = list) {
             if (isRecyclerView(list)) {
                 final Rect rect = new Rect(0, 0, view.getWidth(), view.getHeight());
                 list.offsetDescendantRectToMyCoords(view, rect);
-                scrollWheelTargetIntoSight(list, item, rect);
+                mWheelListRow = Math.max(1, item.getHeight());
+                scrollWheelTargetIntoSight(list, item, rect, false);
                 return;
             }
         }
@@ -7488,10 +7519,11 @@ public final class ViewRootImpl implements ViewParent,
      * a pager that cuts a list taller than itself short, as one under a collapsing toolbar's is.
      * The list's own scroll to a focused row takes in its edges, not what cuts it short.
      */
-    private static void scrollWheelTargetIntoSight(ViewGroup list, View item, Rect rect) {
+    private boolean scrollWheelTargetIntoSight(ViewGroup list, View item, Rect rect,
+            boolean springOnly) {
         final Rect shown = new Rect();
         if (!list.getGlobalVisibleRect(shown)) {
-            return;
+            return false;
         }
         final int[] at = new int[2];
         list.getLocationInWindow(at);
@@ -7499,7 +7531,7 @@ public final class ViewRootImpl implements ViewParent,
         final int top = Math.max(list.getPaddingTop(), shown.top);
         final int bottom = Math.min(list.getHeight() - list.getPaddingBottom(), shown.bottom);
         if (bottom <= top) {
-            return;
+            return false;
         }
         int dy = 0;
         if (rect.top < top) {
@@ -7509,7 +7541,13 @@ public final class ViewRootImpl implements ViewParent,
             dy = Math.min(rect.bottom - bottom, rect.top - top);
         }
         if (dy == 0) {
-            return;
+            return false;
+        }
+        if (springWheelList(list, dy)) {
+            return true;
+        }
+        if (springOnly) {
+            return false;
         }
         // The list's scroll to a rect of its row: one a pixel tall just past the list's edge, by
         // dy, has it scroll by exactly dy
@@ -7518,7 +7556,139 @@ public final class ViewRootImpl implements ViewParent,
         final int edge = dy > 0 ? parentBottom + dy - 1 : parentTop + dy;
         final Rect past = new Rect(0, edge - item.getTop(), 1, edge - item.getTop() + 1);
         list.requestChildRectangleOnScreen(item, past, false);
+        return true;
     }
+
+    /**
+     * The list's travel to the row the wheel went to (wheel_motion): the spring the ring has,
+     * so both arrive together, never loose enough to ring for long, carrying the wheel's speed, in
+     * place of the list's own scroll at its own pace. False without a spring (wheel_motion 0)
+     * or with a list that can't be stopped, which then scrolls as it always did.
+     */
+    private boolean springWheelList(ViewGroup list, int dy) {
+        // A list as tall as its rows, in a page that scrolls, has nowhere to go itself
+        if (mWheelMotion == 0 || !list.canScrollVertically(dy > 0 ? 1 : -1)) {
+            return false;
+        }
+        try {
+            // The scroll the list began as the row took the focus, to the part of it in sight
+            list.getClass().getMethod("stopScroll").invoke(list);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return false;
+        }
+        startWheelSpring(list, dy);
+        return true;
+    }
+
+    /**
+     * The scroll view the row is in, where it is one that jumps to a row taking the focus: the
+     * platform's and the support library's, as Settings' first page is.
+     */
+    private static ViewGroup wheelPageOf(View row) {
+        for (ViewParent parent = row.getParent(); parent instanceof ViewGroup group;
+                parent = group.getParent()) {
+            if (group instanceof android.widget.ScrollView) {
+                return group;
+            }
+            for (Class<?> c = group.getClass(); c != null && c != ViewGroup.class;
+                    c = c.getSuperclass()) {
+                if (c.getName().endsWith("NestedScrollView")) {
+                    return group;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The page jumped by {@code jumped} pixels as {@code row} took the focus: it is put back
+     * and travels there on the list's spring.
+     */
+    private void springWheelPage(ViewGroup page, int jumped, View row) {
+        if (jumped == 0 || mWheelMotion == 0) {
+            return;
+        }
+        page.scrollBy(0, -jumped);
+        mWheelListRow = Math.max(1, row.getHeight());
+        startWheelSpring(page, jumped);
+    }
+
+    private void startWheelSpring(ViewGroup list, int dy) {
+        final long now = System.nanoTime();
+        final boolean running = mWheelListLeft != 0 && mWheelListOf != null
+                && mWheelListOf.get() == list;
+        if (!running) {
+            mWheelListOf = new WeakReference<>(list);
+            mWheelListVel = 0;
+            mWheelListPart = 0;
+            mWheelListAt = now;
+        }
+        final float sinceMs = (now - mWheelListStepAt) / 1e6f;
+        final float speed = sinceMs < 400 ? Math.min(30, 1000 / Math.max(sinceMs, 16)) : 0;
+        mWheelListStepAt = now;
+        // From where the list is now, which is all of what an earlier step left undone too
+        mWheelListLeft = dy;
+        mWheelListVel += dy * WHEEL_MOTIONS[mWheelMotion][2] * speed * 0.55f * 0.6f;
+        if (!running) {
+            mChoreographer.postCallback(Choreographer.CALLBACK_ANIMATION, mWheelListFrame, null);
+        }
+    }
+
+    private void stepWheelList() {
+        final ViewGroup list = mWheelListOf == null ? null : mWheelListOf.get();
+        if (list == null || !list.isAttachedToWindow() || mAttachInfo.mInTouchMode
+                || mWheelMotion == 0 || mWheelListLeft == 0) {
+            mWheelListLeft = 0;
+            return;
+        }
+        final long now = System.nanoTime();
+        final float dt = Math.min(0.032f, (now - mWheelListAt) / 1e9f) / 4;
+        mWheelListAt = now;
+        // More than a row behind a fast wheel it pulls harder, as the ring does: the row a
+        // press would act on is never far out of sight
+        final float behind = Math.max(0, Math.abs(mWheelListLeft) / mWheelListRow - 1);
+        final float k = WHEEL_MOTIONS[mWheelMotion][0] * (1 + Math.min(8, 4 * behind * behind));
+        final float c = 2 * Math.max(WHEEL_MOTIONS[mWheelMotion][1], 0.62f) * (float) Math.sqrt(k);
+        for (int n = 0; n < 4; n++) {
+            mWheelListVel += (k * mWheelListLeft - c * mWheelListVel) * dt;
+            final float move = mWheelListVel * dt;
+            mWheelListLeft -= move;
+            mWheelListPart += move;
+        }
+        final boolean there = Math.abs(mWheelListLeft) < 0.5f && Math.abs(mWheelListVel) < 8;
+        if (there) {
+            mWheelListPart += mWheelListLeft;
+        }
+        // Whole pixels; the rest waits for the next frame
+        final int by = there ? Math.round(mWheelListPart) : (int) mWheelListPart;
+        mWheelListPart -= by;
+        boolean more = !there;
+        if (by != 0) {
+            if (list.canScrollVertically(by > 0 ? 1 : -1)) {
+                list.scrollBy(0, by);
+            } else {
+                // The list's end came first
+                more = false;
+            }
+        }
+        if (more) {
+            mChoreographer.postCallback(Choreographer.CALLBACK_ANIMATION, mWheelListFrame, null);
+        } else {
+            mWheelListLeft = 0;
+            mWheelListVel = 0;
+            mWheelListPart = 0;
+        }
+    }
+
+    private final Runnable mWheelListFrame = this::stepWheelList;
+    private WeakReference<ViewGroup> mWheelListOf;
+    /** Pixels the list has still to scroll; 0 when it rests. */
+    private float mWheelListLeft;
+    private float mWheelListVel;
+    private float mWheelListPart;
+    private long mWheelListAt;
+    private long mWheelListStepAt;
+    private int mWheelListRow = 1;
 
     /**
      * Scrolls the scrolling view the focus is in, or that has it, a quarter of its height on,
@@ -10277,6 +10447,11 @@ public final class ViewRootImpl implements ViewParent,
                             return true;
                         }
                     }
+                    // A page that scrolls as a whole puts the row the focus goes to in sight at
+                    // once; with a spring it travels there instead (springWheelPage)
+                    final ViewGroup page = v != null && v != focused && isWheelFocusEnabled()
+                            && mWheelMotion != 0 ? wheelPageOf(v) : null;
+                    final int pageWas = page != null ? page.getScrollY() : 0;
                     if (v != null && v != focused && isWheelFocusEnabled()) {
                         scrollWheelTargetIntoList(v);
                     }
@@ -10313,6 +10488,9 @@ public final class ViewRootImpl implements ViewParent,
                                 : v.requestFocus(direction)) {
                             if (isWheelFocusEnabled()) {
                                 scrollWheelFocusIntoSight(v);
+                                if (page != null) {
+                                    springWheelPage(page, page.getScrollY() - pageWas, v);
+                                }
                                 // Off a text field, as from a search's query to its results:
                                 // the wheel is going through the page, not typing, and the
                                 // keyboard goes, the rows it covered coming into sight
@@ -10341,6 +10519,10 @@ public final class ViewRootImpl implements ViewParent,
                             && (focusIntoWheelList(focused, direction)
                                     || scrollForWheel(focused, direction))) {
                         return true;
+                    }
+                    if (isWheelFocusEnabled() && !mAttachInfo.mInTouchMode
+                            && (direction == View.FOCUS_DOWN || direction == View.FOCUS_UP)) {
+                        kickWheelRing(direction == View.FOCUS_DOWN ? 1 : -1);
                     }
                 } else {
                     if (mView.restoreDefaultFocus()) {
