@@ -6712,6 +6712,41 @@ public final class ViewRootImpl implements ViewParent,
     private static final float WHEEL_RING_KICK = 180;
     private final Runnable mWheelRingFrame = this::invalidate;
     /** Stiffness, damping (under 1 overshoots) and how much of the wheel's speed is kept. */
+    /**
+     * The spring of a wheel motion, as {stiffness, damping ratio}; null without one.
+     * @hide
+     */
+    public static float[] wheelMotionSpring(int motion) {
+        return motion <= 0 || motion >= WHEEL_MOTIONS.length ? null
+                : new float[] {WHEEL_MOTIONS[motion][0], WHEEL_MOTIONS[motion][1]};
+    }
+
+    /**
+     * How a page started right after the wheel's press opens (wheel_motion): out of the row the
+     * ring is on. Null when the press was not the wheel's, or without a spring.
+     * @hide
+     */
+    public Bundle wheelOpenOptions() {
+        if (mView == null || SystemClock.uptimeMillis() - mWheelPressAt > 250
+                || !isWheelFocusEnabled()) {
+            return null;
+        }
+        final Rect row = new Rect();
+        try {
+            if (android.provider.Settings.Secure.getInt(mContext.getContentResolver(),
+                    android.provider.Settings.Secure.WHEEL_MOTION, 0) == 0
+                    || !getWheelFocusRect(row) || row.isEmpty()) {
+                return null;
+            }
+        } catch (RuntimeException e) {
+            return null;
+        }
+        return android.app.ActivityOptions.makeClipRevealAnimation(mView, row.left, row.top,
+                row.width(), row.height()).toBundle();
+    }
+
+    private long mWheelPressAt;
+
     private static final float[][] WHEEL_MOTIONS = {
             {0, 1, 0}, {170, 1f, 0.6f}, {430, 0.86f, 0.9f}, {300, 0.52f, 1.3f}};
     private int mWheelMotion;
@@ -10608,6 +10643,13 @@ public final class ViewRootImpl implements ViewParent,
                 if (mView.findFocus().dispatchKeyEvent(event) || performFocusNavigation(event)) {
                     return FINISH_HANDLED;
                 }
+            }
+
+            // The press that may open a page out of the row it was on
+            if (event.getAction() == KeyEvent.ACTION_UP
+                    && (event.getKeyCode() == KeyEvent.KEYCODE_DPAD_CENTER
+                    || event.getKeyCode() == KeyEvent.KEYCODE_ENTER)) {
+                mWheelPressAt = SystemClock.uptimeMillis();
             }
 
             // Deliver the key to the view hierarchy.

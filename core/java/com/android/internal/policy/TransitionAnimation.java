@@ -503,7 +503,9 @@ public class TransitionAnimation {
                 clipStartX = appWidth - mTmpRect.width();
                 cutOff = true;
             }
-            final long duration = calculateClipRevealTransitionDuration(cutOff, translationX,
+            final WheelSpring spring = WheelSpring.of(mContext);
+            final long duration = spring != null ? spring.duration
+                    : calculateClipRevealTransitionDuration(cutOff, translationX,
                     translationY, displayFrame);
 
             // Clip third of the from size of launch icon, expand to full width/height
@@ -511,6 +513,11 @@ public class TransitionAnimation {
                     clipStartX, clipStartX + mTmpRect.width(), 0, appWidth);
             clipAnimLR.setInterpolator(mClipHorizontalInterpolator);
             clipAnimLR.setDuration((long) (duration / 2.5f));
+            if (spring != null) {
+                // A row is as wide as its page: both edges travel with the spring
+                clipAnimLR.setInterpolator(spring);
+                clipAnimLR.setDuration(duration);
+            }
 
             TranslateAnimation translate = new TranslateAnimation(translationX, 0, translationY, 0);
             translate.setInterpolator(cutOff ? mTouchResponseInterpolator
@@ -524,6 +531,13 @@ public class TransitionAnimation {
                     mLinearOutSlowInInterpolator);
             clipAnimTB.setInterpolator(mTouchResponseInterpolator);
             clipAnimTB.setDuration(duration);
+            if (spring != null) {
+                translate.setInterpolator(spring);
+                clipAnimTB = new ClipRectTBAnimation(clipStartY, clipStartY + mTmpRect.height(),
+                        0, appHeight, translationYCorrection, 0, spring);
+                clipAnimTB.setInterpolator(spring);
+                clipAnimTB.setDuration(duration);
+            }
 
             // Quick fade-in from icon to app window
             final long alphaDuration = duration / 4;
@@ -535,13 +549,21 @@ public class TransitionAnimation {
             set.addAnimation(clipAnimLR);
             set.addAnimation(clipAnimTB);
             set.addAnimation(translate);
-            set.addAnimation(alpha);
+            if (spring == null) {
+                // Out of a row the page comes whole: half seen, its text would lie over the
+                // row's own for the first frames
+                set.addAnimation(alpha);
+            }
             set.setZAdjustment(Animation.ZORDER_TOP);
             set.initialize(appWidth, appHeight, appWidth, appHeight);
             anim = set;
         } else {
             final long duration;
-            if (transit == TRANSIT_OPEN || transit == TRANSIT_CLOSE) {
+            final WheelSpring spring = WheelSpring.of(mContext);
+            if (spring != null) {
+                // The page under stays for as long as the one over it takes to open
+                duration = spring.duration;
+            } else if (transit == TRANSIT_OPEN || transit == TRANSIT_CLOSE) {
                 duration = mConfigShortAnimTime;
             } else {
                 duration = DEFAULT_APP_TRANSITION_DURATION;
@@ -858,6 +880,57 @@ public class TransitionAnimation {
      *
      * @return the duration of the clip reveal animation, in milliseconds
      */
+    /**
+     * The wheel's spring (wheel_motion) as a page's opening: the ring's, a little slower and
+     * damped more as the draft had it, so that a page settles without ringing. Takes as long as
+     * the spring needs to come within a hundredth of its rest.
+     */
+    private static final class WheelSpring implements Interpolator {
+        final long duration;
+        private final float mOmega;
+        private final float mZeta;
+
+        static WheelSpring of(Context context) {
+            final float[] spring;
+            try {
+                spring = android.view.ViewRootImpl.wheelMotionSpring(
+                        android.provider.Settings.Secure.getInt(context.getContentResolver(),
+                                android.provider.Settings.Secure.WHEEL_MOTION, 0));
+            } catch (RuntimeException e) {
+                return null;
+            }
+            return spring == null ? null : new WheelSpring(spring[0] * 0.8f,
+                    Math.min(1f, spring[1] + 0.12f));
+        }
+
+        private WheelSpring(float stiffness, float zeta) {
+            mOmega = (float) Math.sqrt(stiffness);
+            mZeta = zeta;
+            float end = 1f;
+            for (float t = 1f; t > 0.1f; t -= 0.01f) {
+                if (Math.abs(1 - at(t)) > 0.01f) {
+                    break;
+                }
+                end = t;
+            }
+            duration = (long) (end * 1000);
+        }
+
+        private float at(float t) {
+            if (mZeta >= 0.999f) {
+                return 1 - (float) Math.exp(-mOmega * t) * (1 + mOmega * t);
+            }
+            final float damped = mOmega * (float) Math.sqrt(1 - mZeta * mZeta);
+            return 1 - (float) (Math.exp(-mZeta * mOmega * t) * (Math.cos(damped * t)
+                    + mZeta * mOmega / damped * Math.sin(damped * t)));
+        }
+
+        @Override
+        public float getInterpolation(float input) {
+            return input >= 1 ? 1 : at(input * duration / 1000f);
+        }
+    }
+
     private static long calculateClipRevealTransitionDuration(boolean cutOff, float translationX,
             float translationY, Rect displayFrame) {
         if (!cutOff) {

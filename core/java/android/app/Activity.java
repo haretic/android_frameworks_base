@@ -6065,6 +6065,10 @@ public class Activity extends ContextThemeWrapper
     public void startActivityForResult(@RequiresPermission Intent intent, int requestCode,
             @Nullable Bundle options) {
         if (mParent == null) {
+            if (options == null && mDecor != null && mDecor.getViewRootImpl() != null) {
+                // Started by the wheel's press on a row: the page opens out of that row
+                options = mDecor.getViewRootImpl().wheelOpenOptions();
+            }
             options = transferSpringboardActivityOptions(options);
             Instrumentation.ActivityResult ar =
                 mInstrumentation.execStartActivity(
