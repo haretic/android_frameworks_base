@@ -63,6 +63,9 @@
     <string name="wheel_legend_double_taskbar">Taskbar</string>
     <!-- The wheel guide's hints, each shown once the first time it applies, in the same way
          [CHAR LIMIT=16] -->
+    <!-- The bubble under the status bar when the side button is held on the home screen as a
+         power button would be -->
+    <string name="wheel_guide_lock_hint">Double tap status bar to lock screen</string>
     <string name="wheel_hint_taskbar_turn">Pick</string>
     <string name="wheel_hint_taskbar_press">Open</string>
     <string name="wheel_hint_taskbar_hold">App options</string>
