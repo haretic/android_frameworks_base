@@ -1013,7 +1013,15 @@ class InstallRepository(private val context: Context) : EventResultPersister.Eve
         }
     }
 
+    private val anySource = true
+
     private fun handleUnknownSources(requestInfo: AppOpRequestInfo): InstallStage {
+        // haretic: an APK installs from wherever it was opened, as before Android 8: no
+        // "unknown apps" stop and no per-app switch to find first. The question whether to
+        // install it still follows. A device owner's restriction is checked before this.
+        if (anySource) {
+            return InstallReady()
+        }
         if (requestInfo.originatingPackage == null) {
             Log.i(LOG_TAG, "No source found for package " + newPackageInfo?.packageName)
             return InstallUserActionRequired(USER_ACTION_REASON_ANONYMOUS_SOURCE)
