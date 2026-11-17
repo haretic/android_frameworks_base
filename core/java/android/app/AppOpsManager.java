@@ -3292,6 +3292,9 @@ public class AppOpsManager {
             .setDefaultMode(AppOpsManager.MODE_ALLOWED).build(),
         new AppOpInfo.Builder(OP_REQUEST_INSTALL_PACKAGES, OPSTR_REQUEST_INSTALL_PACKAGES,
                 "REQUEST_INSTALL_PACKAGES", AppOpsManager.MODE_ERRORED)
+            // haretic: any app that asks may hand an APK to the installer, as before Android 8;
+            // the installer still asks before it installs. Settings can take it from an app
+            .setDefaultMode(AppOpsManager.MODE_ALLOWED)
             .setSwitchCode(OP_REQUEST_INSTALL_PACKAGES)
             .setPermission(Manifest.permission.REQUEST_INSTALL_PACKAGES).build(),
         new AppOpInfo.Builder(OP_PICTURE_IN_PICTURE, OPSTR_PICTURE_IN_PICTURE, "PICTURE_IN_PICTURE")

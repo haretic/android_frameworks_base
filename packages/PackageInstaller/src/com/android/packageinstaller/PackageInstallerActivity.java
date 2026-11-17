@@ -570,7 +570,12 @@ public class PackageInstallerActivity extends Activity {
      * Check if it is allowed to install the package and initiate install if allowed.
      */
     private void checkIfAllowedAndInitiateInstall() {
-        if (mAllowUnknownSources || getIntent().getBooleanExtra(EXTRA_IS_TRUSTED_SOURCE, false)) {
+        // haretic: an APK installs from wherever it was opened, as before Android 8: no
+        // "unknown apps" stop and no per-app switch to find first. The question whether to
+        // install it still follows. A device owner's restriction is checked before this.
+        final boolean anySource = true;
+        if (anySource || mAllowUnknownSources
+                || getIntent().getBooleanExtra(EXTRA_IS_TRUSTED_SOURCE, false)) {
             if (mLocalLOGV) Log.i(TAG, "install allowed");
             initiateInstall();
         } else {
