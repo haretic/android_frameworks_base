@@ -16,6 +16,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
@@ -57,6 +62,9 @@ fun WheelShadeTabs(
     val other = if (controls) notifications else controlsLabel
     val switchLabel = stringResource(R.string.wheel_shade_tab_switch, other)
     val colors = MaterialTheme.colorScheme
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    // Where across the tabs the finger is, as a fraction; none for a press that has no place
+    val touched = remember { floatArrayOf(Float.NaN, 0f) }
     Column(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         Row(
             Modifier.sysuiResTag(WHEEL_SHADE_TABS_TAG)
@@ -68,7 +76,29 @@ fun WheelShadeTabs(
                 // Not clickable either while out of sight: the shade's wheel navigator takes
                 // what is clickable as a stop, and put its ring round the tabs while they were hidden
                 .thenIf(onSwitch != null && shown) {
-                    Modifier.clickable(onClickLabel = switchLabel) { onSwitch?.invoke() }
+                    // A finger picks the tab it is on: one on the tab that already shows changes
+                    // nothing. A press without a place, the wheel's, goes to the other tab
+                    Modifier.pointerInput(Unit) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                                    event.changes.firstOrNull()?.let {
+                                        touched[0] = it.position.x / size.width
+                                        touched[1] = it.uptimeMillis.toFloat()
+                                    }
+                                }
+                            }
+                        }
+                        .clickable(onClickLabel = switchLabel) {
+                            // Only the touch that made this press counts, not an older one
+                            val recent =
+                                android.os.SystemClock.uptimeMillis() - touched[1].toLong() < 700
+                            val at = if (recent) touched[0] else Float.NaN
+                            touched[0] = Float.NaN
+                            if (at.isNaN() || ((at > 0.5f) != rtl) != controls) {
+                                onSwitch?.invoke()
+                            }
+                        }
                 }
                 .clearAndSetSemantics {
                     role = Role.Tab
