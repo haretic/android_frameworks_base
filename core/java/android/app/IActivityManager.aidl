@@ -431,6 +431,11 @@ interface IActivityManager {
             String callingPackageName, String callingAttributionTag);
     @UnsupportedAppUsage
     long[] getProcessPss(in int[] pids);
+    /**
+     * The time each process has run, user and system, in milliseconds: with getProcessPss, what
+     * the wheel taskbar shows of a running app. 0 for processes the caller may not see.
+     */
+    long[] getProcessCpuTimes(in int[] pids);
     void showBootMessage(in CharSequence msg, boolean always);
     @UnsupportedAppUsage(maxTargetSdk = 30, trackingBug = 170729553)
     void killAllBackgroundProcesses();
