@@ -296,6 +296,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
     private TextView mLabelTitle;
     private TextView mLabelHint;
     private ImageView mLabelPreview;
+    private WheelAppLoadView mLabelLoad;
     private SpringAnimation mLabelGlide;
     /** The button the label names, and the task whose screen it shows (-1: none). */
     private View mLabelFor;
@@ -2086,6 +2087,10 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         mLabelHint.setMaxWidth(maxWidth);
         mLabel.addView(mLabelHint, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        // A running app's processor and memory use, as wide as the card
+        mLabelLoad = new WheelAppLoadView(mContext, mBackground, mHandler);
+        mLabel.addView(mLabelLoad, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         // Beside the bar, or under or over a bar at the top or bottom; it glides along the bar
         final FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -2114,8 +2119,10 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         final CharSequence title;
         CharSequence hint = null;
         int task = -1;
+        String load = null;
         if (button.getTag() instanceof WheelTaskbarApps.Entry app) {
             title = app.label;
+            load = app.running() ? app.packageName : null;
             final String state = app.front
                     ? mContext.getString(R.string.wheel_taskbar_state_front)
                     : app.background
@@ -2152,6 +2159,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         mLabelHint.setVisibility(TextUtils.isEmpty(hint) ? View.GONE : View.VISIBLE);
         mLabelFor = button;
         mLabelTask = task;
+        mLabelLoad.watch(load);
         final Bitmap thumbnail = task >= 0 ? mThumbnails.get(task) : null;
         if (thumbnail != null) {
             showPreview(thumbnail, false);
@@ -2202,6 +2210,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         }
         mLabelFor = null;
         mLabelTask = -1;
+        mLabelLoad.watch(null);
         mLabelGlide.cancel();
         mLabel.animate().cancel();
         mLabel.setVisibility(View.GONE);

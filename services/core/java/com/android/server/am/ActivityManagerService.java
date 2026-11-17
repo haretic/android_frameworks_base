@@ -4714,6 +4714,35 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     @Override
+    public long[] getProcessCpuTimes(int[] pids) {
+        enforceNotIsolatedCaller("getProcessCpuTimes");
+
+        final int callingPid = Binder.getCallingPid();
+        final int callingUid = Binder.getCallingUid();
+        final int userId = UserHandle.getUserId(callingUid);
+        final boolean allUsers = ActivityManager.checkUidPermission(INTERACT_ACROSS_USERS_FULL,
+                callingUid) == PackageManager.PERMISSION_GRANTED;
+        // As getProcessPss: REAL_GET_TASKS to see other uids' processes
+        final boolean allUids = mAtmInternal.isGetTasksAllowed(
+                "getProcessCpuTimes", callingPid, callingUid);
+
+        final long[] times = new long[pids.length];
+        for (int i = pids.length - 1; i >= 0; i--) {
+            final ProcessRecord proc;
+            synchronized (mPidsSelfLocked) {
+                proc = mPidsSelfLocked.get(pids[i]);
+            }
+            // Only processes the system started for an app, never an arbitrary pid
+            if (proc == null || (proc.uid != callingUid && !allUids)
+                    || (!allUsers && UserHandle.getUserId(proc.uid) != userId)) {
+                continue;
+            }
+            times[i] = mAppProfiler.getCpuTimeForPid(pids[i]);
+        }
+        return times;
+    }
+
+    @Override
     public long[] getProcessPss(int[] pids) {
         enforceNotIsolatedCaller("getProcessPss");
 

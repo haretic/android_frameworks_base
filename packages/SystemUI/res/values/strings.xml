@@ -5149,6 +5149,10 @@
     <string name="wheel_taskbar_app_pinned"><xliff:g id="app" example="Chrome">%1$s</xliff:g>, pinned</string>
     <!-- Wheel taskbar: hint under the name of the app in front [CHAR LIMIT=24] -->
     <string name="wheel_taskbar_state_front">In front</string>
+    <!-- Wheel taskbar: on a running app's card, the label of the meter of its processor use [CHAR LIMIT=5] -->
+    <string name="wheel_taskbar_load_cpu">CPU</string>
+    <!-- Wheel taskbar: on a running app's card, the label of the meter of the memory it holds [CHAR LIMIT=5] -->
+    <string name="wheel_taskbar_load_memory">RAM</string>
     <!-- Wheel taskbar: hint under the name of an app running with only a background service [CHAR LIMIT=24] -->
     <string name="wheel_taskbar_state_background">In the background</string>
     <!-- Wheel taskbar: an app's state and then what holding the side button does, under its name [CHAR LIMIT=64] -->
