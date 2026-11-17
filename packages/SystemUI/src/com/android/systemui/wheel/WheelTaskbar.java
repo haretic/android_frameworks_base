@@ -604,6 +604,22 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         if (key.getAction() != KeyEvent.ACTION_DOWN) {
             return;
         }
+        if (key.getKeyCode() == KeyEvent.KEYCODE_HELP) {
+            // The side button held as a power button is held (PhoneWindowManager): on the home
+            // screen, where it has nothing to go back from, the way to turn the screen off
+            final ActivityManager.RunningTaskInfo front =
+                    ActivityManagerWrapper.getInstance().getRunningTask();
+            if (front != null && front.topActivityType
+                            == android.app.WindowConfiguration.ACTIVITY_TYPE_HOME
+                    && mRoot == null && !mKeyguardStateController.isShowing()
+                    && !mShadeExpanded && isEnabled()
+                    && LineageSettings.System.getIntForUser(mContext.getContentResolver(),
+                            LineageSettings.System.DOUBLE_TAP_SLEEP_GESTURE, 1,
+                            mUserTracker.getUserId()) != 0) {
+                mGuide.lockHint();
+            }
+            return;
+        }
         final int step;
         switch (key.getKeyCode()) {
             case KeyEvent.KEYCODE_NAVIGATE_NEXT:

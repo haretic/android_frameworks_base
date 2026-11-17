@@ -138,6 +138,35 @@ final class WheelGuide {
         show(gestures, words, gravity, HINT_MS, inset);
     }
 
+    /**
+     * A bubble under the status bar, pointing at it: a double tap there turns the screen off.
+     * Shown each time it is asked for, as it answers a hold that did nothing.
+     */
+    void lockHint() {
+        mHandler.removeCallbacks(mHide);
+        mLastShown = SystemClock.uptimeMillis();
+        if (mStrip != null) {
+            mStrip.animate().cancel();
+            mWindowManager.removeViewImmediate(mStrip);
+        }
+        mHinting = true;
+        mStrip = WheelCue.card(mContext, new int[] {WheelCue.DOUBLE},
+                new CharSequence[] {mContext.getText(R.string.wheel_guide_lock_hint)},
+                Gravity.TOP);
+        // A finger's gesture, not the wheel's: no wheel glyph beside it
+        final android.widget.TextView row =
+                (android.widget.TextView) ((android.view.ViewGroup) mStrip).getChildAt(0);
+        row.setCompoundDrawables(null, null, null, null);
+        final WindowManager.LayoutParams lp = layoutParams(Gravity.TOP, 0);
+        lp.x = 0;
+        lp.y = mContext.getResources().getDimensionPixelSize(
+                com.android.internal.R.dimen.status_bar_height);
+        mWindowManager.addView(mStrip, lp);
+        mStrip.setAlpha(0f);
+        mStrip.animate().alpha(1f).setDuration(FADE_MS);
+        mHandler.postDelayed(mHide, HINT_MS);
+    }
+
     private boolean coolingDown() {
         return SystemClock.uptimeMillis() - mLastShown < COOLDOWN_MS;
     }
