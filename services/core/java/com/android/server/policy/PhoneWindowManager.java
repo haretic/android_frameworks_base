@@ -1244,7 +1244,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 // Held as a power button is held to turn a screen off: SystemUI says, on
                 // the home screen, how the r1's is turned off
                 mHandler.removeCallbacks(mWheelSideButtonHeldLong);
-                mWheelSideButtonHeldOn = mDefaultDisplayFocus;
+                final WindowState focus = mDefaultDisplayFocus;
+                mWheelSideButtonHeldOn = focus == null ? null : focus.getOwningPackage();
                 mHandler.postDelayed(mWheelSideButtonHeldLong, WHEEL_SIDE_BUTTON_HELD_LONG_MS);
             }
             return;
@@ -1303,15 +1304,16 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     /** How long the side button is held before it counts as held like a power button. */
     private static final long WHEEL_SIDE_BUTTON_HELD_LONG_MS = 1500;
 
-    /** The focused window when the side button went down. */
-    private WindowState mWheelSideButtonHeldOn;
+    /** The package of the focused window when the side button went down. */
+    private String mWheelSideButtonHeldOn;
 
     private final Runnable mWheelSideButtonHeldLong = () -> {
-        // Still the window it went down on: a hold that went back, from an app to the home
-        // screen, was not a hold on the home screen
+        // Still the app it went down on, whose menu the hold may have opened: a hold that went
+        // back, from an app to the home screen, was not a hold on the home screen
+        final WindowState focus = mDefaultDisplayFocus;
         if (mDefaultDisplayPolicy.isAwake() && !keyguardOn()
-                && mWheelSideButtonHeldOn != null
-                && mWheelSideButtonHeldOn == mDefaultDisplayFocus) {
+                && mWheelSideButtonHeldOn != null && focus != null
+                && mWheelSideButtonHeldOn.equals(focus.getOwningPackage())) {
             final long now = SystemClock.uptimeMillis();
             sendSystemKeyToStatusBarAsync(new KeyEvent(now, now,
                     KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_HELP, 0));
