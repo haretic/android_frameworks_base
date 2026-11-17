@@ -213,6 +213,29 @@ public class WallpaperDataParser {
                     wallpaper.setDescription(wallpaper.getDescription().toBuilder()
                             .setComponent(byDefault).build());
                 }
+                // The same for whoever chose the built-in image in the wallpaper picker, which
+                // keeps a copy of it as its file: the still default, by another way. Once
+                // only, at the first start that knows of this: who picks the still image again
+                // afterwards keeps it.
+                final java.io.File followed = new java.io.File(
+                        WallpaperUtils.getWallpaperDir(userId), "wallpaper_followed_default");
+                if (!followed.exists()) {
+                    if (byDefault != null && !byDefault.equals(mImageWallpaper)
+                            && mImageWallpaper.equals(wallpaper.getComponent())
+                            && wallpaper.sourceExists()
+                            && "built-in-wallpaper".equals(wallpaper.getDescription()
+                                    .getContent().getString("picker_metadata_unique_id"))) {
+                        Slog.i(TAG, "The built-in image was set: following the default "
+                                + byDefault);
+                        wallpaper.setDescription(wallpaper.getDescription().toBuilder()
+                                .setComponent(byDefault).build());
+                    }
+                    try {
+                        followed.createNewFile();
+                    } catch (java.io.IOException e) {
+                        Slog.w(TAG, "Could not note the wallpaper default as followed", e);
+                    }
+                }
             }
             ensureSaneWallpaperData(wallpaper);
             wallpaper.mWhich = lockWallpaper != null ? FLAG_SYSTEM : FLAG_SYSTEM | FLAG_LOCK;
