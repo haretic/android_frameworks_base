@@ -1244,6 +1244,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 // Held as a power button is held to turn a screen off: SystemUI says, on
                 // the home screen, how the r1's is turned off
                 mHandler.removeCallbacks(mWheelSideButtonHeldLong);
+                mWheelSideButtonHeldOn = mDefaultDisplayFocus;
                 mHandler.postDelayed(mWheelSideButtonHeldLong, WHEEL_SIDE_BUTTON_HELD_LONG_MS);
             }
             return;
@@ -1302,8 +1303,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     /** How long the side button is held before it counts as held like a power button. */
     private static final long WHEEL_SIDE_BUTTON_HELD_LONG_MS = 1500;
 
+    /** The focused window when the side button went down. */
+    private WindowState mWheelSideButtonHeldOn;
+
     private final Runnable mWheelSideButtonHeldLong = () -> {
-        if (mDefaultDisplayPolicy.isAwake() && !keyguardOn()) {
+        // Still the window it went down on: a hold that went back, from an app to the home
+        // screen, was not a hold on the home screen
+        if (mDefaultDisplayPolicy.isAwake() && !keyguardOn()
+                && mWheelSideButtonHeldOn != null
+                && mWheelSideButtonHeldOn == mDefaultDisplayFocus) {
             final long now = SystemClock.uptimeMillis();
             sendSystemKeyToStatusBarAsync(new KeyEvent(now, now,
                     KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_HELP, 0));
@@ -1312,6 +1320,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     private void interceptPowerKeyUp(KeyEvent event, boolean canceled) {
         mHandler.removeCallbacks(mWheelSideButtonHeldLong);
+        mWheelSideButtonHeldOn = null;
         // Inform the StatusBar; but do not allow it to consume the event.
         sendSystemKeyToStatusBarAsync(event);
 
