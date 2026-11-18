@@ -7820,6 +7820,11 @@ public final class ViewRootImpl implements ViewParent,
         // An AbsListView with nothing in its adapter only: one that moves its selection itself,
         // as a dialog's choices, has rows that take no focus
         // A pager round such a list, as Messaging's contacts with none yet, is one too
+        if (view instanceof android.widget.AbsListView rows && rows.getCount() > 0) {
+            // Rows it selects itself: a short one that cannot scroll, as three choices over a
+            // dialog's buttons, is as live as a long one
+            return false;
+        }
         return view instanceof ViewGroup group && (isWheelScroller(view) || isRecyclerView(view)
                         || isPager(view)
                         || view instanceof android.widget.AbsListView list
