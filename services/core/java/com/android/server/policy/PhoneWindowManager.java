@@ -1237,9 +1237,21 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mResolvedLongPressOnPowerBehavior = LONG_PRESS_POWER_NOTHING;
             if ((!interactive || mDefaultDisplay.getState() != Display.STATE_ON)
                     && event.getRepeatCount() == 0) {
-                // A double press starting here opens the camera, see powerPress
-                mWheelWakePressDownTime = event.getDownTime();
-                wakeUpFromWakeKey(event);
+                if (!wheelWakeTakesDoublePress()) {
+                    // A double press starting here opens the camera, see powerPress
+                    mWheelWakePressDownTime = event.getDownTime();
+                    wakeUpFromWakeKey(event);
+                } else if (mWheelAsleepPressUpTime >= 0
+                        && event.getDownTime() - mWheelAsleepPressUpTime
+                                <= WHEEL_WAKE_DOUBLE_PRESS_MS) {
+                    // The second press of the two it takes
+                    mWheelAsleepPressUpTime = -1;
+                    mWheelWakePressDownTime = -1;
+                    wakeUpFromWakeKey(event);
+                } else {
+                    // The first: the screen stays off, as for a press in a pocket
+                    mWheelAsleepPress = true;
+                }
             } else if (event.getRepeatCount() == 0) {
                 // Held as a power button is held to turn a screen off: SystemUI says, on
                 // the home screen, how the r1's is turned off
@@ -1320,9 +1332,30 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
     };
 
+    /**
+     * How long after a press with the screen off the second press may begin, where it takes two
+     * to wake: longer than a double press's interval, the first press's times being late when
+     * it had to wake the processor.
+     */
+    private static final long WHEEL_WAKE_DOUBLE_PRESS_MS = 500;
+
+    /** Whether the side button's press now held went down on a screen it left off. */
+    private boolean mWheelAsleepPress;
+
+    /** When the last such press was let go, or -1. */
+    private long mWheelAsleepPressUpTime = -1;
+
+    private boolean wheelWakeTakesDoublePress() {
+        return LineageSettings.Secure.getIntForUser(mContext.getContentResolver(),
+                LineageSettings.Secure.WHEEL_SIDE_BUTTON_WAKE_DOUBLE, 0,
+                UserHandle.USER_CURRENT) != 0;
+    }
+
     private void interceptPowerKeyUp(KeyEvent event, boolean canceled) {
         mHandler.removeCallbacks(mWheelSideButtonHeldLong);
         mWheelSideButtonHeldOn = null;
+        mWheelAsleepPressUpTime = mWheelAsleepPress ? event.getEventTime() : -1;
+        mWheelAsleepPress = false;
         // Inform the StatusBar; but do not allow it to consume the event.
         sendSystemKeyToStatusBarAsync(event);
 
@@ -1370,13 +1403,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     || !mSingleKeyGestureDetector.beganFromDefaultDisplayOn()) {
                 return; // A sequence which woke the device only wakes it.
             }
-            if (count == 2) {
+            if (count == 3) {
+                performWheelSideButtonAction(wheelSideButtonTripleAction());
+            } else if (count == 2) {
                 powerMultiPressAction(displayId, eventTime, true, MULTI_PRESS_POWER_WHEEL_TASKBAR);
             } else if (count == 1) {
                 if (wheelFocusedWindowSelects()) {
                     injectWheelSideButtonKey(KeyEvent.KEYCODE_DPAD_CENTER, eventTime);
                 } else if (!powerPressForWheelMode()) {
-                    performWheelSideButtonAction(false);
+                    performWheelSideButtonAction(wheelSideButtonAction(false));
                 }
             }
             return;
@@ -1744,7 +1779,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     private int getMaxMultiPressPowerCount() {
         if (isWheelSideButtonInput()) {
-            return 2; // Fixed taskbar escape, regardless of saved stock multi-press settings.
+            // The taskbar's double press, whatever the stock multi-press settings say, and a
+            // third press where the user has a use for it: without one the double press acts
+            // at once, not waiting for a third
+            return wheelSideButtonTripleAction()
+                    == LineageSettings.Secure.WHEEL_SIDE_BUTTON_ACTION_NOTHING ? 2 : 3;
         }
         // The actual max power button press count is 5
         // (EMERGENCY_GESTURE_POWER_TAP_COUNT_THRESHOLD), which is coming from
@@ -1774,7 +1813,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 // A hold on the shade's or taskbar's focused item: its long press
                 injectWheelSideButtonHold(eventTime);
             } else {
-                performWheelSideButtonAction(true);
+                performWheelSideButtonAction(wheelSideButtonAction(true));
             }
             return;
         }
@@ -4737,8 +4776,16 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 && getStatusBarManagerInternal() != null;
     }
 
-    private void performWheelSideButtonAction(boolean hold) {
-        switch (wheelSideButtonAction(hold)) {
+    private int wheelSideButtonTripleAction() {
+        return LineageSettings.Secure.getIntForUser(
+                mContext.getContentResolver(),
+                LineageSettings.Secure.WHEEL_SIDE_BUTTON_TRIPLE,
+                LineageSettings.Secure.WHEEL_SIDE_BUTTON_ACTION_SLEEP,
+                UserHandle.USER_CURRENT);
+    }
+
+    private void performWheelSideButtonAction(int action) {
+        switch (action) {
             case LineageSettings.Secure.WHEEL_SIDE_BUTTON_ACTION_BACK:
                 injectWheelSideButtonKey(KeyEvent.KEYCODE_BACK);
                 break;
@@ -4764,6 +4811,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     sendSystemKeyToStatusBarAsync(new KeyEvent(now, now,
                             KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_NAVIGATE_OUT, 0));
                 }
+                break;
+            case LineageSettings.Secure.WHEEL_SIDE_BUTTON_ACTION_SLEEP:
+                goToSleep(SystemClock.uptimeMillis(),
+                        PowerManager.GO_TO_SLEEP_REASON_POWER_BUTTON, 0);
                 break;
             default:
                 break; // Nothing, and any invalid persisted value, have no side effects.
