@@ -7475,11 +7475,20 @@ public final class ViewRootImpl implements ViewParent,
         final ArrayList<View> candidates = new ArrayList<>();
         group.addFocusables(candidates, direction, View.FOCUSABLES_ALL);
         final Rect visible = new Rect();
+        final Rect shown = new Rect();
+        group.getBoundsOnScreen(shown, false);
         View best = null;
         int bestTop = 0;
         for (View candidate : candidates) {
             if (candidate == group || !candidate.getGlobalVisibleRect(visible)
-                    || isDeadWheelList(candidate)) {
+                    || isDeadWheelList(candidate) || isInertWheelText(candidate)) {
+                continue;
+            }
+            // In the list's own bounds for the better part: a row it scrolled away under a
+            // page's title is not in reach, though no parent clips it there
+            candidate.getBoundsOnScreen(visible, false);
+            final int height = visible.height();
+            if (!visible.intersect(shown) || visible.height() * 2 < height) {
                 continue;
             }
             if (best == null || (direction == View.FOCUS_DOWN
@@ -7954,6 +7963,18 @@ public final class ViewRootImpl implements ViewParent,
      * scroller moves the focus itself, straight down, not along a row, past the window's steps:
      * past a text field without the keyboard going, onto buttons under it.
      */
+    private boolean isWheelStepOnNestedScroller(KeyEvent event) {
+        final int code = event.getKeyCode();
+        if (event.getAction() != KeyEvent.ACTION_DOWN
+                || (code != KeyEvent.KEYCODE_DPAD_DOWN && code != KeyEvent.KEYCODE_DPAD_UP)
+                || !event.hasNoModifiers() || mAttachInfo.mInTouchMode || mView == null
+                || !isWheelFocusEnabled()) {
+            return false;
+        }
+        final View focused = mView.findFocus();
+        return focused != null && focused.getClass().getName().endsWith(".NestedScrollView");
+    }
+
     private boolean isWheelStepInNestedScroller(KeyEvent event) {
         final int code = event.getKeyCode();
         if (event.getAction() != KeyEvent.ACTION_DOWN
@@ -8061,8 +8082,9 @@ public final class ViewRootImpl implements ViewParent,
         if (dir == 0) {
             return false;
         }
-        for (ViewParent p = focused.getParent(); p instanceof ViewGroup group;
-                p = p.getParent()) {
+        // From the focused view itself, where it is the scroller holding the focus
+        for (ViewParent p = focused instanceof ViewGroup self ? self : focused.getParent();
+                p instanceof ViewGroup group; p = p.getParent()) {
             if (group.canScrollVertically(dir)) {
                 group.scrollBy(0, dir * group.getHeight() / 2);
                 keepWheelFocusInSight(focused, group);
@@ -10642,6 +10664,12 @@ public final class ViewRootImpl implements ViewParent,
             final KeyEvent event = (KeyEvent)q.mEvent;
 
             if (mUnhandledKeyManager.preViewDispatch(event)) {
+                return FINISH_HANDLED;
+            }
+
+            if (isWheelStepOnNestedScroller(event) && performFocusNavigation(event)) {
+                // The scroller has the focus for a view the wheel scrolled out of sight
+                // (keepWheelFocusInSight): its own arrow keys would stop on the page's text
                 return FINISH_HANDLED;
             }
 
