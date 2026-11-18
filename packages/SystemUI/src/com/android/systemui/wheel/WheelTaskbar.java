@@ -351,6 +351,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         final String app;
         /** Where the focus was when another list opened from it. */
         int focus;
+        /** Whether the wheel modes' rows for this app's wheel feel are open. */
+        boolean tuning;
 
         Menu(int type, View button, String app) {
             this.type = type;
@@ -481,7 +483,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 updateMode();
                 requestApps();
                 if (mModeClient != null) {
-                    mModeClient.tune(mSettings.daemonTuning(newUser, rotation()));
+                    mSettings.readAppTuning(newUser);
+                    sendTuning();
                 }
             }
         }, mContext.getMainExecutor());
@@ -534,12 +537,14 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                 new android.database.ContentObserver(mHandler) {
                     @Override
                     public void onChange(boolean selfChange) {
-                        mModeClient.tune(mSettings.daemonTuning(mUserTracker.getUserId(), rotation()));
+                        mSettings.readAppTuning(mUserTracker.getUserId());
+                        sendTuning();
                     }
                 };
         for (String key : new String[] {LineageSettings.Secure.WHEEL_SCROLL_DISTANCE,
                 LineageSettings.Secure.WHEEL_SPIN, LineageSettings.Secure.WHEEL_PRESS_GUARD,
-                LineageSettings.Secure.WHEEL_REVERSE,
+                LineageSettings.Secure.WHEEL_REVERSE, LineageSettings.Secure.WHEEL_SCROLL_NATURAL,
+                LineageSettings.Secure.WHEEL_APP_TUNING,
                 LineageSettings.Secure.WHEEL_TURN_WITH_SCREEN}) {
             mContext.getContentResolver().registerContentObserver(
                     LineageSettings.Secure.getUriFor(key), false, tuning, UserHandle.USER_ALL);
@@ -556,8 +561,7 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                             return;
                         }
                         mRotation = rotation;
-                        mModeClient.tune(mSettings.daemonTuning(mUserTracker.getUserId(),
-                                rotation));
+                        sendTuning();
                         if (mRoot != null && mSettings.edge(rotation) != mEdge) {
                             hide();
                             show();
@@ -572,7 +576,8 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                     public void onDisplayRemoved(int displayId) {
                     }
                 }, mHandler);
-        mModeClient.tune(mSettings.daemonTuning(mUserTracker.getUserId(), rotation()));
+        mSettings.readAppTuning(mUserTracker.getUserId());
+        sendTuning();
         readAppModes();
         updateMode();
     }
@@ -746,6 +751,20 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
      * key character map makes them D-pad steps there); an app gets its own mode. The stock
      * look (WHEEL_UI off) has the wheel as the D-pad, as without the daemon.
      */
+    /**
+     * The app whose own wheel feel the daemon has, null with the general one: while the bar,
+     * the shade or the lock screen has the wheel, an app's reversed wheel is not theirs.
+     */
+    private String mTunedPackage;
+
+    /** Sends the daemon the wheel's feel, the app's in front where it has the wheel. */
+    private void sendTuning() {
+        if (mModeClient != null) {
+            mModeClient.tune(mSettings.daemonTuning(mUserTracker.getUserId(), rotation(),
+                    mTunedPackage));
+        }
+    }
+
     private void updateMode() {
         if (mModeClient == null) {
             return;
@@ -771,6 +790,9 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                     || MODE_TOUCH.equals(base)) ? MODE_APP : picked;
             guided = modeKind(mode);
         }
+        // The feel first: the mode's first step is already the app's
+        mTunedPackage = guided != null ? mForegroundPackage : null;
+        sendTuning();
         mModeClient.set(mode);
         mGuide.onMode(guided, guideGravity());
     }
@@ -2951,7 +2973,102 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
                         hide();
                     });
         }
+        fillTuning(app, MODE_SCROLL.equals(modeKind(current)));
         return focusIndex;
+    }
+
+    /** The values a press steps a tuning through, as Taskbar and wheel's pages have them. */
+    private static final int[] TUNE_DISTANCES = {50, 75, 100, 150, 200};
+    private static final int[] TUNE_SPINS = {0, 1, 2};
+    private static final int[] TUNE_GUARDS = {0, 100, 150, 250, 400};
+    private static final int[] TUNE_SWITCH = {0, 1};
+    private static final int[] TUNE_DIVIDES = {1, 2, 3, 4};
+
+    /**
+     * Under the modes, the wheel's feel in this app alone: a row that opens the tunings and
+     * shuts them again, each stepped on by a press and kept for the app where it differs from
+     * the user's general setting. Scroll distance, spin and natural scrolling are scroll
+     * mode's, and only there.
+     */
+    private void fillTuning(String app, boolean scrolls) {
+        if (app == null) {
+            return;
+        }
+        final Menu menu = top();
+        final int header = mPanelItems.getChildCount();
+        final int own = mSettings.appTunings(app);
+        final CharSequence summary = menu.tuning
+                ? mContext.getString(R.string.wheel_tune_open)
+                : own == 0 ? mContext.getString(R.string.wheel_tune_closed)
+                : mContext.getResources().getQuantityString(R.plurals.wheel_tune_changed, own,
+                        own);
+        addRow(mContext.getDrawable(R.drawable.ic_wheel_taskbar_settings),
+                mContext.getString(R.string.wheel_tune_title), summary, true)
+                .setOnClickListener(v -> {
+                    menu.tuning = !menu.tuning;
+                    refill(menu, header);
+                    if (menu.tuning) {
+                        // The rows opened are under the list's end: the row goes to its top,
+                        // once the focus has been shown where it was
+                        mPanelItems.post(() -> {
+                            final View opened = mPanelItems.getChildAt(header);
+                            if (opened != null && !mMenus.isEmpty() && top() == menu) {
+                                mPanelScroll.glideTo(mPanelItems.getTop() + opened.getTop());
+                            }
+                        });
+                    }
+                });
+        if (!menu.tuning) {
+            return;
+        }
+        if (scrolls) {
+            addTuning(app, WheelTaskbarSettings.TUNE_DISTANCE, R.string.wheel_tune_distance,
+                    TUNE_DISTANCES, R.array.wheel_tune_distance_values);
+            addTuning(app, WheelTaskbarSettings.TUNE_SPIN, R.string.wheel_tune_spin,
+                    TUNE_SPINS, R.array.wheel_tune_spin_values);
+            addTuning(app, WheelTaskbarSettings.TUNE_NATURAL, R.string.wheel_tune_natural,
+                    TUNE_SWITCH, R.array.wheel_tune_switch_values);
+        }
+        addTuning(app, WheelTaskbarSettings.TUNE_REVERSE, R.string.wheel_tune_reverse,
+                TUNE_SWITCH, R.array.wheel_tune_switch_values);
+        addTuning(app, WheelTaskbarSettings.TUNE_DIVIDE, R.string.wheel_tune_divide,
+                TUNE_DIVIDES, R.array.wheel_tune_divide_values);
+        addTuning(app, WheelTaskbarSettings.TUNE_GUARD, R.string.wheel_tune_guard,
+                TUNE_GUARDS, R.array.wheel_tune_guard_values);
+        if (own > 0) {
+            underTuning(addRow(null, mContext.getString(R.string.wheel_tune_reset), null, false))
+                    .setOnClickListener(v -> {
+                        mSettings.setAppTuning(mUserTracker.getUserId(), app, null, 0);
+                        refill(menu, header);
+                    });
+        }
+    }
+
+    /** A row under This app's wheel: its text starts where that row's does, past the icon. */
+    private View underTuning(View row) {
+        row.findViewById(R.id.wheel_taskbar_item_icon).setVisibility(View.INVISIBLE);
+        return row;
+    }
+
+    private void addTuning(String app, String name, int title, int[] values, int names) {
+        final int userId = mUserTracker.getUserId();
+        final int value = mSettings.tuning(userId, app, name);
+        int at = 0;
+        for (int i = 0; i < values.length; i++) {
+            // The nearest, for a general setting from before the values were these
+            if (Math.abs(values[i] - value) < Math.abs(values[at] - value)) {
+                at = i;
+            }
+        }
+        final CharSequence said = mContext.getResources().getStringArray(names)[at];
+        final int row = mPanelItems.getChildCount();
+        final int next = values[(at + 1) % values.length];
+        underTuning(addRow(null, mContext.getString(title), mSettings.appTuned(app, name)
+                ? mContext.getString(R.string.wheel_tune_app_only, said) : said, false))
+                .setOnClickListener(v -> {
+                    mSettings.setAppTuning(userId, app, name, next);
+                    refill(top(), row);
+                });
     }
 
     /**

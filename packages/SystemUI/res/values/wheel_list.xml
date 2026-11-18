@@ -66,6 +66,51 @@
     <!-- The bubble under the status bar when the side button is held on the home screen as a
          power button would be -->
     <string name="wheel_guide_lock_hint">Double tap status bar to lock screen</string>
+    <!-- Wheel mode's last row and the rows it opens: the wheel's feel in the app in front -->
+    <string name="wheel_tune_title">This app\'s wheel</string>
+    <string name="wheel_tune_closed">Direction, clicks per step and more</string>
+    <string name="wheel_tune_open">Press to close</string>
+    <plurals name="wheel_tune_changed">
+        <item quantity="one">%d changed for this app</item>
+        <item quantity="other">%d changed for this app</item>
+    </plurals>
+    <string name="wheel_tune_app_only">%s, this app only</string>
+    <string name="wheel_tune_reset">Reset to the wheel\'s settings</string>
+    <string name="wheel_tune_distance">Scroll distance</string>
+    <string name="wheel_tune_spin">Spin acceleration</string>
+    <string name="wheel_tune_natural">Natural scrolling</string>
+    <string name="wheel_tune_reverse">Reverse direction</string>
+    <string name="wheel_tune_divide">Clicks per step</string>
+    <string name="wheel_tune_guard">Press guard</string>
+    <string-array name="wheel_tune_distance_values">
+        <item>Short</item>
+        <item>Shorter</item>
+        <item>Standard</item>
+        <item>Longer</item>
+        <item>Long</item>
+    </string-array>
+    <string-array name="wheel_tune_spin_values">
+        <item>Off</item>
+        <item>Standard</item>
+        <item>Strong</item>
+    </string-array>
+    <string-array name="wheel_tune_switch_values">
+        <item>Off</item>
+        <item>On</item>
+    </string-array>
+    <string-array name="wheel_tune_divide_values">
+        <item>Every click</item>
+        <item>Every 2nd click</item>
+        <item>Every 3rd click</item>
+        <item>Every 4th click</item>
+    </string-array>
+    <string-array name="wheel_tune_guard_values">
+        <item>Off</item>
+        <item>100 ms</item>
+        <item>150 ms</item>
+        <item>250 ms</item>
+        <item>400 ms</item>
+    </string-array>
     <string name="wheel_hint_taskbar_turn">Pick</string>
     <string name="wheel_hint_taskbar_press">Open</string>
     <string name="wheel_hint_taskbar_hold">App options</string>
