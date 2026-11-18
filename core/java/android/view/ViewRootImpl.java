@@ -8082,8 +8082,15 @@ public final class ViewRootImpl implements ViewParent,
         if (focused == scroller || !(scroller instanceof ViewGroup group)) {
             return;
         }
-        if (focused.getGlobalVisibleRect(mWheelSightRect)
-                && mWheelSightRect.height() * 2 >= focused.getHeight()) {
+        // What the scroller shows of it: its own bounds are where its rows end for the eye,
+        // which a visible rect, clipped only where a parent says it clips, does not tell, as
+        // with Settings' pages scrolling up under their title
+        focused.getBoundsOnScreen(mWheelSightRect, false);
+        scroller.getBoundsOnScreen(mWheelClipRect, false);
+        final boolean seen = mWheelSightRect.intersect(mWheelClipRect);
+        logWheelFocus("in sight " + seen + " " + mWheelSightRect + " of " + focused.getHeight()
+                + " in", scroller);
+        if (seen && mWheelSightRect.height() * 2 >= focused.getHeight()) {
             return;
         }
         // A list that takes no focus of its own, as Settings' pages, takes it while the wheel
@@ -8096,6 +8103,7 @@ public final class ViewRootImpl implements ViewParent,
         group.setDescendantFocusability(ViewGroup.FOCUS_BEFORE_DESCENDANTS);
         final boolean took = group.requestFocus();
         group.setDescendantFocusability(descendants);
+        logWheelFocus("scroller took the focus " + took + ", now", mView.findFocus());
         if (focusable) {
             return;
         }
