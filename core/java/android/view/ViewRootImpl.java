@@ -10667,9 +10667,11 @@ public final class ViewRootImpl implements ViewParent,
                 return FINISH_HANDLED;
             }
 
-            if (isWheelStepOnNestedScroller(event) && performFocusNavigation(event)) {
+            if (isWheelStepOnNestedScroller(event)) {
                 // The scroller has the focus for a view the wheel scrolled out of sight
-                // (keepWheelFocusInSight): its own arrow keys would stop on the page's text
+                // (keepWheelFocusInSight): its own arrow keys would stop on the page's text,
+                // at the page's end too, where the window has nowhere to step
+                performFocusNavigation(event);
                 return FINISH_HANDLED;
             }
 
