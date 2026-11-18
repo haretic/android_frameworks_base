@@ -4776,11 +4776,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 && getStatusBarManagerInternal() != null;
     }
 
+    /** Nothing until the user picks one: a third press to wait for slows the double press. */
     private int wheelSideButtonTripleAction() {
         return LineageSettings.Secure.getIntForUser(
                 mContext.getContentResolver(),
                 LineageSettings.Secure.WHEEL_SIDE_BUTTON_TRIPLE,
-                LineageSettings.Secure.WHEEL_SIDE_BUTTON_ACTION_SLEEP,
+                LineageSettings.Secure.WHEEL_SIDE_BUTTON_ACTION_NOTHING,
                 UserHandle.USER_CURRENT);
     }
 
