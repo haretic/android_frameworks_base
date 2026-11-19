@@ -20,7 +20,9 @@ import android.content.ContentResolver
 import android.content.Context
 import android.database.ContentObserver
 import android.os.UserHandle
+import android.view.KeyEvent
 import android.view.MotionEvent
+import android.widget.WheelCue
 import androidx.annotation.VisibleForTesting
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
@@ -56,6 +58,7 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -67,6 +70,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -79,8 +83,12 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -118,9 +126,116 @@ import com.android.systemui.lifecycle.rememberViewModel
 import com.android.systemui.qs.ui.compose.borderOnFocus
 import com.android.systemui.res.R
 import com.android.systemui.util.policy.PolicyRestriction
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import lineageos.providers.LineageSettings
 import platform.test.motion.compose.values.MotionTestValueKey
 import platform.test.motion.compose.values.motionTestValues
+
+/** How long the wheel keeps the slider without a step, as WheelSliderGrab's. */
+private const val WHEEL_GRAB_TIMEOUT_MS = 4000L
+
+/**
+ * The wheel's grab of the slider (config_wheelFocus), as the framework's seek bars and
+ * WheelSliderGrab's Material sliders have it: the side button's press takes the slider, the
+ * wheel's steps (down and up) then set it, and a press, a pause or leaving it lets it go. A
+ * horizontal Compose slider moves only on left and right, so the wheel's steps went past it and
+ * its press, unclaimed, opened the taskbar.
+ */
+@Composable
+private fun Modifier.wheelSliderGrab(
+    enabled: Boolean,
+    value: () -> Int,
+    valueRange: IntRange,
+    onValue: (Int) -> Unit,
+    onStop: (Int) -> Unit,
+): Modifier {
+    val view = LocalView.current
+    val wheel = remember(view) {
+        view.resources.getBoolean(com.android.internal.R.bool.config_wheelFocus)
+    }
+    if (!wheel) {
+        return this
+    }
+    val scope = rememberCoroutineScope()
+    var grabbed by remember { mutableStateOf(false) }
+    var letGo by remember { mutableStateOf<Job?>(null) }
+    var lastStep by remember { mutableLongStateOf(0L) }
+    val currentValue by rememberUpdatedState(value)
+    val currentOnValue by rememberUpdatedState(onValue)
+    val currentOnStop by rememberUpdatedState(onStop)
+    fun setGrabbed(grab: Boolean) {
+        letGo?.cancel()
+        if (grab == grabbed) {
+            return
+        }
+        grabbed = grab
+        // The ring goes twice as thick round the host while it holds the wheel (isWheelGrabbed)
+        view.isPressed = grab
+        if (grab) {
+            WheelCue.show(
+                view,
+                com.android.internal.R.string.wheel_cue_set,
+                com.android.internal.R.string.wheel_cue_let_go,
+            )
+        } else {
+            WheelCue.hide()
+            currentOnStop(currentValue())
+        }
+    }
+    fun armLetGo() {
+        letGo?.cancel()
+        letGo = scope.launch {
+            delay(WHEEL_GRAB_TIMEOUT_MS)
+            setGrabbed(false)
+        }
+    }
+    DisposableEffect(view) {
+        onDispose {
+            if (grabbed) {
+                grabbed = false
+                view.isPressed = false
+                WheelCue.hide()
+            }
+        }
+    }
+    return this
+        .onFocusChanged { if (!it.hasFocus) setGrabbed(false) }
+        .onPreviewKeyEvent { event ->
+            val native = event.nativeKeyEvent
+            if (!enabled) {
+                return@onPreviewKeyEvent false
+            }
+            if (KeyEvent.isConfirmKey(native.keyCode) || native.keyCode == KeyEvent.KEYCODE_POWER) {
+                if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
+                    setGrabbed(!grabbed)
+                    if (grabbed) {
+                        armLetGo()
+                    }
+                }
+                return@onPreviewKeyEvent true
+            }
+            if (!grabbed ||
+                native.keyCode != KeyEvent.KEYCODE_DPAD_DOWN &&
+                    native.keyCode != KeyEvent.KEYCODE_DPAD_UP
+            ) {
+                return@onPreviewKeyEvent false
+            }
+            if (event.type == KeyEventType.KeyDown) {
+                armLetGo()
+                val fast = native.eventTime - lastStep < 60
+                lastStep = native.eventTime
+                val span = valueRange.last - valueRange.first
+                val step = maxOf(1, span / if (fast) 10 else 50)
+                val direction = if (native.keyCode == KeyEvent.KEYCODE_DPAD_DOWN) 1 else -1
+                val next = (currentValue() + direction * step).coerceIn(valueRange)
+                if (next != currentValue()) {
+                    currentOnValue(next)
+                }
+            }
+            true
+        }
+}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -242,6 +357,20 @@ fun BrightnessSlider(
             modifier =
                 Modifier
                     .weight(1f)
+                    .wheelSliderGrab(
+                        enabled = enabled && !isRestricted && !overriddenByAppState,
+                        value = { value },
+                        valueRange = valueRange,
+                        onValue = {
+                            hapticsViewModel.onValueChange(it.toFloat())
+                            value = it
+                            onDrag(it)
+                        },
+                        onStop = {
+                            hapticsViewModel.onValueChangeEnded()
+                            onStop(it)
+                        },
+                    )
                     .sysuiResTag("slider")
                     .semantics(mergeDescendants = true) {
                         this.text = AnnotatedString(contentDescription)

@@ -156,6 +156,13 @@ public class BrightnessDialog extends ComponentActivity {
 
     private void setWindowAttributes() {
         final Window window = getWindow();
+        if (getResources().getBoolean(com.android.internal.R.bool.config_wheelFocus)) {
+            // This activity belongs to SystemUI, not Settings. Claim its side-button press
+            // directly rather than letting SystemUI's default taskbar action take the key.
+            final WindowManager.LayoutParams attributes = window.getAttributes();
+            attributes.inputFeatures |= WindowManager.LayoutParams.INPUT_FEATURE_POWER_KEY_SELECTS;
+            window.setAttributes(attributes);
+        }
         if (brightnessDialogOnSystemUser()) {
             window.addPrivateFlags(WindowManager.LayoutParams.SYSTEM_FLAG_SHOW_FOR_ALL_USERS);
         }
