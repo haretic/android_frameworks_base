@@ -6531,7 +6531,8 @@ public final class ViewRootImpl implements ViewParent,
             mWheelFocusPaint.setStyle(Paint.Style.STROKE);
         }
         // The accent as the theme's primary is, the seed itself in the haretic style
-        mWheelFocusPaint.setColor(mContext.getColor(android.R.color.system_primary_dark));
+        mWheelFocusPaint.setColor(wheelRingColor(mWheelRingTarget,
+                mContext.getColor(android.R.color.system_primary_dark)));
         // Twice as thick while the view holds the wheel, as a slider the side button grabbed
         final float width = WHEEL_FOCUS_WIDTH_DP * density
                 * (isWheelGrabbed(mView.findFocus()) ? 2 : 1);
@@ -6590,6 +6591,34 @@ public final class ViewRootImpl implements ViewParent,
             mWheelFocusNode.endRecording();
         }
         recording.drawRenderNode(mWheelFocusNode);
+    }
+
+    /**
+     * The ring's colour round {@code view}: the accent, but a light one round a button filled in
+     * a colour too near the accent to show it, as Dialer's keypad button, Contacts' add or
+     * Messaging's Start chat in the haretic orange, where the ring sits on the fill inside the
+     * button's edge and only its dark inner line showed.
+     */
+    private int wheelRingColor(View view, int accent) {
+        if (view == null) {
+            return accent;
+        }
+        int fill = 0;
+        final android.content.res.ColorStateList tint = view.getBackgroundTintList();
+        if (tint != null) {
+            fill = tint.getColorForState(view.getDrawableState(), tint.getDefaultColor());
+        } else if (view.getBackground() instanceof android.graphics.drawable.ColorDrawable c) {
+            fill = c.getColor();
+        } else if (view.getBackground() instanceof android.graphics.drawable.GradientDrawable g
+                && g.getColor() != null) {
+            fill = g.getColor().getColorForState(view.getDrawableState(),
+                    g.getColor().getDefaultColor());
+        }
+        if (Color.alpha(fill) < 0x80 || com.android.internal.graphics.ColorUtils.calculateContrast(
+                accent | 0xff000000, fill | 0xff000000) >= 1.8) {
+            return accent;
+        }
+        return mContext.getColor(android.R.color.system_neutral1_10);
     }
 
     private boolean isWheelFocusDirty() {
@@ -6918,6 +6947,16 @@ public final class ViewRootImpl implements ViewParent,
                 mWheelOverPick = null;
                 return true;
             }
+            if (isWheelPassThrough(focused)) {
+                // The first pick can be the empty-state box before its button is laid out.
+                // Resolve it before the overlay retry returns; keep tracking the actual child.
+                final View inner = wheelPassThroughChild((ViewGroup) focused, View.FOCUS_FORWARD);
+                if (inner != null && inner.requestFocus(View.FOCUS_FORWARD)) {
+                    mWheelOverPick = mView.findFocus();
+                    logWheelFocus("first stop inside empty-state pick", mWheelOverPick);
+                }
+                return false;
+            }
             final View over = wheelTopOverList(mWheelOverList);
             if (over != null && over != focused && over.requestFocus(View.FOCUS_FORWARD)) {
                 mWheelOverPick = over;
@@ -6932,8 +6971,14 @@ public final class ViewRootImpl implements ViewParent,
                 final View next = below.focusSearch(View.FOCUS_DOWN);
                 below = next == below ? null : next;
             }
-            return below != null && !isInside(below, toolbar)
-                    && below.requestFocus(View.FOCUS_DOWN);
+            if (below == null || isInside(below, toolbar)) {
+                return false;
+            }
+            // Not onto a stop a stray press would act on for good, as Wi-Fi details' Forget at
+            // the start of its row of buttons or the Internet page's Use Wi-Fi switch: on down to
+            // the first plain row in sight, where there is one within a few steps
+            below = wheelHarmlessFirstStop(below);
+            return below.requestFocus(View.FOCUS_DOWN);
         }
         if (focused != null && isComposeHost(focused)) {
             // A Compose page, as Settings' app list: its first focus, a button in its top bar as
@@ -6959,14 +7004,33 @@ public final class ViewRootImpl implements ViewParent,
                     || bounds.height() < focused.getHeight())
                     && !(bounds.width() <= 72 * density && bounds.bottom <= 96 * density);
         }
+        if (focused != null && isWheelPassThrough(focused)) {
+            // A container can own default focus directly, not just be reached by a step.
+            final View inner = wheelPassThroughChild((ViewGroup) focused, View.FOCUS_FORWARD);
+            if (inner != null && inner != focused) {
+                inner.requestFocus(View.FOCUS_FORWARD);
+            }
+            return false;
+        }
         if (focused != null && isDeadWheelList(focused)) {
             // An empty list the window first focused, as Messaging's with no conversations: no
             // stop. The first focus goes to what is drawn over it, the topmost first, as Dialer's
             // Add favourite over its empty favourites; else on to the next in order, as Messaging's
             // Start chat; or waits for rows
             final View over = wheelTopOverList(focused);
-            final View next = over != null ? over : focused.focusSearch(View.FOCUS_FORWARD);
-            if (next == null || next == focused || isDeadWheelList(next)
+            View next = over != null ? over : focused.focusSearch(View.FOCUS_FORWARD);
+            // Recents' empty state is below its list, unlike Favourites' overlay: forward
+            // search can return the box round Make a call. Apply the steps' pass-through rule.
+            for (int depth = 0; depth < 8 && next != null && isWheelPassThrough(next);
+                    depth++) {
+                final View inner = wheelPassThroughChild((ViewGroup) next, View.FOCUS_FORWARD);
+                if (inner == null || inner == next) {
+                    return false;
+                }
+                next = inner;
+            }
+            if (next == null || next == focused || isWheelPassThrough(next)
+                    || isDeadWheelList(next)
                     || !next.requestFocus(View.FOCUS_FORWARD)) {
                 return false;
             }
@@ -6975,8 +7039,75 @@ public final class ViewRootImpl implements ViewParent,
             mWheelOverPick = next;
             return false;
         }
-        // Not on a toolbar's back arrow: nothing to skip
+        // Not on a toolbar's back arrow: nothing to skip, but a first focus a press would act on
+        // for good, as the Internet page's Use Wi-Fi switch bar, on to the plain row below it
+        if (focused != null) {
+            final View harmless = wheelHarmlessFirstStop(focused);
+            if (harmless != focused) {
+                harmless.requestFocus(View.FOCUS_DOWN);
+                logWheelFocus("first stop past a switch or button row to", mView.findFocus());
+            }
+        }
         return true;
+    }
+
+    /**
+     * The first stop at or below {@code first} that a press would not act on at once for good:
+     * past a button side by side with others, as an action row's Forget, and past a switch or a
+     * row that flips one, as a main switch bar. {@code first} itself where nothing within a few
+     * steps down in sight is such a row.
+     */
+    private View wheelHarmlessFirstStop(View first) {
+        View v = first;
+        for (int i = 0; i < 4 && isWheelRiskyFirstStop(v); i++) {
+            final View next = v.focusSearch(View.FOCUS_DOWN);
+            if (next == null || next == v || !isInSight(next)) {
+                return first;
+            }
+            v = next;
+        }
+        return isWheelRiskyFirstStop(v) ? first : v;
+    }
+
+    private static boolean isWheelRiskyFirstStop(View v) {
+        // A page's main switch, as the Internet page's Use Wi-Fi: not a row's own switch, whose
+        // press a second press undoes with no harm done
+        for (Class<?> c = v.getClass(); c != null && c != View.class; c = c.getSuperclass()) {
+            if (c.getName().endsWith("MainSwitchBar")) {
+                return true;
+            }
+        }
+        if (v instanceof android.widget.Button && v.getParent() instanceof ViewGroup row) {
+            for (int i = 0; i < row.getChildCount(); i++) {
+                final View other = row.getChildAt(i);
+                if (other != v && other instanceof android.widget.Button && other.isShown()
+                        && other.isFocusable()) {
+                    return true;
+                }
+            }
+        }
+        // Settings action strips wrap each icon button and its label in a vertical column.
+        // Keep this to one wrapper level in a horizontal strip, not arbitrary nearby buttons.
+        if (v instanceof android.widget.Button
+                && v.getParent() instanceof android.widget.LinearLayout column
+                && column.getOrientation() == android.widget.LinearLayout.VERTICAL
+                && column.getParent() instanceof android.widget.LinearLayout strip
+                && strip.getOrientation() == android.widget.LinearLayout.HORIZONTAL) {
+            for (int i = 0; i < strip.getChildCount(); i++) {
+                final View sibling = strip.getChildAt(i);
+                if (sibling == column || !(sibling instanceof ViewGroup group)) {
+                    continue;
+                }
+                for (int j = 0; j < group.getChildCount(); j++) {
+                    final View other = group.getChildAt(j);
+                    if (other instanceof android.widget.Button && other.isShown()
+                            && other.isFocusable()) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -7052,13 +7183,14 @@ public final class ViewRootImpl implements ViewParent,
 
     /**
      * Whether {@code next} is on {@code focused}'s row, its middle level with it, as a small
-     * button beside a tall one: along the row either way.
+     * button beside a tall one: along the row either way. Use the logical bounds: clipping a
+     * row below a scroller can give it empty or inverted bounds.
      */
     private boolean isOnSameRow(View focused, View next) {
         final Rect from = mTempRect;
         final Rect to = mAttachInfo.mTmpInvalRect;
-        focused.getBoundsOnScreen(from, true);
-        next.getBoundsOnScreen(to, true);
+        focused.getBoundsOnScreen(from, false);
+        next.getBoundsOnScreen(to, false);
         return to.centerY() >= from.top && to.centerY() <= from.bottom;
     }
 
@@ -7118,12 +7250,24 @@ public final class ViewRootImpl implements ViewParent,
             final View before = end.focusSearch(back);
             if (before == null || before == end || before == focused || isInside(focused, before)
                     || !isOnSameRow(end, before) || isOnSameRow(focused, before)
-                    || !isInSight(before)) {
+                    || !isAcrossInSight(before)) {
                 break;
             }
             end = before;
         }
         return end;
+    }
+
+    /**
+     * Whether {@code view} lies across the window's width, however far up or down its scroller
+     * has it: not on a pager's page beside, yet a row still below the screen's edge counts, as
+     * Calculator's functions under its keys, whose row the step must enter at its start before
+     * the scroll brings it in; a row not yet in sight had the step land on its last key alone.
+     */
+    private boolean isAcrossInSight(View view) {
+        view.getBoundsOnScreen(mWheelSightRect, false);
+        final int left = mAttachInfo.mWindowLeft;
+        return mWheelSightRect.right > left && mWheelSightRect.left < left + mWidth;
     }
 
     /**
@@ -7938,6 +8082,31 @@ public final class ViewRootImpl implements ViewParent,
         return false;
     }
 
+    /** A real descendant stop, excluding the inert root and boxes around its children.
+     * FocusFinder with null focus can return a FOCUS_BEFORE_DESCENDANTS root itself;
+     * relative search also returns null with only one focusable. Enumerate descendants
+     * in reading order instead, waiting for nonempty layout bounds as first-stop retries do. */
+    private static View wheelPassThroughChild(ViewGroup group, int direction) {
+        final ArrayList<View> candidates = new ArrayList<>();
+        group.addFocusables(candidates, View.FOCUS_FORWARD, View.FOCUSABLES_ALL);
+        final boolean forward = direction != View.FOCUS_UP && direction != View.FOCUS_BACKWARD;
+        final Rect bounds = new Rect();
+        for (int i = forward ? 0 : candidates.size() - 1;
+                forward ? i < candidates.size() : i >= 0; i += forward ? 1 : -1) {
+            final View candidate = candidates.get(i);
+            if (candidate == group || !candidate.isShown() || isDeadWheelList(candidate)
+                    || isWheelPassThrough(candidate)) {
+                continue;
+            }
+            candidate.getDrawingRect(bounds);
+            group.offsetDescendantRectToMyCoords(candidate, bounds);
+            if (!bounds.isEmpty() && bounds.right > 0 && bounds.left < group.getWidth()) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
     /**
      * Whether {@code view} is a container the wheel passes into rather than stops on: focusable,
      * yet nothing to press nor hold, no list nor scroller nor Compose host, with what takes the
@@ -7992,6 +8161,45 @@ public final class ViewRootImpl implements ViewParent,
         }
         final View focused = mView.findFocus();
         return focused != null && focused.getClass().getName().endsWith(".NestedScrollView");
+    }
+
+    /**
+     * A wheel step on something focused inside a Compose page goes in the page's own reading
+     * order, as Tab and Shift+Tab move it, not by its arrow keys' nearest neighbour up or down:
+     * those pass over a button beside the focused one, as App info's Force stop beside Disable or
+     * Updater's Report issues beside Recent changes, and find nothing above a top bar's search
+     * icon, leaving its back arrow and menu out of reach. The view pages' steps go as text reads
+     * the same way (wheelRowEnd, isAlongTheWay). With nothing further in the page's order the
+     * step is the window's, as before.
+     */
+    private boolean dispatchWheelStepToCompose(KeyEvent event) {
+        final int code = event.getKeyCode();
+        if ((code != KeyEvent.KEYCODE_DPAD_DOWN && code != KeyEvent.KEYCODE_DPAD_UP)
+                || !event.hasNoModifiers() || mAttachInfo.mInTouchMode || mView == null
+                || !isWheelFocusEnabled()) {
+            return false;
+        }
+        final View host = mView.findFocus();
+        // Nor while it holds the wheel, as a slider grabbed to be set by the steps themselves
+        if (host == null || !isComposeHost(host) || isWheelGrabbed(host)) {
+            return false;
+        }
+        // Only from an element inside it: the host as a whole is the first stop's to move on
+        final Rect focusedRect = new Rect();
+        host.getFocusedRect(focusedRect);
+        if (focusedRect.isEmpty() || focusedRect.width() >= host.getWidth()
+                && focusedRect.height() >= host.getHeight()) {
+            return false;
+        }
+        final KeyEvent tab = new KeyEvent(event.getDownTime(), event.getEventTime(),
+                event.getAction(), KeyEvent.KEYCODE_TAB, event.getRepeatCount(),
+                code == KeyEvent.KEYCODE_DPAD_UP
+                        ? KeyEvent.META_SHIFT_ON | KeyEvent.META_SHIFT_LEFT_ON : 0,
+                event.getDeviceId(), 0, event.getFlags(), event.getSource());
+        final boolean moved = host.dispatchKeyEvent(tab);
+        logWheelFocus("compose step " + (code == KeyEvent.KEYCODE_DPAD_UP ? "back" : "on")
+                + " " + moved + " from " + focusedRect + " in", host);
+        return moved;
     }
 
     private boolean isWheelStepInNestedScroller(KeyEvent event) {
@@ -10504,8 +10712,7 @@ public final class ViewRootImpl implements ViewParent,
                             && !isInside(focused, v) && isWheelPassThrough(v)) {
                         // A container the step reached, as a dialer's box round its one button:
                         // on to what is in it, no stop on the box
-                        final View inner = FocusFinder.getInstance().findNextFocus(
-                                (ViewGroup) v, null, direction);
+                        final View inner = wheelPassThroughChild((ViewGroup) v, direction);
                         if (inner != null && inner != v) {
                             v = inner;
                         }
@@ -10700,6 +10907,10 @@ public final class ViewRootImpl implements ViewParent,
                 if (mView.findFocus().dispatchKeyEvent(event) || performFocusNavigation(event)) {
                     return FINISH_HANDLED;
                 }
+            }
+
+            if (dispatchWheelStepToCompose(event)) {
+                return FINISH_HANDLED;
             }
 
             // The press that may open a page out of the row it was on
