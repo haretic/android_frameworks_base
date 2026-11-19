@@ -7061,7 +7061,10 @@ public final class ViewRootImpl implements ViewParent,
         View v = first;
         for (int i = 0; i < 4 && isWheelRiskyFirstStop(v); i++) {
             final View next = v.focusSearch(View.FOCUS_DOWN);
-            if (next == null || next == v || !isInSight(next)) {
+            // Nor onto a text field, whose focus brings the keyboard up, nor a view whose app
+            // acts on its focus itself: the window's own first focus stands then
+            if (next == null || next == v || !isInSight(next) || next.onCheckIsTextEditor()
+                    || next.getOnFocusChangeListener() != null) {
                 return first;
             }
             v = next;
@@ -7077,10 +7080,10 @@ public final class ViewRootImpl implements ViewParent,
                 return true;
             }
         }
-        if (v instanceof android.widget.Button && v.getParent() instanceof ViewGroup row) {
+        if (isWheelActionButton(v) && v.getParent() instanceof ViewGroup row) {
             for (int i = 0; i < row.getChildCount(); i++) {
                 final View other = row.getChildAt(i);
-                if (other != v && other instanceof android.widget.Button && other.isShown()
+                if (other != v && isWheelActionButton(other) && other.isShown()
                         && other.isFocusable()) {
                     return true;
                 }
@@ -7088,7 +7091,7 @@ public final class ViewRootImpl implements ViewParent,
         }
         // Settings action strips wrap each icon button and its label in a vertical column.
         // Keep this to one wrapper level in a horizontal strip, not arbitrary nearby buttons.
-        if (v instanceof android.widget.Button
+        if (isWheelActionButton(v)
                 && v.getParent() instanceof android.widget.LinearLayout column
                 && column.getOrientation() == android.widget.LinearLayout.VERTICAL
                 && column.getParent() instanceof android.widget.LinearLayout strip
@@ -7100,7 +7103,7 @@ public final class ViewRootImpl implements ViewParent,
                 }
                 for (int j = 0; j < group.getChildCount(); j++) {
                     final View other = group.getChildAt(j);
-                    if (other instanceof android.widget.Button && other.isShown()
+                    if (isWheelActionButton(other) && other.isShown()
                             && other.isFocusable()) {
                         return true;
                     }
@@ -7108,6 +7111,15 @@ public final class ViewRootImpl implements ViewParent,
             }
         }
         return false;
+    }
+
+    /**
+     * A button that acts when pressed, as an action row's: not a check box, switch or radio
+     * button (CompoundButton extends Button), whose press a second press undoes.
+     */
+    private static boolean isWheelActionButton(View v) {
+        return v instanceof android.widget.Button
+                && !(v instanceof android.widget.CompoundButton);
     }
 
     /**
@@ -8085,27 +8097,36 @@ public final class ViewRootImpl implements ViewParent,
     /** A real descendant stop, excluding the inert root and boxes around its children.
      * FocusFinder with null focus can return a FOCUS_BEFORE_DESCENDANTS root itself;
      * relative search also returns null with only one focusable. Enumerate descendants
-     * in reading order instead, waiting for nonempty layout bounds as first-stop retries do. */
-    private static View wheelPassThroughChild(ViewGroup group, int direction) {
-        final ArrayList<View> candidates = new ArrayList<>();
+     * in addFocusables' order instead, each level's children as text reads (FocusFinder.sort),
+     * waiting for nonempty layout bounds as first-stop retries do. */
+    private View wheelPassThroughChild(ViewGroup group, int direction) {
+        final ArrayList<View> candidates = mWheelPassThroughCandidates;
         group.addFocusables(candidates, View.FOCUS_FORWARD, View.FOCUSABLES_ALL);
         final boolean forward = direction != View.FOCUS_UP && direction != View.FOCUS_BACKWARD;
-        final Rect bounds = new Rect();
-        for (int i = forward ? 0 : candidates.size() - 1;
-                forward ? i < candidates.size() : i >= 0; i += forward ? 1 : -1) {
-            final View candidate = candidates.get(i);
-            if (candidate == group || !candidate.isShown() || isDeadWheelList(candidate)
-                    || isWheelPassThrough(candidate)) {
-                continue;
+        final Rect bounds = mWheelPassThroughBounds;
+        try {
+            for (int i = forward ? 0 : candidates.size() - 1;
+                    forward ? i < candidates.size() : i >= 0; i += forward ? 1 : -1) {
+                final View candidate = candidates.get(i);
+                if (candidate == group || !candidate.isShown() || isDeadWheelList(candidate)
+                        || isWheelPassThrough(candidate)) {
+                    continue;
+                }
+                candidate.getDrawingRect(bounds);
+                group.offsetDescendantRectToMyCoords(candidate, bounds);
+                if (!bounds.isEmpty() && bounds.right > 0 && bounds.left < group.getWidth()) {
+                    return candidate;
+                }
             }
-            candidate.getDrawingRect(bounds);
-            group.offsetDescendantRectToMyCoords(candidate, bounds);
-            if (!bounds.isEmpty() && bounds.right > 0 && bounds.left < group.getWidth()) {
-                return candidate;
-            }
+            return null;
+        } finally {
+            // Holds no views past the call
+            candidates.clear();
         }
-        return null;
     }
+
+    private final ArrayList<View> mWheelPassThroughCandidates = new ArrayList<>();
+    private final Rect mWheelPassThroughBounds = new Rect();
 
     /**
      * Whether {@code view} is a container the wheel passes into rather than stops on: focusable,
@@ -8174,14 +8195,35 @@ public final class ViewRootImpl implements ViewParent,
      */
     private boolean dispatchWheelStepToCompose(KeyEvent event) {
         final int code = event.getKeyCode();
-        if ((code != KeyEvent.KEYCODE_DPAD_DOWN && code != KeyEvent.KEYCODE_DPAD_UP)
-                || !event.hasNoModifiers() || mAttachInfo.mInTouchMode || mView == null
-                || !isWheelFocusEnabled()) {
+        if (code != KeyEvent.KEYCODE_DPAD_DOWN && code != KeyEvent.KEYCODE_DPAD_UP) {
+            return false;
+        }
+        if (event.getAction() != KeyEvent.ACTION_DOWN || event.getRepeatCount() > 0) {
+            // A repeat or the up goes where its first down went: as Tab after a down taken as
+            // Tab, else to the app, which so never has an up or repeat without its down
+            if (mWheelComposeStepKey != code) {
+                return false;
+            }
+            if (event.getAction() == KeyEvent.ACTION_UP) {
+                mWheelComposeStepKey = KeyEvent.KEYCODE_UNKNOWN;
+            }
+            final View host = mView != null ? mView.findFocus() : null;
+            if (host != null && isComposeHost(host)) {
+                host.dispatchKeyEvent(wheelStepAsTab(event));
+            }
+            return true;
+        }
+        mWheelComposeStepKey = KeyEvent.KEYCODE_UNKNOWN;
+        // The wheel's only: a keyboard's arrows are the app's, as everywhere
+        if (!event.hasNoModifiers() || mAttachInfo.mInTouchMode || mView == null
+                || !isWheelFocusEnabled() || !isFromWheel(event)) {
             return false;
         }
         final View host = mView.findFocus();
-        // Nor while it holds the wheel, as a slider grabbed to be set by the steps themselves
-        if (host == null || !isComposeHost(host) || isWheelGrabbed(host)) {
+        // Nor while it holds the wheel, as a slider grabbed to be set by the steps themselves,
+        // nor in a text field, where the steps move the cursor along its lines
+        if (host == null || !isComposeHost(host) || isWheelGrabbed(host)
+                || host.onCheckIsTextEditor()) {
             return false;
         }
         // Only from an element inside it: the host as a whole is the first stop's to move on
@@ -8191,16 +8233,51 @@ public final class ViewRootImpl implements ViewParent,
                 && focusedRect.height() >= host.getHeight()) {
             return false;
         }
-        final KeyEvent tab = new KeyEvent(event.getDownTime(), event.getEventTime(),
-                event.getAction(), KeyEvent.KEYCODE_TAB, event.getRepeatCount(),
-                code == KeyEvent.KEYCODE_DPAD_UP
-                        ? KeyEvent.META_SHIFT_ON | KeyEvent.META_SHIFT_LEFT_ON : 0,
-                event.getDeviceId(), 0, event.getFlags(), event.getSource());
-        final boolean moved = host.dispatchKeyEvent(tab);
+        final boolean moved = host.dispatchKeyEvent(wheelStepAsTab(event));
         logWheelFocus("compose step " + (code == KeyEvent.KEYCODE_DPAD_UP ? "back" : "on")
                 + " " + moved + " from " + focusedRect + " in", host);
+        if (moved) {
+            mWheelComposeStepKey = code;
+        }
         return moved;
     }
+
+    /** The wheel step {@code event} as Tab, Shift+Tab for one up: dispatchWheelStepToCompose. */
+    private static KeyEvent wheelStepAsTab(KeyEvent event) {
+        return new KeyEvent(event.getDownTime(), event.getEventTime(),
+                event.getAction(), KeyEvent.KEYCODE_TAB, event.getRepeatCount(),
+                event.getKeyCode() == KeyEvent.KEYCODE_DPAD_UP
+                        ? KeyEvent.META_SHIFT_ON | KeyEvent.META_SHIFT_LEFT_ON : 0,
+                event.getDeviceId(), 0, event.getFlags(), event.getSource());
+    }
+
+    /** The step key whose down went to a Compose page as Tab, its up to follow. */
+    private int mWheelComposeStepKey = KeyEvent.KEYCODE_UNKNOWN;
+
+    /**
+     * Whether {@code event} comes from the wheel: its daemon's input device
+     * (config_wheelDaemonInputDevice) or the wheel's own (config_scrollWheelInputDevices), as the
+     * policy tells them, not a keyboard. Looked up once a device.
+     */
+    private boolean isFromWheel(KeyEvent event) {
+        final int id = event.getDeviceId();
+        if (id != mWheelDeviceId) {
+            final InputDevice device = InputDevice.getDevice(id);
+            if (device == null) {
+                return false;
+            }
+            final String name = device.getName();
+            final android.content.res.Resources res = mContext.getResources();
+            mWheelDeviceId = id;
+            mWheelDeviceIsWheel = name.equals(res.getString(R.string.config_wheelDaemonInputDevice))
+                    || com.android.internal.util.ArrayUtils.contains(
+                            res.getStringArray(R.array.config_scrollWheelInputDevices), name);
+        }
+        return mWheelDeviceIsWheel;
+    }
+
+    private int mWheelDeviceId = Integer.MIN_VALUE;
+    private boolean mWheelDeviceIsWheel;
 
     private boolean isWheelStepInNestedScroller(KeyEvent event) {
         final int code = event.getKeyCode();
@@ -13134,6 +13211,14 @@ public final class ViewRootImpl implements ViewParent,
             mRemoved = true;
             mOnBackInvokedDispatcher.detachFromWindow();
             removeVrrMessages();
+            // The wheel's views of this window, not held past it
+            mWheelFirstStopPending = false;
+            mWheelOverList = null;
+            mWheelOverPick = null;
+            mWheelRingTarget = null;
+            mWheelPassThroughChecked = null;
+            mHandler.removeCallbacks(mWheelSightCheck);
+            mWheelSightFocused = null;
 
             if (mCachedSurfaceControl != null) {
                 mCachedSurfaceControl.release();
