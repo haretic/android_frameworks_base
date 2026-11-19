@@ -7587,6 +7587,20 @@ public final class ViewRootImpl implements ViewParent,
         if (dy == 0) {
             return false;
         }
+        if (springOnly && mWheelMotion != 0 && list.canScrollVertically(dy > 0 ? 1 : -1)
+                && (rect.top >= bottom || rect.bottom <= top)) {
+            // A row wholly past the edge, laid out there for the focus search: its first line
+            // is brought in at once and the spring travels the rest. A layout while it is still
+            // out of sight, as a gallery's on its thumbnails arriving, recycles it, and the
+            // focus it took falls back to the window's first view
+            final int was = item.getTop();
+            list.scrollBy(0, dy > 0 ? rect.top - bottom + 1 : rect.bottom - top - 1);
+            dy -= was - item.getTop();
+            if (dy != 0 && !springWheelList(list, dy)) {
+                list.scrollBy(0, dy);
+            }
+            return true;
+        }
         if (springWheelList(list, dy)) {
             return true;
         }
