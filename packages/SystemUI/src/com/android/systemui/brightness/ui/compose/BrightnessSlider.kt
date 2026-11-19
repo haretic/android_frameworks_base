@@ -127,6 +127,7 @@ import com.android.systemui.qs.ui.compose.borderOnFocus
 import com.android.systemui.res.R
 import com.android.systemui.util.policy.PolicyRestriction
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import lineageos.providers.LineageSettings
 import platform.test.motion.compose.values.MotionTestValueKey
@@ -140,11 +141,13 @@ private const val WHEEL_GRAB_TIMEOUT_MS = 4000L
  * WheelSliderGrab's Material sliders have it: the side button's press takes the slider, the
  * wheel's steps (down and up) then set it, and a press, a pause or leaving it lets it go. A
  * horizontal Compose slider moves only on left and right, so the wheel's steps went past it and
- * its press, unclaimed, opened the taskbar.
+ * its press, unclaimed, opened the taskbar. [blocked]: a policy or the app on screen holds the
+ * brightness, so a grab ends without a write.
  */
 @Composable
 private fun Modifier.wheelSliderGrab(
     enabled: Boolean,
+    blocked: Boolean,
     value: () -> Int,
     valueRange: IntRange,
     onValue: (Int) -> Unit,
@@ -161,10 +164,13 @@ private fun Modifier.wheelSliderGrab(
     var grabbed by remember { mutableStateOf(false) }
     var letGo by remember { mutableStateOf<Job?>(null) }
     var lastStep by remember { mutableLongStateOf(0L) }
+    // A press's down came here, and a hold's repeat let go of the grab: its up is the slider's too
+    var pressed by remember { mutableStateOf(false) }
+    var heldLetGo by remember { mutableStateOf(false) }
     val currentValue by rememberUpdatedState(value)
     val currentOnValue by rememberUpdatedState(onValue)
     val currentOnStop by rememberUpdatedState(onStop)
-    fun setGrabbed(grab: Boolean) {
+    fun setGrabbed(grab: Boolean, write: Boolean = true) {
         letGo?.cancel()
         if (grab == grabbed) {
             return
@@ -180,7 +186,9 @@ private fun Modifier.wheelSliderGrab(
             )
         } else {
             WheelCue.hide()
-            currentOnStop(currentValue())
+            if (write) {
+                currentOnStop(currentValue())
+            }
         }
     }
     fun armLetGo() {
@@ -190,30 +198,64 @@ private fun Modifier.wheelSliderGrab(
             setGrabbed(false)
         }
     }
+    val usable = enabled && !blocked
+    LaunchedEffect(usable) {
+        if (!usable) {
+            // Taken away mid-grab: no ring, cue or timeout left behind. Only disabled (the shade
+            // or dialog stopping), it keeps what the wheel set, as closing it does
+            pressed = false
+            heldLetGo = false
+            setGrabbed(false, write = !blocked)
+        }
+    }
     DisposableEffect(view) {
         onDispose {
-            if (grabbed) {
-                grabbed = false
-                view.isPressed = false
-                WheelCue.hide()
-            }
+            // Closed while grabbed (a tap outside, the taskbar): the steps set only the temporary
+            // brightness, so save the value or it reverts. The write outlives the composition.
+            setGrabbed(false)
         }
     }
     return this
         .onFocusChanged { if (!it.hasFocus) setGrabbed(false) }
         .onPreviewKeyEvent { event ->
             val native = event.nativeKeyEvent
-            if (!enabled) {
+            if (!usable) {
                 return@onPreviewKeyEvent false
             }
             if (KeyEvent.isConfirmKey(native.keyCode) || native.keyCode == KeyEvent.KEYCODE_POWER) {
-                if (event.type == KeyEventType.KeyDown && native.repeatCount == 0) {
-                    setGrabbed(!grabbed)
-                    if (grabbed) {
-                        armLetGo()
+                // A hold comes as the same down, then a repeat and an up flagged as a long press,
+                // so a press toggles on its up. A hold lets go of a grab, else it is left to the
+                // window (the dialog closes on it, as on back).
+                if (event.type == KeyEventType.KeyDown) {
+                    if (native.repeatCount == 0 && !native.isLongPress) {
+                        pressed = true
+                        return@onPreviewKeyEvent true
+                    }
+                    if (native.isLongPress && pressed) {
+                        pressed = false
+                        if (grabbed) {
+                            setGrabbed(false)
+                            heldLetGo = true
+                        }
+                    }
+                    return@onPreviewKeyEvent heldLetGo
+                }
+                if (event.type == KeyEventType.KeyUp) {
+                    val press = pressed && !native.isLongPress && !native.isCanceled
+                    pressed = false
+                    if (heldLetGo) {
+                        heldLetGo = false
+                        return@onPreviewKeyEvent true
+                    }
+                    if (press) {
+                        setGrabbed(!grabbed)
+                        if (grabbed) {
+                            armLetGo()
+                        }
+                        return@onPreviewKeyEvent true
                     }
                 }
-                return@onPreviewKeyEvent true
+                return@onPreviewKeyEvent false
             }
             if (!grabbed ||
                 native.keyCode != KeyEvent.KEYCODE_DPAD_DOWN &&
@@ -358,7 +400,8 @@ fun BrightnessSlider(
                 Modifier
                     .weight(1f)
                     .wheelSliderGrab(
-                        enabled = enabled && !isRestricted && !overriddenByAppState,
+                        enabled = enabled,
+                        blocked = isRestricted || overriddenByAppState,
                         value = { value },
                         valueRange = valueRange,
                         onValue = {
@@ -661,7 +704,11 @@ fun BrightnessSliderContainer(
             onStop = {
                 viewModel.setIsDragging(false)
                 dragging = false
-                coroutineScope.launch { viewModel.onDrag(Drag.Stopped(GammaBrightness(it))) }
+                // Not cancelled with the composition: the wheel's grab saves its value as the
+                // slider goes away, and the scope goes with it
+                coroutineScope.launch(context = NonCancellable) {
+                    viewModel.onDrag(Drag.Stopped(GammaBrightness(it)))
+                }
             },
             onIconClick = { viewModel.onIconClick() },
             modifier =
