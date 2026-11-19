@@ -26,6 +26,7 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ObjectAnimator;
 import android.app.ActivityManager;
+import android.app.KeyguardManager;
 import android.annotation.AnyThread;
 import android.annotation.ColorInt;
 import android.annotation.DrawableRes;
@@ -40,6 +41,7 @@ import android.content.IntentFilter;
 import android.graphics.drawable.AnimatedVectorDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Handler;
+import android.os.PowerManager;
 import android.os.RemoteException;
 import android.os.SystemProperties;
 import android.provider.Settings;
@@ -715,8 +717,19 @@ public class RotationButtonController {
         // Don't let apps that force landscape or 180 alter user lock.
         // Nor a home that never turns, as the R1's: it turns the screen upright as it comes up,
         // which is not the user turning back to portrait, and the next app keeps the lock's way
+        // Nor the lock screen, which stays upright (config_enableLockScreenRotation off): the
+        // screen going off shows it, turning the display to portrait, and the locked rotation
+        // the user set came back as portrait on waking
         return rotation == RotationPolicy.getNaturalRotation()
-                && !(!mHomeRotationEnabled && isHomeOnTop());
+                && !(!mHomeRotationEnabled && isHomeOnTop())
+                && !isKeyguardOrAsleep();
+    }
+
+    private boolean isKeyguardOrAsleep() {
+        final KeyguardManager keyguard = mContext.getSystemService(KeyguardManager.class);
+        final PowerManager power = mContext.getSystemService(PowerManager.class);
+        return (keyguard != null && keyguard.isKeyguardLocked())
+                || (power != null && !power.isInteractive());
     }
 
     private static boolean isHomeOnTop() {
