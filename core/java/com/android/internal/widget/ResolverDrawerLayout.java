@@ -32,6 +32,7 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.AttributeSet;
 import android.util.Log;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.View;
@@ -779,6 +780,27 @@ public class ResolverDrawerLayout extends ViewGroup implements DismissableView {
         if (!isInTouchMode() && isDescendantClipped(focused)) {
             smoothScrollTo(0, 0);
         }
+    }
+
+    /**
+     * A list that keeps the focus itself and moves its selection with the arrow keys, as the
+     * resolver's ListView under the wheel: the row it selects can lie under the bars drawn over
+     * the collapsed sheet's bottom (Just once / Always), which the list doesn't know cover it,
+     * and requestChildFocus never runs again for it. The sheet opens as for a focus moving there.
+     */
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        final boolean handled = super.dispatchKeyEvent(event);
+        if (handled && event.getAction() == KeyEvent.ACTION_DOWN && !isInTouchMode()
+                && isCollapsed() && hasFocus()) {
+            final View focused = findFocus();
+            final View selected = focused instanceof AbsListView list
+                    ? list.getSelectedView() : focused;
+            if (selected != null && selected != this && isDescendantClipped(selected)) {
+                smoothScrollTo(0, 0);
+            }
+        }
+        return handled;
     }
 
     @Override
