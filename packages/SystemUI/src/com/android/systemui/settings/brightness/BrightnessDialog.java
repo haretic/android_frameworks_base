@@ -308,8 +308,41 @@ public class BrightnessDialog extends ComponentActivity {
             }
             requestFinish();
         }
+        if (isSideButtonHold(keyCode, event)) {
+            // The hold's repeat, which the slider left to the dialog: close as back did
+            if (mCancelTimeoutRunnable != null) {
+                mCancelTimeoutRunnable.run();
+            }
+            requestFinish();
+            return true;
+        }
 
         return super.onKeyDown(keyCode, event);
+    }
+
+    @Override
+    public boolean onKeyUp(int keyCode, KeyEvent event) {
+        if (isSideButtonHold(keyCode, event)) {
+            // The hold's up, flagged as a long press too, in case its repeat went elsewhere
+            if (!isFinishing()) {
+                if (mCancelTimeoutRunnable != null) {
+                    mCancelTimeoutRunnable.run();
+                }
+                requestFinish();
+            }
+            return true;
+        }
+        return super.onKeyUp(keyCode, event);
+    }
+
+    /**
+     * The side button's hold: with INPUT_FEATURE_POWER_KEY_SELECTS the framework delivers it as
+     * a long-pressed select key, not as back, so the dialog closes on it itself.
+     */
+    private boolean isSideButtonHold(int keyCode, KeyEvent event) {
+        return event.isLongPress()
+                && KeyEvent.isConfirmKey(keyCode)
+                && getResources().getBoolean(com.android.internal.R.bool.config_wheelFocus);
     }
 
     @Override
