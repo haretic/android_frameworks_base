@@ -1113,7 +1113,29 @@ public class NotificationShadeWindowControllerImpl
         pw.println("  preferredMinDisplayRefreshRate=" + mLpChanged.preferredMinDisplayRefreshRate);
         pw.println("  preferredMaxDisplayRefreshRate=" + mLpChanged.preferredMaxDisplayRefreshRate);
         pw.println("  mDeferWindowLayoutParams=" + mDeferWindowLayoutParams);
-        pw.println(mCurrentState);
+        pw.println("  currentState: keyguardShowing=" + mCurrentState.keyguardShowing
+                + " keyguardOccluded=" + mCurrentState.keyguardOccluded
+                + " keyguardGoingAway=" + mCurrentState.keyguardGoingAway);
+        pw.println("  panelVisible=" + mCurrentState.panelVisible
+                + " shadeOrQsExpanded=" + mCurrentState.shadeOrQsExpanded
+                + " notificationShadeFocusable=" + mCurrentState.notificationShadeFocusable);
+        pw.println("  forceWindowCollapsed=" + mCurrentState.forceWindowCollapsed
+                + " forceHideAfterActivityLaunch=" + mCurrentState.forceHideAfterActivityLaunch
+                + " launchingActivityFromNotification="
+                + mCurrentState.launchingActivityFromNotification
+                + " launchingActivityFromWidget=" + mCurrentState.launchingActivityFromWidget);
+        pw.println("  forcePluginOpen=" + mCurrentState.forcePluginOpen
+                + " communalVisible=" + mCurrentState.communalVisible
+                + " bouncerShowing=" + mCurrentState.bouncerShowing
+                + " keyguardFadingAway=" + mCurrentState.keyguardFadingAway
+                + " headsUpNotificationShowing=" + mCurrentState.headsUpNotificationShowing
+                + " isAnimatingGoneToAod=" + mCurrentState.isAnimatingGoneToAod);
+        pw.println("  visibilityRequestedByState=" + (isExpanded(mCurrentState)
+                || mCurrentState.forcePluginOpen || mCurrentState.communalVisible));
+        if (mWindowRootView != null) {
+            pw.println("  rootVisibility=" + mWindowRootView.getVisibility()
+                    + " rootAttached=" + mWindowRootView.isAttachedToWindow());
+        }
         if (mWindowRootView != null && mWindowRootView.getViewRootImpl() != null) {
             Trace.beginSection("mWindowRootView.dump()");
             mWindowRootView.getViewRootImpl().dump("  ", pw);
