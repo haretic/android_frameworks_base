@@ -99,6 +99,8 @@ import lineageos.providers.LineageSettings;
 import org.lineageos.internal.util.PowerMenuUtils;
 
 import java.text.NumberFormat;
+import java.io.PrintWriter;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -382,6 +384,14 @@ public class WheelTaskbar implements CoreStartable, CommandQueue.Callbacks {
         mWindowManager = context.getSystemService(WindowManager.class);
         mSettings = new WheelTaskbarSettings(context);
         mGuide = new WheelGuide(context, mWindowManager, handler, userTracker::getUserId);
+    }
+
+    @Override
+    public void dump(PrintWriter pw, String[] args) {
+        pw.println("enabled=" + isEnabled() + " rootPresent=" + (mRoot != null)
+                + " shadeExpanded=" + mShadeExpanded
+                + " keyguardShowing=" + mKeyguardStateController.isShowing()
+                + " modeClientPresent=" + (mModeClient != null));
     }
 
     @Override

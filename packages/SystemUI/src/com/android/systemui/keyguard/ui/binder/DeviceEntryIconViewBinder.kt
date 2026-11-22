@@ -44,6 +44,7 @@ import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.res.R
 import com.android.systemui.statusbar.VibratorHelper
 import com.android.systemui.util.kotlin.DisposableHandles
+import com.android.systemui.wheel.WheelLayoutSettings
 import com.android.systemui.wheel.wheelLayoutEnabled
 import com.android.systemui.window.domain.interactor.WindowRootViewBlurInteractor
 import com.google.android.msdl.data.model.MSDLToken
@@ -89,6 +90,20 @@ object DeviceEntryIconViewBinder {
         val bgView = view.bgView
         touchHandlingView.listener =
             object : TouchHandlingView.Listener {
+                // With the wheel UI the side button's press on the padlock unlocks; a finger's
+                // tap on it does the same, not only its hold
+                override fun onSingleTapDetected(touched: View, x: Int, y: Int) {
+                    if (
+                        !WheelLayoutSettings.component(
+                            view.context,
+                            LineageSettings.Secure.WHEEL_LOCKSCREEN,
+                        ) || falsingManager.isFalseTap(FalsingManager.LOW_PENALTY)
+                    ) {
+                        return
+                    }
+                    view.performClick()
+                }
+
                 override fun onLongPressDetected(view: View, x: Int, y: Int) {
                     if (falsingManager.isFalseLongTap(FalsingManager.LOW_PENALTY)) {
                         Log.d(

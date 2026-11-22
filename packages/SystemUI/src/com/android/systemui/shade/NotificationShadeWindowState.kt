@@ -77,17 +77,17 @@ class NotificationShadeWindowState(
     }
 
     /** List of [String] to be used as a [Row] with [DumpsysTableLogger]. */
-    val asStringList: List<String> by lazy {
-        listOf(
+    val asStringList: List<String>
+        get() = listOf(
             keyguardShowing.toString(),
             keyguardOccluded.toString(),
             keyguardNeedsInput.toString(),
             panelVisible.toString(),
             shadeOrQsExpanded.toString(),
             notificationShadeFocusable.toString(),
-            bouncerShowing.toString(),
             glanceableHubShowing.toString(),
             glanceableHubOrientationAware.toString(),
+            bouncerShowing.toString(),
             keyguardFadingAway.toString(),
             keyguardGoingAway.toString(),
             qsExpanded.toString(),
@@ -114,7 +114,6 @@ class NotificationShadeWindowState(
             isAnimatingGoneToAod.toString(),
             launchingActivityFromWidget.toString(),
         )
-    }
 
     /**
      * [RingBuffer] to store [NotificationShadeWindowState]. After the buffer is full, it will
@@ -247,6 +246,7 @@ class NotificationShadeWindowState(
                 "communalVisible",
                 "isOnOrGoingToDream",
                 "isAnimatingSurfaceBehind",
+                "isAnimatingGoneToAod",
                 "launchingActivityFromWidget",
             )
     }

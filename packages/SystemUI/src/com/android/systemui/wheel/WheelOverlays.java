@@ -23,6 +23,8 @@ import com.android.systemui.settings.UserTracker;
 
 import lineageos.providers.LineageSettings;
 
+import java.io.PrintWriter;
+
 import java.util.concurrent.Executor;
 
 import javax.inject.Inject;
@@ -55,6 +57,15 @@ public class WheelOverlays implements CoreStartable {
         mUserTracker = userTracker;
         mHandler = handler;
         mBackground = background;
+    }
+
+    @Override
+    public void dump(PrintWriter pw, String[] args) {
+        pw.println("resourceOverlaysOnly=true user=" + mUserTracker.getUserId());
+        pw.println("requestedDialogs=" + WheelLayoutSettings.component(
+                mContext, LineageSettings.Secure.WHEEL_DIALOGS)
+                + " requestedFocus=" + WheelLayoutSettings.component(
+                        mContext, LineageSettings.Secure.WHEEL_SETTINGS));
     }
 
     @Override
